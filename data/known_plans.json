@@ -158,7 +158,7 @@
     "aum_billions": 60,
     "website": "https://www.copera.org",
     "materials_url": "https://copera.org/about/board-and-leadership/board-meeting-archive/",
-    "materials_type": "html_links",
+    "materials_type": "playwright",
     "investment_only": false,
     "doc_types": ["agenda", "board_pack", "minutes"]
   },
