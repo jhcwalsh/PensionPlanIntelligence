@@ -12,7 +12,7 @@ from pathlib import Path
 import streamlit as st
 from dotenv import load_dotenv
 
-from database import Document, Plan, Summary, get_session, init_db, search_summaries
+from database import Document, Plan, Summary, get_session, init_db, search_summaries, get_new_meetings
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
@@ -280,6 +280,47 @@ def page_plans():
                 st.markdown(f"Materials page: [{plan.materials_url}]({plan.materials_url})")
 
 
+def page_updates(plan_id, plan_label):
+    st.title("Meeting Updates")
+    st.caption("New meetings detected since last pipeline run, with agenda summaries and links to materials.")
+
+    days = st.slider("Look back (days)", 1, 60, 14)
+    session = get_db_session()
+    meetings = get_new_meetings(session, days=days)
+
+    if plan_id:
+        meetings = [m for m in meetings if m["plan"] and m["plan"].id == plan_id]
+
+    if not meetings:
+        st.info(f"No new meetings found in the last {days} days. Run the pipeline to fetch updates.")
+        return
+
+    st.caption(f"**{len(meetings)} new meeting(s)** in the last {days} days"
+               + (f" for {plan_label}" if plan_label != "All" else ""))
+
+    for m in meetings:
+        plan = m["plan"]
+        plan_label_str = (plan.abbreviation or plan.name) if plan else "Unknown"
+        date_str = m["meeting_date"].strftime("%B %d, %Y") if m["meeting_date"] else "Date unknown"
+        doc = m["agenda_doc"]
+        summary = m["agenda_summary"]
+
+        header = f"**{plan_label_str}** — {date_str}"
+        with st.expander(header, expanded=True):
+            if summary:
+                st.markdown(summary.summary_text)
+            elif doc:
+                st.caption("No summary yet — run Summarize to process this document.")
+            else:
+                st.caption("No agenda document found for this meeting.")
+
+            # Links to all materials for this meeting
+            st.markdown("**Materials:**")
+            for d in m["all_docs"]:
+                doc_type = (d.doc_type or "document").replace("_", " ").title()
+                st.markdown(f"- [{doc_type} — {d.filename}]({d.url})")
+
+
 def page_investment_actions(plan_id, plan_label):
     st.title("Investment Actions")
     st.caption("Manager hires/fires, allocation changes, and new commitments extracted from board packs.")
@@ -338,17 +379,19 @@ def page_investment_actions(plan_id, plan_label):
 def main():
     plan_id, plan_label = render_sidebar()
 
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "Search", "Browse Recent", "Investment Actions", "Plans"
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "Updates", "Search", "Browse Recent", "Investment Actions", "Plans"
     ])
 
     with tab1:
-        page_search(plan_id, plan_label)
+        page_updates(plan_id, plan_label)
     with tab2:
-        page_browse(plan_id, plan_label)
+        page_search(plan_id, plan_label)
     with tab3:
-        page_investment_actions(plan_id, plan_label)
+        page_browse(plan_id, plan_label)
     with tab4:
+        page_investment_actions(plan_id, plan_label)
+    with tab5:
         page_plans()
 
 

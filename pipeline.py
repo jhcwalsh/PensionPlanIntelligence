@@ -102,6 +102,10 @@ def main():
                         help="Only fetch documents from this year onward (default: 2025)")
     parser.add_argument("--status", action="store_true",
                         help="Just print pipeline status and exit")
+    parser.add_argument("--updates", action="store_true",
+                        help="Print new meetings with agenda summaries and material links")
+    parser.add_argument("--updates-days", type=int, default=14,
+                        help="Lookback window for --updates (default: 14 days)")
     args = parser.parse_args()
 
     if args.status:
@@ -109,6 +113,33 @@ def main():
         session = get_session()
         try:
             print_status(session)
+        finally:
+            session.close()
+        return
+
+    if args.updates:
+        init_db()
+        session = get_session()
+        try:
+            from database import get_new_meetings
+            meetings = get_new_meetings(session, days=args.updates_days)
+            if not meetings:
+                console.print(f"[yellow]No new meetings in the last {args.updates_days} days.[/yellow]")
+                return
+            console.rule(f"[bold]New Meetings (last {args.updates_days} days)[/bold]")
+            for m in meetings:
+                plan = m["plan"]
+                plan_str = (plan.abbreviation or plan.name) if plan else "Unknown"
+                date_str = m["meeting_date"].strftime("%B %d, %Y") if m["meeting_date"] else "Date unknown"
+                console.print(f"\n[bold cyan]{plan_str}[/bold cyan] — {date_str}")
+                if m["agenda_summary"]:
+                    console.print(f"  {m['agenda_summary'].summary_text}")
+                else:
+                    console.print("  [dim]No summary yet — run pipeline to process.[/dim]")
+                console.print("  [bold]Materials:[/bold]")
+                for d in m["all_docs"]:
+                    doc_type = (d.doc_type or "document").replace("_", " ").title()
+                    console.print(f"    {doc_type}: {d.url}")
         finally:
             session.close()
         return

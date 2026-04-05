@@ -3,7 +3,7 @@ SQLite database schema and helper functions using SQLAlchemy.
 """
 
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from sqlalchemy import (
@@ -164,6 +164,54 @@ def get_unsummarized_documents(session: Session) -> list[Document]:
         ))
         .all()
     )
+
+
+def get_new_meetings(session: Session, days: int = 7) -> list[dict]:
+    """
+    Return meetings that have documents downloaded within the last N days.
+    Groups by (plan_id, meeting_date). For each meeting returns:
+      plan, meeting_date, agenda_doc, agenda_summary, all_docs
+    Sorted by meeting_date descending.
+    """
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    recent_docs = (
+        session.query(Document)
+        .filter(Document.downloaded_at >= cutoff)
+        .order_by(Document.meeting_date.desc())
+        .all()
+    )
+
+    # Group by (plan_id, meeting_date)
+    seen: dict[tuple, dict] = {}
+    for doc in recent_docs:
+        key = (doc.plan_id, doc.meeting_date)
+        if key not in seen:
+            plan = session.get(Plan, doc.plan_id)
+            seen[key] = {
+                "plan": plan,
+                "meeting_date": doc.meeting_date,
+                "all_docs": [],
+                "agenda_doc": None,
+                "agenda_summary": None,
+            }
+        seen[key]["all_docs"].append(doc)
+        # Prefer agenda; fall back to board_pack
+        entry = seen[key]
+        if doc.doc_type == "agenda":
+            entry["agenda_doc"] = doc
+        elif entry["agenda_doc"] is None and doc.doc_type in ("board_pack", "minutes"):
+            entry["agenda_doc"] = doc
+
+    # Attach summaries
+    for entry in seen.values():
+        if entry["agenda_doc"]:
+            entry["agenda_summary"] = (
+                session.query(Summary)
+                .filter_by(document_id=entry["agenda_doc"].id)
+                .first()
+            )
+
+    return sorted(seen.values(), key=lambda e: e["meeting_date"] or datetime.min, reverse=True)
 
 
 def search_summaries(session: Session, query: str, plan_id: str = None,
