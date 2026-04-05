@@ -417,7 +417,7 @@ def download_document(url: str, dest_dir: Path, filename: str) -> tuple[Path | N
 # Main entry point
 # ---------------------------------------------------------------------------
 
-MIN_DATE = datetime(2025, 1, 1)
+MIN_DATE = datetime(2026, 1, 1)
 
 
 def run_fetcher(plan_ids: list[str] = None, max_docs_per_plan: int = 50):
