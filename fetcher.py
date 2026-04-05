@@ -417,6 +417,9 @@ def download_document(url: str, dest_dir: Path, filename: str) -> tuple[Path | N
 # Main entry point
 # ---------------------------------------------------------------------------
 
+MIN_DATE = datetime(2025, 1, 1)
+
+
 def run_fetcher(plan_ids: list[str] = None, max_docs_per_plan: int = 50):
     init_db()
     plans = load_plans()
@@ -441,6 +444,11 @@ def run_fetcher(plan_ids: list[str] = None, max_docs_per_plan: int = 50):
 
             for doc_info in doc_links[:max_docs_per_plan]:
                 url = doc_info["url"]
+
+                # Skip documents dated before 2025 (date=None means unknown, keep it)
+                doc_date = doc_info.get("meeting_date")
+                if doc_date and doc_date < MIN_DATE:
+                    continue
 
                 if document_exists(session, url):
                     continue

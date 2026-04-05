@@ -57,6 +57,7 @@ def run_pipeline(
     do_extract: bool = True,
     do_summarize: bool = True,
     max_docs_per_plan: int = 50,
+    min_year: int = 2025,
 ):
     init_db()
     start = datetime.utcnow()
@@ -64,7 +65,9 @@ def run_pipeline(
 
     if do_fetch:
         console.rule("[bold]Step 1: Fetch Documents[/bold]")
+        import fetcher as _fetcher
         from fetcher import run_fetcher
+        _fetcher.MIN_DATE = datetime(min_year, 1, 1)
         run_fetcher(plan_ids=plan_ids, max_docs_per_plan=max_docs_per_plan)
 
     if do_extract:
@@ -95,6 +98,8 @@ def main():
     parser.add_argument("--summarize-only", action="store_true")
     parser.add_argument("--max-docs", type=int, default=50,
                         help="Max documents to download per plan (default: 50)")
+    parser.add_argument("--min-year", type=int, default=2025,
+                        help="Only fetch documents from this year onward (default: 2025)")
     parser.add_argument("--status", action="store_true",
                         help="Just print pipeline status and exit")
     args = parser.parse_args()
@@ -126,6 +131,7 @@ def main():
         do_extract=do_extract,
         do_summarize=do_summarize,
         max_docs_per_plan=args.max_docs,
+        min_year=args.min_year,
     )
 
 
