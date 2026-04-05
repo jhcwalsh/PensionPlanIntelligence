@@ -135,7 +135,7 @@
     "website": "https://www.psers.pa.gov",
     "materials_url": "https://www.pa.gov/agencies/psers/board-of-trustees/board-of-trustees-meetings",
     "materials_type": "playwright",
-    "investment_only": true,
+    "investment_only": false,
     "doc_types": ["agenda", "board_pack", "minutes"]
   },
   {
@@ -147,7 +147,7 @@
     "website": "https://www.sers.pa.gov",
     "materials_url": "https://sers.pa.gov/About-Board-Meeting-Assets.html",
     "materials_type": "playwright",
-    "investment_only": true,
+    "investment_only": false,
     "doc_types": ["agenda", "board_pack", "minutes"]
   },
   {
@@ -159,7 +159,7 @@
     "website": "https://www.copera.org",
     "materials_url": "https://copera.org/about/board-and-leadership/board-meeting-archive/",
     "materials_type": "html_links",
-    "investment_only": true,
+    "investment_only": false,
     "doc_types": ["agenda", "board_pack", "minutes"]
   },
   {
