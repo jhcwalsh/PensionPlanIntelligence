@@ -37,7 +37,7 @@
     "website": "https://www.nycers.org",
     "materials_url": "https://www.nycers.org/post/board-meeting-agendas",
     "materials_type": "html_links",
-    "investment_only": true,
+    "investment_only": false,
     "doc_types": ["agenda", "board_pack", "minutes"]
   },
   {
@@ -59,8 +59,8 @@
     "state": "NY",
     "aum_billions": 260,
     "website": "https://www.comptroller.nyc.gov",
-    "materials_url": "https://comptroller.nyc.gov/services/financial-matters/pension/investment-meetings/",
-    "materials_type": "html_links",
+    "materials_url": "https://comptroller.nyc.gov/bamlibrary/",
+    "materials_type": "playwright",
     "investment_only": false,
     "doc_types": ["agenda", "board_pack"],
     "notes": "This page IS the investment advisory committee — disable filter"
@@ -73,7 +73,7 @@
     "aum_billions": 200,
     "website": "https://www.trs.texas.gov",
     "materials_url": "https://www.trs.texas.gov/about/trustees/board-meeting-materials",
-    "materials_type": "html_links",
+    "materials_type": "playwright",
     "investment_only": true,
     "doc_types": ["agenda", "board_pack", "minutes"]
   },
@@ -86,7 +86,7 @@
     "website": "https://ers.texas.gov",
     "materials_url": "https://ers.texas.gov/about-ers/ers-board-of-trustees/board-materials",
     "materials_type": "html_links",
-    "investment_only": true,
+    "investment_only": false,
     "doc_types": ["agenda", "board_pack", "minutes"]
   },
   {
@@ -96,7 +96,7 @@
     "state": "FL",
     "aum_billions": 210,
     "website": "https://www.myfrs.com",
-    "materials_url": "https://www.sbafla.com/oversight/investment-advisory-council/investment-advisory-council-meeting-materials/",
+    "materials_url": "https://www.sbafla.com/oversight/investment-advisory-council/investment-advisory-council-meeting-materials/?year=2026",
     "materials_type": "playwright",
     "investment_only": false,
     "investment_only": true,
@@ -134,7 +134,7 @@
     "aum_billions": 73,
     "website": "https://www.psers.pa.gov",
     "materials_url": "https://www.pa.gov/agencies/psers/board-of-trustees/board-of-trustees-meetings",
-    "materials_type": "html_links",
+    "materials_type": "playwright",
     "investment_only": true,
     "doc_types": ["agenda", "board_pack", "minutes"]
   },
@@ -146,7 +146,7 @@
     "aum_billions": 35,
     "website": "https://www.sers.pa.gov",
     "materials_url": "https://sers.pa.gov/About-Board-Meeting-Assets.html",
-    "materials_type": "html_links",
+    "materials_type": "playwright",
     "investment_only": true,
     "doc_types": ["agenda", "board_pack", "minutes"]
   },
@@ -157,7 +157,7 @@
     "state": "CO",
     "aum_billions": 60,
     "website": "https://www.copera.org",
-    "materials_url": "https://copera.org/about/board-and-leadership/board-meetings",
+    "materials_url": "https://copera.org/about/board-and-leadership/board-meeting-archive/",
     "materials_type": "html_links",
     "investment_only": true,
     "doc_types": ["agenda", "board_pack", "minutes"]
@@ -183,8 +183,8 @@
     "aum_billions": 12,
     "website": "https://www.scers.org",
     "materials_url": "https://www.scers.gov/retirement-board-meetings",
-    "materials_type": "html_links",
-    "investment_only": true,
+    "materials_type": "playwright",
+    "investment_only": false,
     "doc_types": ["agenda", "minutes"]
   },
   {
@@ -197,7 +197,7 @@
     "materials_url": "https://www.nj.gov/treasury/doinvest/calendar.shtml",
     "materials_type": "html_links",
     "investment_only": false,
-    "notes": "State Investment Council — already scoped to investment; disable filter"
+    "notes": "State Investment Council — already scoped to investment; disable filter",
     "doc_types": ["agenda", "minutes"]
   },
   {
@@ -233,7 +233,7 @@
     "website": "https://etf.wi.gov",
     "materials_url": "https://etf.wi.gov/about-etf/governing-boards/retirement-boards-meeting-agendas-and-materials",
     "materials_type": "html_links",
-    "investment_only": true,
+    "investment_only": false,
     "doc_types": ["agenda", "minutes"]
   },
   {

@@ -34,8 +34,9 @@ DOC_EXTENSIONS = {".pdf", ".docx", ".doc", ".xlsx"}
 DOC_URL_PATTERNS = [
     r"/documents/[^/]+/download",   # CalPERS
     r"/media/\d+/download",         # IPERS, Drupal-based sites
-    r"/download\?",                  # Generic inline downloads
+    r"/download\?",                  # Generic inline downloads (ETF Wisconsin)
     r"/files/.*\?",                  # Some Drupal sites
+    r"/iip/\w+/file/getfile/",      # AgendasSuite (ERS Texas, etc.)
 ]
 
 # A document link must match at least one of these to be kept
