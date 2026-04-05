@@ -38,10 +38,36 @@ DOC_URL_PATTERNS = [
     r"/files/.*\?",                  # Some Drupal sites
 ]
 
+# A document link must match at least one of these to be kept
 RELEVANT_KEYWORDS = [
     "agenda", "minutes", "board", "investment", "committee",
     "pack", "materials", "meeting", "report", "performance", "trustee"
 ]
+
+# ---------------------------------------------------------------------------
+# Investment-focus filter
+# Links/pages must match at least one of these to be kept.
+# All other committees (audit, benefits, legislative, finance, etc.) are dropped.
+# ---------------------------------------------------------------------------
+INVESTMENT_FOCUS = re.compile(
+    r"(investment[\s\-_]committee|investment[\s\-_]board|board[\s\-_]of[\s\-_]invest"
+    r"|investment[\s\-_]advisory|portfolio[\s\-_]committee|pctm"
+    r"|investment[\s\-_]staff|investment[\s\-_]meeting|invest[\s\-_]material"
+    r"|board[\s\-_]invest|boi[\b\-_/])",
+    re.IGNORECASE,
+)
+
+# Pages/committees to explicitly exclude even if they contain the word "board"
+EXCLUDE_COMMITTEES = re.compile(
+    r"(audit[\s\-_]committee|finance[\s\-_]committee|benefit[\s\-_]review"
+    r"|legislative[\s\-_]committee|compensation[\s\-_]committee"
+    r"|personnel[\s\-_]committee|governance[\s\-_]committee"
+    r"|real[\s\-_]estate[\s\-_]committee|general[\s\-_]counsel"
+    r"|administration[\s\-_]committee|full[\s\-_]board(?!.*invest)"
+    r"|board[\s\-_]of[\s\-_]retirement|board[\s\-_]of[\s\-_]trustee"
+    r"|board[\s\-_]of[\s\-_]director)",
+    re.IGNORECASE,
+)
 
 HEADERS = {
     "User-Agent": (
@@ -223,8 +249,29 @@ def make_filename(url: str, link_text: str) -> str:
     return f"{slug}{ext}"
 
 
-def extract_doc_links(soup: BeautifulSoup, base_url: str) -> list[dict]:
-    """Extract all document links from a BeautifulSoup page."""
+def is_investment_related(url: str, link_text: str, page_url: str = "") -> bool:
+    """
+    Return True only if this document or its page context is investment
+    committee / board of investments related.
+
+    When a plan uses investment_only=True (default), non-investment committee
+    documents are dropped here. Plans can set investment_only=False to keep all.
+    """
+    combined = f"{url} {link_text} {page_url}"
+    if EXCLUDE_COMMITTEES.search(combined):
+        return False
+    # If the page URL itself is investment-focused, trust all docs on that page
+    if INVESTMENT_FOCUS.search(page_url):
+        return True
+    # Otherwise require an investment signal in the link/URL
+    if INVESTMENT_FOCUS.search(combined):
+        return True
+    return False
+
+
+def extract_doc_links(soup: BeautifulSoup, base_url: str,
+                      investment_only: bool = True) -> list[dict]:
+    """Extract document links from a BeautifulSoup page."""
     found = []
     seen_urls = set()
 
@@ -242,6 +289,9 @@ def extract_doc_links(soup: BeautifulSoup, base_url: str) -> list[dict]:
 
         combined = (full_url + " " + link_text).lower()
         if not any(kw in combined for kw in RELEVANT_KEYWORDS):
+            continue
+
+        if investment_only and not is_investment_related(full_url, link_text, base_url):
             continue
 
         filename = make_filename(full_url, link_text)
@@ -269,12 +319,15 @@ def find_sub_pages(soup: BeautifulSoup, base_url: str, pattern: str,
     seen = set()
     for a_tag in soup.find_all("a", href=True):
         href = a_tag["href"].strip()
+        link_text = a_tag.get_text(strip=True)
         full_url = urljoin(base_url, href)
         if full_url in seen:
             continue
         if re.search(pattern, full_url, re.IGNORECASE):
-            seen.add(full_url)
-            sub_urls.append(full_url)
+            # Still exclude non-investment sub-pages
+            if not EXCLUDE_COMMITTEES.search(full_url + " " + link_text):
+                seen.add(full_url)
+                sub_urls.append(full_url)
         if len(sub_urls) >= max_sub_pages:
             break
     return sub_urls
@@ -284,15 +337,17 @@ def discover_document_links(plan: dict) -> list[dict]:
     """
     Fetch the plan's materials page and return a list of document dicts.
     Handles static HTML, JS-rendered, and two-level crawl patterns.
+    Plans with investment_only=False skip the investment filter (default True).
     """
     materials_url = plan["materials_url"]
+    investment_only = plan.get("investment_only", True)
     console.print(f"[cyan]Discovering documents for {plan['abbreviation']}...[/cyan]")
 
     soup = fetch_page(plan)
     if soup is None:
         return []
 
-    found = extract_doc_links(soup, materials_url)
+    found = extract_doc_links(soup, materials_url, investment_only=investment_only)
 
     # Two-level crawl: follow sub-pages matching a URL pattern before extracting docs
     sub_page_pattern = plan.get("sub_page_pattern")
@@ -303,14 +358,16 @@ def discover_document_links(plan: dict) -> list[dict]:
         for sub_url in sub_pages:
             sub_soup = fetch_page(plan, url=sub_url)
             if sub_soup:
-                found.extend(extract_doc_links(sub_soup, sub_url))
+                found.extend(extract_doc_links(sub_soup, sub_url,
+                                               investment_only=investment_only))
             time.sleep(0.5)
 
-    # Additional explicit extra_pages
+    # Additional explicit extra_pages (e.g. LACERA Board of Investments)
     for sub_url in plan.get("extra_pages", []):
         sub_soup = fetch_page(plan, url=sub_url)
         if sub_soup:
-            found.extend(extract_doc_links(sub_soup, sub_url))
+            # extra_pages are already investment-scoped, skip filter
+            found.extend(extract_doc_links(sub_soup, sub_url, investment_only=False))
 
     # Deduplicate
     seen = set()

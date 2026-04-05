@@ -8,9 +8,11 @@
     "website": "https://www.calpers.ca.gov",
     "materials_url": "https://www.calpers.ca.gov/about/board/board-meetings",
     "materials_type": "playwright",
-    "sub_page_pattern": "calpers\\.ca\\.gov/about/board/board-meetings/[a-z]",
-    "max_sub_pages": 8,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "sub_page_pattern": "calpers\\.ca\\.gov/about/board/board-meetings/(pctm|invest)",
+    "max_sub_pages": 12,
+    "investment_only": false,
+    "doc_types": ["agenda", "board_pack", "minutes"],
+    "notes": "PCTM = Portfolio Construction and Trade Management Committee (investment)"
   },
   {
     "id": "calstrs",
@@ -19,8 +21,9 @@
     "state": "CA",
     "aum_billions": 340,
     "website": "https://www.calstrs.com",
-    "materials_url": "https://www.calstrs.com/board-meeting-information",
+    "materials_url": "https://www.calstrs.com/investment-committee",
     "materials_type": "html_links",
+    "investment_only": false,
     "doc_types": ["agenda", "board_pack", "minutes"]
   },
   {
@@ -32,6 +35,7 @@
     "website": "https://www.nycers.org",
     "materials_url": "https://www.nycers.org/about/board-of-trustees/board-meeting-materials",
     "materials_type": "html_links",
+    "investment_only": true,
     "doc_types": ["agenda", "board_pack", "minutes"]
   },
   {
@@ -43,6 +47,7 @@
     "website": "https://www.nystrs.org",
     "materials_url": "https://www.nystrs.org/About-the-Fund/Governance/Board-of-Trustees/Board-Meeting-Materials",
     "materials_type": "html_links",
+    "investment_only": true,
     "doc_types": ["agenda", "board_pack", "minutes"]
   },
   {
@@ -54,7 +59,9 @@
     "website": "https://www.comptroller.nyc.gov",
     "materials_url": "https://www.comptroller.nyc.gov/bureaus/bureau-of-asset-management/investment-advisory-committee/",
     "materials_type": "html_links",
-    "doc_types": ["agenda", "board_pack"]
+    "investment_only": false,
+    "doc_types": ["agenda", "board_pack"],
+    "notes": "This page IS the investment advisory committee — disable filter"
   },
   {
     "id": "trs_texas",
@@ -65,6 +72,7 @@
     "website": "https://www.trs.texas.gov",
     "materials_url": "https://www.trs.texas.gov/TRS%20Documents/board_meeting_archive.aspx",
     "materials_type": "html_links",
+    "investment_only": true,
     "doc_types": ["agenda", "board_pack", "minutes"]
   },
   {
@@ -76,6 +84,7 @@
     "website": "https://ers.texas.gov",
     "materials_url": "https://ers.texas.gov/About-ERS/Board-of-Trustees/Board-Meetings",
     "materials_type": "html_links",
+    "investment_only": true,
     "doc_types": ["agenda", "board_pack", "minutes"]
   },
   {
@@ -87,6 +96,7 @@
     "website": "https://www.myfrs.com",
     "materials_url": "https://www.sbafla.com/fsb/MeetingsandAgendas/tabid/604/Default.aspx",
     "materials_type": "html_links",
+    "investment_only": true,
     "doc_types": ["agenda", "board_pack", "minutes"]
   },
   {
@@ -98,7 +108,7 @@
     "website": "https://www.opers.org",
     "materials_url": "https://www.opers.org/about/board/meetings/",
     "materials_type": "playwright",
-    "playwright_wait_selector": "a[href$='.pdf']",
+    "investment_only": true,
     "doc_types": ["agenda", "board_pack", "minutes"]
   },
   {
@@ -110,6 +120,7 @@
     "website": "https://www.strsoh.org",
     "materials_url": "https://www.strsoh.org/about/board/board-meeting-information.html",
     "materials_type": "html_links",
+    "investment_only": true,
     "doc_types": ["agenda", "board_pack", "minutes"]
   },
   {
@@ -121,6 +132,7 @@
     "website": "https://www.psers.pa.gov",
     "materials_url": "https://www.psers.pa.gov/About/Board/Pages/BoardMeetingMaterials.aspx",
     "materials_type": "html_links",
+    "investment_only": true,
     "doc_types": ["agenda", "board_pack", "minutes"]
   },
   {
@@ -132,6 +144,7 @@
     "website": "https://www.sers.pa.gov",
     "materials_url": "https://www.sers.pa.gov/board/board-meetings/",
     "materials_type": "html_links",
+    "investment_only": true,
     "doc_types": ["agenda", "board_pack", "minutes"]
   },
   {
@@ -143,6 +156,7 @@
     "website": "https://www.copera.org",
     "materials_url": "https://www.copera.org/about-pera/board-trustees/board-meetings",
     "materials_type": "html_links",
+    "investment_only": true,
     "doc_types": ["agenda", "board_pack", "minutes"]
   },
   {
@@ -151,10 +165,12 @@
     "abbreviation": "LACERA",
     "state": "CA",
     "aum_billions": 75,
-    "website": "https://www.lacera.com",
-    "materials_url": "https://www.lacera.gov/accountability/bor-and-committees",
+    "website": "https://www.lacera.gov",
+    "materials_url": "https://www.lacera.gov/accountability/boi-and-committees",
     "materials_type": "html_links",
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "investment_only": false,
+    "doc_types": ["agenda", "board_pack", "minutes"],
+    "notes": "Pointing directly at Board of Investments — disable filter"
   },
   {
     "id": "scers",
@@ -165,6 +181,7 @@
     "website": "https://www.scers.org",
     "materials_url": "https://www.scers.org/board-of-retirement/board-agendas-and-minutes/",
     "materials_type": "html_links",
+    "investment_only": true,
     "doc_types": ["agenda", "minutes"]
   },
   {
@@ -176,6 +193,7 @@
     "website": "https://www.nj.gov/treasury/pensions",
     "materials_url": "https://www.nj.gov/treasury/pensions/pension-fund-meetings.shtml",
     "materials_type": "html_links",
+    "investment_only": true,
     "doc_types": ["agenda", "minutes"]
   },
   {
@@ -187,6 +205,7 @@
     "website": "https://www.srs.illinois.gov",
     "materials_url": "https://www.srs.illinois.gov/GARS/board_information.htm",
     "materials_type": "html_links",
+    "investment_only": true,
     "doc_types": ["agenda", "minutes"]
   },
   {
@@ -198,6 +217,7 @@
     "website": "https://www.imrf.org",
     "materials_url": "https://www.imrf.org/en/about-imrf/board-of-trustees/board-meeting-calendar",
     "materials_type": "html_links",
+    "investment_only": true,
     "doc_types": ["agenda", "board_pack", "minutes"]
   },
   {
@@ -209,6 +229,7 @@
     "website": "https://etf.wi.gov",
     "materials_url": "https://etf.wi.gov/about-etf/boards-and-councils/employee-trust-funds-board/etf-board-meetings",
     "materials_type": "html_links",
+    "investment_only": true,
     "doc_types": ["agenda", "minutes"]
   },
   {
@@ -220,6 +241,8 @@
     "website": "https://ipers.org",
     "materials_url": "https://ipers.org/about/governance/investment-board/investment-board-agendas-materials-minutes",
     "materials_type": "playwright",
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "investment_only": false,
+    "doc_types": ["agenda", "board_pack", "minutes"],
+    "notes": "URL is already scoped to investment board — disable filter"
   }
 ]

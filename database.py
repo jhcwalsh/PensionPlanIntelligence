@@ -100,6 +100,7 @@ class Summary(Base):
     performance_data = Column(Text)     # JSON: returns by asset class if present
     generated_at = Column(DateTime)
     model_used = Column(String)
+    text_hash = Column(String)          # MD5 of extracted_text — skip re-summarizing duplicates
 
     document = relationship("Document", back_populates="summary")
 
@@ -147,6 +148,11 @@ def document_exists(session: Session, url: str) -> bool:
 
 def get_unextracted_documents(session: Session) -> list[Document]:
     return session.query(Document).filter_by(extraction_status="pending").all()
+
+
+def summary_exists_for_hash(session: Session, text_hash: str) -> Summary | None:
+    """Return an existing Summary with the same text hash, or None."""
+    return session.query(Summary).filter_by(text_hash=text_hash).first()
 
 
 def get_unsummarized_documents(session: Session) -> list[Document]:
