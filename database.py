@@ -176,7 +176,7 @@ def get_new_meetings(session: Session, days: int = 7) -> list[dict]:
     cutoff = datetime.utcnow() - timedelta(days=days)
     recent_docs = (
         session.query(Document)
-        .filter(Document.downloaded_at >= cutoff)
+        .filter(Document.meeting_date >= cutoff)
         .order_by(Document.meeting_date.desc())
         .all()
     )

@@ -121,33 +121,6 @@ def render_sidebar():
     selected_plan_id = plan_map.get(selected_label)
 
     st.sidebar.markdown("---")
-    st.sidebar.subheader("Pipeline")
-    if st.sidebar.button("Run Pipeline (all plans)", use_container_width=True):
-        with st.spinner("Running pipeline..."):
-            from pipeline import run_pipeline
-            run_pipeline()
-        st.success("Pipeline complete!")
-        st.rerun()
-
-    col1, col2 = st.sidebar.columns(2)
-    with col1:
-        if st.button("Fetch Only", use_container_width=True):
-            with st.spinner("Fetching..."):
-                from fetcher import run_fetcher
-                run_fetcher(plan_ids=[selected_plan_id] if selected_plan_id else None)
-            st.success("Done")
-            st.rerun()
-    with col2:
-        if st.button("Summarize", use_container_width=True):
-            with st.spinner("Summarizing..."):
-                from extractor import run_extractor
-                from summarizer import run_summarizer
-                run_extractor()
-                run_summarizer()
-            st.success("Done")
-            st.rerun()
-
-    st.sidebar.markdown("---")
     plans_count, docs_count, extracted_count, summarized_count = get_stats()
     st.sidebar.metric("Plans tracked", plans_count)
     st.sidebar.metric("Documents", docs_count)
@@ -280,11 +253,98 @@ def page_plans():
                 st.markdown(f"Materials page: [{plan.materials_url}]({plan.materials_url})")
 
 
+def _truncate_words(text: str, max_words: int) -> tuple[str, bool]:
+    """Return (truncated_text, was_truncated)."""
+    words = text.split()
+    if len(words) <= max_words:
+        return text, False
+    return " ".join(words[:max_words]) + "…", True
+
+
+def page_summary_updates(plan_id, plan_label):
+    st.title("Summary of Updates")
+    st.caption("One snapshot per plan — up to 100 words. Expand a plan for the full detail.")
+
+    days = st.slider("Look back (days)", 1, 90, 14, key="summary_days")
+    session = get_db_session()
+    meetings = get_new_meetings(session, days=days)
+
+    if plan_id:
+        meetings = [m for m in meetings if m["plan"] and m["plan"].id == plan_id]
+
+    if not meetings:
+        st.info(f"No new meetings found in the last {days} days. Run the pipeline to fetch updates.")
+        return
+
+    # Group by plan — keep the most recent meeting per plan as the headline
+    from collections import defaultdict
+    by_plan: dict[str, list] = defaultdict(list)
+    for m in meetings:
+        pid = m["plan"].id if m["plan"] else "unknown"
+        by_plan[pid].append(m)
+
+    st.caption(f"**{len(by_plan)} plan(s)** with activity in the last {days} days"
+               + (f" for {plan_label}" if plan_label != "All" else ""))
+
+    for pid, plan_meetings in sorted(by_plan.items(),
+                                     key=lambda kv: kv[1][0]["meeting_date"] or datetime.min,
+                                     reverse=True):
+        plan = plan_meetings[0]["plan"]
+        plan_label_str = (plan.abbreviation or plan.name) if plan else pid.upper()
+        latest_date = plan_meetings[0]["meeting_date"]
+        date_str = latest_date.strftime("%B %d, %Y") if latest_date else "Date unknown"
+        n_meetings = len(plan_meetings)
+
+        # Find the best summary across all meetings for this plan
+        headline_summary = None
+        for m in plan_meetings:
+            if m["agenda_summary"] and m["agenda_summary"].summary_text:
+                headline_summary = m["agenda_summary"].summary_text
+                break
+
+        col1, col2 = st.columns([6, 1])
+        with col1:
+            st.markdown(f"### {plan_label_str} — {date_str}")
+        with col2:
+            st.caption(f"{n_meetings} meeting{'s' if n_meetings > 1 else ''}")
+
+        if headline_summary:
+            short, was_truncated = _truncate_words(headline_summary, 100)
+            st.markdown(short)
+        else:
+            st.caption("No summary yet — run Summarize to process.")
+            was_truncated = False
+
+        if was_truncated or n_meetings > 1:
+            with st.expander("Full details"):
+                for m in plan_meetings:
+                    m_date = m["meeting_date"].strftime("%B %d, %Y") if m["meeting_date"] else "Date unknown"
+                    st.markdown(f"**{m_date}**")
+                    if m["agenda_summary"]:
+                        st.markdown(m["agenda_summary"].summary_text)
+                    else:
+                        st.caption("No summary available.")
+                    st.markdown("**Materials:**")
+                    for d in m["all_docs"]:
+                        doc_type = (d.doc_type or "document").replace("_", " ").title()
+                        st.markdown(f"- [{doc_type} — {d.filename}]({d.url})")
+                    st.divider()
+        else:
+            # Still show materials even without truncation
+            with st.expander("Materials"):
+                for m in plan_meetings:
+                    for d in m["all_docs"]:
+                        doc_type = (d.doc_type or "document").replace("_", " ").title()
+                        st.markdown(f"- [{doc_type} — {d.filename}]({d.url})")
+
+        st.divider()
+
+
 def page_updates(plan_id, plan_label):
     st.title("Meeting Updates")
     st.caption("New meetings detected since last pipeline run, with agenda summaries and links to materials.")
 
-    days = st.slider("Look back (days)", 1, 60, 14)
+    days = st.slider("Look back (days)", 1, 90, 14)
     session = get_db_session()
     meetings = get_new_meetings(session, days=days)
 
@@ -379,19 +439,21 @@ def page_investment_actions(plan_id, plan_label):
 def main():
     plan_id, plan_label = render_sidebar()
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "Updates", "Search", "Browse Recent", "Investment Actions", "Plans"
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "Summary", "Updates", "Search", "Browse Recent", "Investment Actions", "Plans"
     ])
 
     with tab1:
-        page_updates(plan_id, plan_label)
+        page_summary_updates(plan_id, plan_label)
     with tab2:
-        page_search(plan_id, plan_label)
+        page_updates(plan_id, plan_label)
     with tab3:
-        page_browse(plan_id, plan_label)
+        page_search(plan_id, plan_label)
     with tab4:
-        page_investment_actions(plan_id, plan_label)
+        page_browse(plan_id, plan_label)
     with tab5:
+        page_investment_actions(plan_id, plan_label)
+    with tab6:
         page_plans()
 
 
