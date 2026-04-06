@@ -203,6 +203,17 @@ def _get_client() -> anthropic.Anthropic:
         if not api_key:
             load_dotenv(_ENV_PATH, override=True)
             api_key = os.environ.get("ANTHROPIC_API_KEY")
+
+        # Fall back to Claude Code session ingress token (OAuth bearer auth)
+        if not api_key:
+            token_file = os.environ.get("CLAUDE_SESSION_INGRESS_TOKEN_FILE")
+            if token_file and os.path.exists(token_file):
+                with open(token_file) as f:
+                    auth_token = f.read().strip()
+                if auth_token:
+                    _client = anthropic.Anthropic(auth_token=auth_token)
+                    return _client
+
         if not api_key:
             raise RuntimeError(f"ANTHROPIC_API_KEY not set. Check {_ENV_PATH}")
         _client = anthropic.Anthropic(api_key=api_key)
