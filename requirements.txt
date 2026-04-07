@@ -2,3 +2,4 @@ streamlit
 SQLAlchemy
 python-dotenv
 pandas
+reportlab
