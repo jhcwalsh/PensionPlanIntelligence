@@ -4,8 +4,11 @@ Streamlit UI — search and browse pension plan meeting documents and summaries.
 Run with: streamlit run app.py
 """
 
+import io
 import json
 import os
+import re
+import textwrap
 from datetime import datetime
 from pathlib import Path
 
@@ -381,6 +384,128 @@ def page_updates(plan_id, plan_label):
                 st.markdown(f"- [{doc_type} — {d.filename}]({d.url})")
 
 
+# ---------------------------------------------------------------------------
+# PDF generation helper
+# ---------------------------------------------------------------------------
+
+NOTES_DIR = Path(__file__).parent / "notes"
+
+
+def _markdown_to_pdf_bytes(title: str, date_str: str, markdown_text: str) -> bytes:
+    """Convert a markdown note to a PDF using reportlab."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable
+    from reportlab.lib import colors
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4,
+        leftMargin=20 * mm, rightMargin=20 * mm,
+        topMargin=20 * mm, bottomMargin=20 * mm,
+    )
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        "NoteTitle", parent=styles["Heading1"],
+        fontSize=16, spaceAfter=4, textColor=colors.HexColor("#003366"),
+    )
+    date_style = ParagraphStyle(
+        "NoteDate", parent=styles["Normal"],
+        fontSize=9, textColor=colors.grey, spaceAfter=10,
+    )
+    h2_style = ParagraphStyle(
+        "NoteH2", parent=styles["Heading2"],
+        fontSize=12, spaceBefore=10, spaceAfter=4,
+        textColor=colors.HexColor("#003366"),
+    )
+    body_style = ParagraphStyle(
+        "NoteBody", parent=styles["Normal"],
+        fontSize=10, leading=14, spaceAfter=6,
+    )
+    bullet_style = ParagraphStyle(
+        "NoteBullet", parent=body_style,
+        leftIndent=12, bulletIndent=0,
+    )
+
+    story = [
+        Paragraph(title, title_style),
+        Paragraph(date_str, date_style),
+        HRFlowable(width="100%", thickness=1, color=colors.HexColor("#003366"), spaceAfter=8),
+    ]
+
+    for line in markdown_text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("---") or stripped.startswith("*Generated"):
+            continue
+        if stripped.startswith("## "):
+            story.append(Spacer(1, 4))
+            story.append(Paragraph(stripped[3:], h2_style))
+        elif stripped.startswith("# "):
+            pass  # already in title
+        elif stripped.startswith("- ") or stripped.startswith("* "):
+            text = stripped[2:].replace("**", "<b>", 1).replace("**", "</b>", 1)
+            story.append(Paragraph(f"• {text}", bullet_style))
+        else:
+            # Bold markers
+            text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", stripped)
+            text = re.sub(r"\*(.+?)\*", r"<i>\1</i>", text)
+            story.append(Paragraph(text, body_style))
+
+    doc.build(story)
+    return buf.getvalue()
+
+
+def _render_note_page(md_path: Path, title: str, generated_date: str, pdf_filename: str):
+    """Render a markdown note with a date stamp and PDF download button."""
+    if not md_path.exists():
+        st.warning(f"Note file not found: {md_path}")
+        return
+
+    content = md_path.read_text()
+
+    col1, col2 = st.columns([5, 1])
+    with col1:
+        st.caption(f"Generated: {generated_date}")
+    with col2:
+        pdf_bytes = _markdown_to_pdf_bytes(title, generated_date, content)
+        st.download_button(
+            "Download PDF",
+            data=pdf_bytes,
+            file_name=pdf_filename,
+            mime="application/pdf",
+            use_container_width=True,
+        )
+
+    st.divider()
+    # Render markdown body (skip the H1 title line — we show it via st.title)
+    body_lines = [l for l in content.splitlines() if not l.startswith("# ") or l.startswith("## ")]
+    st.markdown("\n".join(body_lines))
+
+
+def page_notes():
+    tab_trends, tab_week = st.tabs(["2026 Agenda Trends", "7-Day Highlights"])
+
+    with tab_trends:
+        st.title("2026 Meeting Agenda Trends")
+        _render_note_page(
+            md_path=NOTES_DIR / "2026_meeting_trends_summary.md",
+            title="2026 Meeting Agenda Trends",
+            generated_date="April 7, 2026",
+            pdf_filename="2026_meeting_agenda_trends.pdf",
+        )
+
+    with tab_week:
+        st.title("7-Day Highlights")
+        _render_note_page(
+            md_path=NOTES_DIR / "7day_highlights_2026-04-07.md",
+            title="7-Day Highlights: April 1–7, 2026",
+            generated_date="April 7, 2026",
+            pdf_filename="7day_highlights_2026-04-07.pdf",
+        )
+
+
 def page_investment_actions(plan_id, plan_label):
     st.title("Investment Actions")
     st.caption("Manager hires/fires, allocation changes, and new commitments extracted from board packs.")
@@ -439,21 +564,23 @@ def page_investment_actions(plan_id, plan_label):
 def main():
     plan_id, plan_label = render_sidebar()
 
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-        "Summary", "Updates", "Search", "Browse Recent", "Investment Actions", "Plans"
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+        "Notes", "Summary", "Updates", "Search", "Browse Recent", "Investment Actions", "Plans"
     ])
 
     with tab1:
-        page_summary_updates(plan_id, plan_label)
+        page_notes()
     with tab2:
-        page_updates(plan_id, plan_label)
+        page_summary_updates(plan_id, plan_label)
     with tab3:
-        page_search(plan_id, plan_label)
+        page_updates(plan_id, plan_label)
     with tab4:
-        page_browse(plan_id, plan_label)
+        page_search(plan_id, plan_label)
     with tab5:
-        page_investment_actions(plan_id, plan_label)
+        page_browse(plan_id, plan_label)
     with tab6:
+        page_investment_actions(plan_id, plan_label)
+    with tab7:
         page_plans()
 
 
