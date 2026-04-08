@@ -4,7 +4,7 @@
 
 ---
 
-## **Private Markets Deployment: Commitments Accelerating Across Buyout, Credit, and Venture**
+## Private Markets Deployment: Commitments Accelerating Across Buyout, Credit, and Venture
 
 Private markets activity has been the most consequential investment story across 2026 meeting agendas. Boards and investment committees are deploying capital across buyout, venture, credit, and secondaries at a pace that signals sustained conviction despite elevated macro uncertainty.
 
@@ -20,7 +20,7 @@ The Houston Police Officers' Pension System ($8B) placed three PE fund commitmen
 
 ---
 
-## **Manager Hires and Mandate Changes: Specialty Equity Mandates and Alternatives Infrastructure**
+## Manager Hires and Mandate Changes: Specialty Equity Mandates and Alternatives Infrastructure
 
 Manager selection activity in 2026 reflects a deliberate rotation toward specialty active mandates in equities and a build-out of alternatives advisory infrastructure at multiple funds.
 
@@ -34,7 +34,7 @@ The Mississippi Public Employees' Retirement System ($29B) held information-only
 
 ---
 
-## **Portfolio Strategy Shifts: TPA Adoption, Allocation Reviews, and Benchmark Restructuring**
+## Portfolio Strategy Shifts: TPA Adoption, Allocation Reviews, and Benchmark Restructuring
 
 Several large plans are executing foundational strategy reviews that will reshape portfolio construction over the next several years.
 
@@ -48,7 +48,7 @@ Colorado PERA ($60B) approved an amended CAP Statement of Investment Policy at i
 
 ---
 
-## **Performance Data: Strong 2025 Results, Mixed Early-2026 Signals**
+## Performance Data: Strong 2025 Results, Mixed Early-2026 Signals
 
 Performance data embedded in 2026 board packs reveals a broadly strong 2025 for most funds, with mixed results in the first two months of 2026.
 
@@ -58,7 +58,7 @@ Oregon PERS ($110B) was a notable outlier: the total fund returned 10.67% for th
 
 ---
 
-## **Governance, ESG, and Leadership Transitions**
+## Governance, ESG, and Leadership Transitions
 
 Governance transitions, ESG policy, and leadership succession featured prominently across the first quarter of 2026.
 

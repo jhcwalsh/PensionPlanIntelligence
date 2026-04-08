@@ -4,7 +4,7 @@
 
 ---
 
-## **Private Equity Commitments: HPOPS, DPFP, and Upcoming LACERA Action**
+## Private Equity Commitments: HPOPS, DPFP, and Upcoming LACERA Action
 
 The week of April 1–7 was dominated by private markets activity across three plans, with a fourth — LACERA — set to act on $416 million in commitments at its April 8 Board meeting.
 
@@ -16,7 +16,7 @@ LACERA ($75B) reported — via minutes from its March 11 board meeting, included
 
 ---
 
-## **CalPERS: Total Portfolio Approach and Governance Housekeeping**
+## CalPERS: Total Portfolio Approach and Governance Housekeeping
 
 CalPERS ($502B) held a board education session on April 2, 2026 with Global Governance Advisors (GGA) focused on aligning staff incentive compensation with its forthcoming **Total Portfolio Approach (TPA)**, which launches FY2026-2027. GGA benchmarked CalPERS' existing incentive design against three leading TPA-adopting sovereign funds — the Australian Future Fund, New Zealand Superannuation Fund, and CPP Investments — and recommended a five-year phased blend of legacy SAA results and new TPA performance versus a Reference Portfolio. A separate April 2 agenda item presented GGA's formal opinion letter on FY2026-27 incentive metrics. The 2026-27 budget includes **$43.5 million** for annual incentive awards; final GGA recommendations are expected at the June 2026 board meeting.
 
@@ -24,7 +24,7 @@ CalPERS' next major scheduled meeting — the Board of Administration and four c
 
 ---
 
-## **LACERA Operations and Cash Overlay Search**
+## LACERA Operations and Cash Overlay Search
 
 LACERA's Operations Oversight Committee met in executive session on April 1, 2026 under California Government Code Section 54957 (potential threats to public services or facilities), with no reportable outcomes. The April 1 Board of Retirement meeting approved a new three-firm fiduciary counsel panel, ratified labor agreements (MOUs) with SEIU bargaining units, and approved salary adjustments for non-represented staff.
 
@@ -32,7 +32,7 @@ Separately, LACERA's Passive Cash Overlay Investment Manager Search has advanced
 
 ---
 
-## **NYCERS and Routine Governance Actions**
+## NYCERS and Routine Governance Actions
 
 The NYC Employees' Retirement System ($88B) met on April 9, 2026 — just outside the strict April 1–7 window but worth flagging — to approve **$1,157,660 in investment management expenses for Q1 FY-2026** and to renew its annual membership in the **Ceres Investor Network on Climate Risk (INCR)** for $13,995. The Ceres renewal reaffirms NYCERS' ongoing ESG engagement posture, consistent with prior years.
 
@@ -40,7 +40,7 @@ The Iowa Public Employees' Retirement System ($41B) held a brief, closed-session
 
 ---
 
-## **Upcoming Meetings to Watch**
+## Upcoming Meetings to Watch
 
 - **LACERA** (April 8): Board vote on $416M in PE commitments and StepStone consulting extension
 - **HPOPS** (April 9): Board action on Ares Pathfinder III, Kingswood Capital Opportunities IV, LS Power Equity Partners VI, and the 1600 Smith real estate transaction
