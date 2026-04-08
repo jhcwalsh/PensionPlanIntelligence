@@ -15,6 +15,12 @@ import os
 import sys
 from datetime import datetime
 
+# Force UTF-8 output on Windows — filenames from pension sites can contain
+# characters outside cp1252, which crashes the default Windows console encoder.
+if sys.platform == 'win32' and hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
 from dotenv import load_dotenv
 from rich.console import Console
 from rich.table import Table
@@ -22,7 +28,7 @@ from rich.table import Table
 from database import Document, Plan, Summary, get_session, init_db
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
-console = Console()
+console = Console(legacy_windows=False)
 
 
 def print_status(session):
