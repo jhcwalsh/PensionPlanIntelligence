@@ -27,7 +27,7 @@ from database import (
 
 _ENV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
 load_dotenv(_ENV_PATH, override=True)
-console = Console()
+console = Console(legacy_windows=False)
 
 MODEL_SONNET = "claude-sonnet-4-6"
 MODEL_HAIKU = "claude-haiku-4-5-20251001"
@@ -216,7 +216,10 @@ def _get_client() -> anthropic.Anthropic:
 
         if not api_key:
             raise RuntimeError(f"ANTHROPIC_API_KEY not set. Check {_ENV_PATH}")
-        _client = anthropic.Anthropic(api_key=api_key)
+        # Use the real Anthropic API endpoint, bypassing any local proxy
+        # (e.g. Claude Code sets ANTHROPIC_BASE_URL=http://127.0.0.1:... which
+        # rejects direct API keys).
+        _client = anthropic.Anthropic(api_key=api_key, base_url="https://api.anthropic.com")
     return _client
 
 

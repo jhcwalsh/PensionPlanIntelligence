@@ -23,7 +23,7 @@ from rich.console import Console
 
 from database import Document, Plan, get_session, init_db, upsert_plan, document_exists
 
-console = Console()
+console = Console(legacy_windows=False)
 
 DOWNLOADS_DIR = Path(__file__).parent / "downloads"
 PLANS_FILE = Path(__file__).parent / "data" / "known_plans.json"
@@ -32,11 +32,12 @@ DOC_EXTENSIONS = {".pdf", ".docx", ".doc", ".xlsx"}
 
 # URL patterns that serve documents without a file extension
 DOC_URL_PATTERNS = [
-    r"/documents/[^/]+/download",   # CalPERS
-    r"/media/\d+/download",         # IPERS, Drupal-based sites
-    r"/download\?",                  # Generic inline downloads (ETF Wisconsin)
-    r"/files/.*\?",                  # Some Drupal sites
-    r"/iip/\w+/file/getfile/",      # AgendasSuite (ERS Texas, etc.)
+    r"/documents/[^/]+/download",        # CalPERS
+    r"/media/\d+/download",              # IPERS, Drupal-based sites
+    r"/download\?",                       # Generic inline downloads (ETF Wisconsin)
+    r"/files/.*\?",                       # Some Drupal sites
+    r"/iip/\w+/file/getfile/",           # AgendasSuite (ERS Texas, etc.)
+    r"/documents/files/governance/",     # NCRS (myncretirement.gov)
 ]
 
 # A document link must match at least one of these to be kept
@@ -311,10 +312,15 @@ def extract_doc_links(soup: BeautifulSoup, base_url: str,
 
 
 def find_sub_pages(soup: BeautifulSoup, base_url: str, pattern: str,
-                   max_sub_pages: int = 12) -> list[str]:
+                   max_sub_pages: int = 12,
+                   skip_committee_filter: bool = False) -> list[str]:
     """
     Find internal sub-page links matching a regex pattern.
     Used for two-level crawls (e.g. CalPERS main → per-meeting sub-pages).
+
+    skip_committee_filter: set True when the materials_url is already scoped to
+    an investment-relevant section (e.g. a specific event-type page) so the
+    EXCLUDE_COMMITTEES check doesn't incorrectly drop valid meeting links.
     """
     sub_urls = []
     seen = set()
@@ -325,8 +331,8 @@ def find_sub_pages(soup: BeautifulSoup, base_url: str, pattern: str,
         if full_url in seen:
             continue
         if re.search(pattern, full_url, re.IGNORECASE):
-            # Still exclude non-investment sub-pages
-            if not EXCLUDE_COMMITTEES.search(full_url + " " + link_text):
+            # Optionally exclude non-investment sub-pages based on URL+text
+            if skip_committee_filter or not EXCLUDE_COMMITTEES.search(full_url + " " + link_text):
                 seen.add(full_url)
                 sub_urls.append(full_url)
         if len(sub_urls) >= max_sub_pages:
@@ -354,7 +360,8 @@ def discover_document_links(plan: dict) -> list[dict]:
     sub_page_pattern = plan.get("sub_page_pattern")
     if sub_page_pattern:
         sub_pages = find_sub_pages(soup, materials_url, sub_page_pattern,
-                                   max_sub_pages=plan.get("max_sub_pages", 12))
+                                   max_sub_pages=plan.get("max_sub_pages", 12),
+                                   skip_committee_filter=plan.get("sub_page_skip_committee_filter", False))
         console.print(f"  Following [dim]{len(sub_pages)}[/dim] sub-pages...")
         for sub_url in sub_pages:
             sub_soup = fetch_page(plan, url=sub_url)

@@ -617,9 +617,9 @@
     "state": "WA",
     "aum_billions": 200,
     "website": "https://www.sib.wa.gov",
-    "materials_url": "https://www.sib.wa.gov/meetings",
-    "materials_type": "playwright",
-    "investment_only": true,
+    "materials_url": "https://www.sib.wa.gov/meetings.html",
+    "materials_type": "html_links",
+    "investment_only": false,
     "doc_types": ["agenda", "board_pack", "minutes"]
   },
   {
@@ -655,7 +655,7 @@
     "website": "https://www.msbi.us",
     "materials_url": "https://www.msbi.us/board-meetings",
     "materials_type": "playwright",
-    "investment_only": true,
+    "investment_only": false,
     "doc_types": ["agenda", "board_pack", "minutes"]
   },
   {
@@ -677,9 +677,12 @@
     "state": "NC",
     "aum_billions": 120,
     "website": "https://www.myncretirement.gov",
-    "materials_url": "https://www.myncretirement.gov/governance/boards-trustees-and-committees",
+    "materials_url": "https://www.myncretirement.gov/event-type/tsers-and-lgers-board-meeting",
     "materials_type": "playwright",
     "investment_only": false,
+    "sub_page_pattern": "/news/events/tsers-and-lgers-board-trustees-meeting",
+    "sub_page_skip_committee_filter": true,
+    "max_sub_pages": 8,
     "doc_types": ["agenda", "board_pack", "minutes"]
   },
   {
@@ -701,7 +704,7 @@
     "state": "MA",
     "aum_billions": 110,
     "website": "https://www.mapension.com",
-    "materials_url": "https://www.mapension.com/events",
+    "materials_url": "https://www.mapension.com/records-of-interest/",
     "materials_type": "playwright",
     "investment_only": true,
     "doc_types": ["agenda", "board_pack", "minutes"]

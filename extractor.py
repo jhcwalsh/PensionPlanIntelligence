@@ -14,7 +14,7 @@ from rich.console import Console
 
 from database import Document, get_session, get_unextracted_documents
 
-console = Console()
+console = Console(legacy_windows=False)
 
 # Max characters to store (Claude's context window is large but we want to be economical)
 MAX_TEXT_CHARS = 150_000
