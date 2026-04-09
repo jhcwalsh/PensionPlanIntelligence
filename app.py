@@ -107,6 +107,11 @@ def parse_json_field(val):
         return []
 
 
+def _safe_md(text: str) -> str:
+    """Escape $ so Streamlit doesn't treat them as LaTeX delimiters."""
+    return text.replace("$", r"\$")
+
+
 # ---------------------------------------------------------------------------
 # Sidebar
 # ---------------------------------------------------------------------------
@@ -148,7 +153,7 @@ def render_summary_card(doc: Document, summary: Summary, highlight: str = None):
     performance = parse_json_field(summary.performance_data)
 
     with st.expander(f"**{plan_name}** — {doc_type} — {date_str}", expanded=False):
-        st.markdown(f"**Summary**\n\n{summary.summary_text}")
+        st.markdown(f"**Summary**\n\n{_safe_md(summary.summary_text)}")
 
         if key_topics:
             tags_html = " ".join(f'<span class="tag">{t}</span>' for t in key_topics[:8])
@@ -313,7 +318,7 @@ def page_summary_updates(plan_id, plan_label):
 
         if headline_summary:
             short, was_truncated = _truncate_words(headline_summary, 100)
-            st.markdown(short)
+            st.markdown(_safe_md(short))
         else:
             st.caption("No summary yet — run Summarize to process.")
             was_truncated = False
@@ -324,7 +329,7 @@ def page_summary_updates(plan_id, plan_label):
                     m_date = m["meeting_date"].strftime("%B %d, %Y") if m["meeting_date"] else "Date unknown"
                     st.markdown(f"**{m_date}**")
                     if m["agenda_summary"]:
-                        st.markdown(m["agenda_summary"].summary_text)
+                        st.markdown(_safe_md(m["agenda_summary"].summary_text))
                     else:
                         st.caption("No summary available.")
                     st.markdown("**Materials:**")
@@ -371,7 +376,7 @@ def page_updates(plan_id, plan_label):
         header = f"**{plan_label_str}** — {date_str}"
         with st.expander(header, expanded=True):
             if summary:
-                st.markdown(summary.summary_text)
+                st.markdown(_safe_md(summary.summary_text))
             elif doc:
                 st.caption("No summary yet — run Summarize to process this document.")
             else:
