@@ -457,13 +457,53 @@ def _markdown_to_pdf_bytes(title: str, date_str: str, markdown_text: str) -> byt
     return buf.getvalue()
 
 
+def _notes_md_to_html(content: str) -> str:
+    """Convert notes markdown to HTML with inline styles, bypassing Streamlit's renderer."""
+    def inline(text: str) -> str:
+        text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text)
+        text = re.sub(r'\*(.+?)\*', r'<em>\1</em>', text)
+        return text
+
+    lines = content.splitlines()
+    parts: list[str] = []
+    para: list[str] = []
+
+    def flush():
+        if para:
+            parts.append(
+                f'<p style="margin:0 0 14px;line-height:1.65;">{inline(" ".join(para))}</p>'
+            )
+            para.clear()
+
+    for line in lines:
+        s = line.strip()
+        if s.startswith("## "):
+            flush()
+            parts.append(
+                f'<h2 style="margin:28px 0 8px;font-size:1.25em;font-weight:600;">'
+                f'{inline(s[3:])}</h2>'
+            )
+        elif s == "---":
+            flush()
+            parts.append('<hr style="margin:16px 0;border:none;border-top:1px solid #555;">')
+        elif s.startswith("# "):
+            continue  # skip H1 — shown via st.title
+        elif s == "":
+            flush()
+        else:
+            para.append(s)
+
+    flush()
+    return "\n".join(parts)
+
+
 def _render_note_page(md_path: Path, title: str, generated_date: str, pdf_filename: str):
     """Render a markdown note with a date stamp and PDF download button."""
     if not md_path.exists():
         st.warning(f"Note file not found: {md_path}")
         return
 
-    content = md_path.read_text()
+    content = md_path.read_text(encoding="utf-8")
 
     col1, col2 = st.columns([5, 1])
     with col1:
@@ -479,9 +519,12 @@ def _render_note_page(md_path: Path, title: str, generated_date: str, pdf_filena
         )
 
     st.divider()
-    # Render markdown body (skip the H1 title line — we show it via st.title)
-    body_lines = [l for l in content.splitlines() if not l.startswith("# ") or l.startswith("## ")]
-    st.markdown("\n".join(body_lines))
+    html = _notes_md_to_html(content)
+    st.markdown(
+        f'<div style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\','
+        f'Arial,sans-serif;font-size:15px;color:inherit;">{html}</div>',
+        unsafe_allow_html=True,
+    )
 
 
 def page_notes():
