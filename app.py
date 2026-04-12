@@ -9,7 +9,7 @@ import json
 import os
 import re
 import textwrap
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import streamlit as st
@@ -396,6 +396,57 @@ def page_updates(plan_id, plan_label):
 NOTES_DIR = Path(__file__).parent / "notes"
 
 
+def _find_all_highlights() -> list[tuple[Path, str, str]]:
+    """Find all 7-day highlights files, sorted newest first.
+
+    Returns list of (path, title, generated_date) tuples.
+    """
+    candidates = sorted(NOTES_DIR.glob("7day_highlights_*.md"), reverse=True)
+    results = []
+    for path in candidates:
+        content = path.read_text(encoding="utf-8")
+        # Extract title from first H1 line
+        first_line = content.split("\n")[0] if content else ""
+        title = first_line[2:].strip() if first_line.startswith("# ") else path.stem
+
+        # Extract generated date from *Generated: ...* line
+        gen_match = re.search(r"\*Generated:\s*(.+?)\*", content)
+        if gen_match:
+            generated_date = gen_match.group(1).strip()
+        else:
+            # Fall back to date in filename
+            date_match = re.search(r"(\d{4}-\d{2}-\d{2})", path.name)
+            if date_match:
+                dt = datetime.strptime(date_match.group(1), "%Y-%m-%d")
+                generated_date = dt.strftime("%B %d, %Y")
+            else:
+                generated_date = "Unknown"
+
+        results.append((path, title, generated_date))
+    return results
+
+
+def _find_latest_trends() -> tuple[Path, str, str] | None:
+    """Find the 2026 trends summary and extract its generated date.
+
+    Returns (path, title, generated_date) or None.
+    """
+    path = NOTES_DIR / "2026_meeting_trends_summary.md"
+    if not path.exists():
+        return None
+
+    content = path.read_text(encoding="utf-8")
+    # Try *Generated: ...* first, then fall back to *Covering ...*
+    gen_match = re.search(r"\*Generated:\s*(.+?)\*", content)
+    if gen_match:
+        generated_date = gen_match.group(1).strip()
+    else:
+        cov_match = re.search(r"\*Covering\s+(.+?)\*", content)
+        generated_date = cov_match.group(1).strip() if cov_match else "Unknown"
+
+    return (path, "2026 Meeting Agenda Trends", generated_date)
+
+
 def _markdown_to_pdf_bytes(title: str, date_str: str, markdown_text: str) -> bytes:
     """Convert a markdown note to a PDF using reportlab."""
     from reportlab.lib.pagesizes import A4
@@ -537,21 +588,44 @@ def page_notes():
 
     with tab_trends:
         st.title("2026 Meeting Agenda Trends")
-        _render_note_page(
-            md_path=NOTES_DIR / "2026_meeting_trends_summary.md",
-            title="2026 Meeting Agenda Trends",
-            generated_date="April 7, 2026",
-            pdf_filename="2026_meeting_agenda_trends.pdf",
-        )
+        result = _find_latest_trends()
+        if result:
+            path, title, gen_date = result
+            _render_note_page(
+                md_path=path,
+                title=title,
+                generated_date=gen_date,
+                pdf_filename="2026_meeting_agenda_trends.pdf",
+            )
+        else:
+            st.info("No trends document found. Run `python generate_notes.py` to generate.")
 
     with tab_week:
         st.title("7-Day Highlights")
-        _render_note_page(
-            md_path=NOTES_DIR / "7day_highlights_2026-04-07.md",
-            title="7-Day Highlights: April 1–7, 2026",
-            generated_date="April 7, 2026",
-            pdf_filename="7day_highlights_2026-04-07.pdf",
-        )
+        all_highlights = _find_all_highlights()
+        if not all_highlights:
+            st.info("No highlights found. Run `python generate_notes.py` to generate.")
+        elif len(all_highlights) == 1:
+            path, title, gen_date = all_highlights[0]
+            _render_note_page(
+                md_path=path,
+                title=title,
+                generated_date=gen_date,
+                pdf_filename=path.stem + ".pdf",
+            )
+        else:
+            labels = [title for _, title, _ in all_highlights]
+            selected_idx = st.selectbox(
+                "Select week", range(len(labels)),
+                format_func=lambda i: labels[i],
+            )
+            path, title, gen_date = all_highlights[selected_idx]
+            _render_note_page(
+                md_path=path,
+                title=title,
+                generated_date=gen_date,
+                pdf_filename=path.stem + ".pdf",
+            )
 
 
 def page_investment_actions(plan_id, plan_label):
