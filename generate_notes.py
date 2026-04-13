@@ -300,6 +300,41 @@ MEETING DATA:
 {meetings_text}"""
 
 
+def build_insights_prompt(data: dict) -> str:
+    """Build the Claude prompt for the CIO Insights note."""
+    today_str = datetime.utcnow().strftime("%B %d, %Y")
+    aum_trillions = data["total_aum"] / 1000
+    meetings_text = format_meetings_for_prompt(data["meetings"])
+
+    return f"""\
+Write a CIO Insights briefing synthesizing the most important strategic themes and \
+implications from U.S. public pension plan board and investment committee activity in 2026.
+
+Below is structured data from {data['plans_with_activity']} pension plans representing \
+approximately ${aum_trillions:.1f} trillion in combined AUM.
+
+Think like a Chief Investment Officer advising a large institutional investor. Go beyond \
+describing what happened — extract the signals, identify what the pattern of decisions \
+means, and highlight what is being underweighted in the conventional narrative. This is \
+strategic analysis, not a summary.
+
+FORMAT REQUIREMENTS:
+- Start with exactly: # CIO Insights: 2026 Institutional Trends
+- Second line: *Synthesized from board and investment committee activity across \
+{data['plans_with_activity']} U.S. public pension plans (~${aum_trillions:.1f} trillion AUM)*
+- Third line must be exactly: *Generated: {today_str}*
+- Then a --- horizontal rule
+- Use numbered ## headings (## 1. Theme Name)
+- Each section should end with a bold **Practical implication:** or **Bottom line:** sentence
+- Bold plan names with AUM in parentheses on first mention, dollar amounts, manager names
+- Include specific data: return percentages, commitment sizes, vote tallies, fee rates
+- Do NOT produce a section-by-section recap of each plan — synthesize across plans
+- Target 1,400–1,800 words total
+
+MEETING DATA:
+{meetings_text}"""
+
+
 # ---------------------------------------------------------------------------
 # File output
 # ---------------------------------------------------------------------------
@@ -332,6 +367,8 @@ def main():
                         help="Only generate 7-day highlights")
     parser.add_argument("--trends-only", action="store_true",
                         help="Only generate trends document")
+    parser.add_argument("--insights-only", action="store_true",
+                        help="Only generate CIO insights document")
     parser.add_argument("--days", type=int, default=7,
                         help="Lookback window for highlights (default: 7)")
     args = parser.parse_args()
@@ -350,8 +387,10 @@ def main():
     session = get_session()
 
     try:
-        do_highlights = not args.trends_only
-        do_trends = not args.highlights_only
+        only_one = args.highlights_only or args.trends_only or args.insights_only
+        do_highlights = args.highlights_only or not only_one
+        do_trends = args.trends_only or not only_one
+        do_insights = args.insights_only or not only_one
 
         # Step 2: Generate 7-day highlights
         if do_highlights:
@@ -385,6 +424,21 @@ def main():
                     f"{len(data['meetings'])} meetings)...")
                 content = generate_note(prompt, MAX_TOKENS_TRENDS)
                 write_note(content, "2026_meeting_trends_summary.md")
+
+        # Step 4: Generate CIO insights
+        if do_insights:
+            console.rule("[bold blue]Generate CIO Insights[/bold blue]")
+            data = gather_trends_data(session)
+            if not data["meetings"]:
+                console.print("[yellow]No 2026 meetings found. Skipping insights.[/yellow]")
+            else:
+                prompt = build_insights_prompt(data)
+                console.print(
+                    f"Calling Claude Sonnet ({len(prompt):,} char prompt, "
+                    f"{data['plans_with_activity']} plans, "
+                    f"{len(data['meetings'])} meetings)...")
+                content = generate_note(prompt, MAX_TOKENS_TRENDS)
+                write_note(content, "2026_cio_insights.md")
 
         console.rule("[bold green]Notes generation complete[/bold green]")
 

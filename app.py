@@ -426,6 +426,17 @@ def _find_all_highlights() -> list[tuple[Path, str, str]]:
     return results
 
 
+def _find_latest_insights() -> tuple[Path, str, str] | None:
+    """Find the CIO Insights note and extract its generated date."""
+    path = NOTES_DIR / "2026_cio_insights.md"
+    if not path.exists():
+        return None
+    content = path.read_text(encoding="utf-8")
+    gen_match = re.search(r"\*Generated:\s*(.+?)\*", content)
+    generated_date = gen_match.group(1).strip() if gen_match else "Unknown"
+    return (path, "CIO Insights: 2026 Institutional Trends", generated_date)
+
+
 def _find_latest_trends() -> tuple[Path, str, str] | None:
     """Find the 2026 trends summary and extract its generated date.
 
@@ -584,7 +595,7 @@ def _render_note_page(md_path: Path, title: str, generated_date: str, pdf_filena
 
 
 def page_notes():
-    tab_trends, tab_week = st.tabs(["2026 Agenda Trends", "7-Day Highlights"])
+    tab_trends, tab_week, tab_insights = st.tabs(["2026 Agenda Trends", "7-Day Highlights", "Insights"])
 
     with tab_trends:
         st.title("2026 Meeting Agenda Trends")
@@ -599,6 +610,20 @@ def page_notes():
             )
         else:
             st.info("No trends document found. Run `python generate_notes.py` to generate.")
+
+    with tab_insights:
+        st.title("CIO Insights")
+        result = _find_latest_insights()
+        if result:
+            path, title, gen_date = result
+            _render_note_page(
+                md_path=path,
+                title=title,
+                generated_date=gen_date,
+                pdf_filename="2026_cio_insights.pdf",
+            )
+        else:
+            st.info("No insights document found. Run `python generate_notes.py --insights-only` to generate.")
 
     with tab_week:
         st.title("7-Day Highlights")
