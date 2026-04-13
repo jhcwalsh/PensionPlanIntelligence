@@ -239,7 +239,7 @@ def page_browse(plan_id, plan_label):
 def page_plans():
     st.title("Tracked Plans")
     session = get_db_session()
-    plans = session.query(Plan).order_by(Plan.aum_billions.desc()).all()
+    plans = session.query(Plan).order_by(Plan.name).all()
 
     if not plans:
         st.warning("No plans loaded yet. Run the pipeline to initialize.")
