@@ -103,7 +103,12 @@ def gather_highlights_data(session, days: int = 7) -> dict:
 
     # Compute metadata
     dates = [m["meeting_date"] for m in meetings if m["meeting_date"]]
-    date_range = (min(dates), max(dates)) if dates else None
+    if dates:
+        today = datetime.utcnow()
+        latest = min(max(dates), today)
+        date_range = (latest - timedelta(days=days), latest)
+    else:
+        date_range = None
     plan_ids = {m["plan"].id for m in meetings if m["plan"]}
     plans = session.query(Plan).filter(Plan.id.in_(plan_ids)).all()
     total_aum = sum(p.aum_billions or 0 for p in plans)
@@ -227,12 +232,12 @@ def build_highlights_prompt(data: dict, days: int) -> str:
     today_str = today.strftime("%B %d, %Y")
 
     if data["date_range"]:
-        start_str = data["date_range"][0].strftime("%B %-d")
-        end_str = data["date_range"][1].strftime("%-d, %Y")
+        start_str = data["date_range"][0].strftime("%B %#d")
+        end_str = data["date_range"][1].strftime("%#d, %Y")
         date_range_title = f"{start_str}–{end_str}"
     else:
         start = today - timedelta(days=days)
-        date_range_title = f"{start.strftime('%B %-d')}–{today.strftime('%-d, %Y')}"
+        date_range_title = f"{start.strftime('%B %#d')}–{today.strftime('%#d, %Y')}"
 
     meetings_text = format_meetings_for_prompt(data["meetings"])
 
