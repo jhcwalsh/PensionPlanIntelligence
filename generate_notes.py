@@ -78,6 +78,7 @@ def _enrich_meeting_summaries(session, meeting: dict) -> list[dict]:
         summary = session.query(Summary).filter_by(document_id=doc.id).first()
         if summary:
             summaries.append({
+                "doc_id": doc.id,
                 "doc_type": doc.doc_type or "document",
                 "filename": doc.filename,
                 "summary_text": summary.summary_text or "",
@@ -185,7 +186,7 @@ def format_meetings_for_prompt(meetings: list[dict]) -> str:
         section += f"Documents: {len(m['all_docs'])} ({doc_types})\n"
 
         for i, s in enumerate(m.get("all_summaries", []), 1):
-            section += f"\n[Summary {i} — {s['doc_type']}]\n"
+            section += f"\n[Summary {i} — {s['doc_type']} | doc_id={s['doc_id']}]\n"
             section += f"Summary: {s['summary_text']}\n"
             if s["key_topics"]:
                 section += f"Topics: {', '.join(s['key_topics'])}\n"
@@ -255,6 +256,14 @@ FORMAT REQUIREMENTS:
 - End with ## Upcoming Meetings to Watch (bullet list of what's on deck next)
 - Target 700–900 words total
 
+SOURCE LINKS:
+Each summary in the data below includes a doc_id (e.g. doc_id=42). At the end of
+each ## section, add a *Sources:* line listing the documents referenced in that
+section as markdown links. Use this exact format for each link:
+  [Plan Abbreviation — DocType — Date](?doc=ID)
+Example: *Sources: [CalPERS — Agenda — April 02, 2026](?doc=42), [LACERA — Board Pack — March 11, 2026](?doc=58)*
+Only cite documents whose content you actually used in that section.
+
 MEETING DATA:
 {meetings_text}"""
 
@@ -290,6 +299,14 @@ FORMAT REQUIREMENTS:
   and manager names
 - Include specific numbers: commitment sizes, return percentages, vote tallies
 - Target 1500–1800 words total
+
+SOURCE LINKS:
+Each summary in the data below includes a doc_id (e.g. doc_id=42). At the end of
+each ## section, add a *Sources:* line listing the documents referenced in that
+section as markdown links. Use this exact format for each link:
+  [Plan Abbreviation — DocType — Date](?doc=ID)
+Example: *Sources: [CalPERS — Agenda — April 02, 2026](?doc=42), [LACERA — Board Pack — March 11, 2026](?doc=58)*
+Only cite documents whose content you actually used in that section.
 
 MEETING DATA:
 {meetings_text}"""

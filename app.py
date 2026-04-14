@@ -501,11 +501,14 @@ def _markdown_to_pdf_bytes(title: str, date_str: str, markdown_text: str) -> byt
         elif stripped.startswith("# "):
             pass  # already in title
         elif stripped.startswith("- ") or stripped.startswith("* "):
-            text = stripped[2:].replace("**", "<b>", 1).replace("**", "</b>", 1)
+            text = stripped[2:]
+            text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<a href="\2" color="blue">\1</a>', text)
+            text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
+            text = re.sub(r"\*(.+?)\*", r"<i>\1</i>", text)
             story.append(Paragraph(f"• {text}", bullet_style))
         else:
-            # Bold markers
-            text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", stripped)
+            text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<a href="\2" color="blue">\1</a>', stripped)
+            text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
             text = re.sub(r"\*(.+?)\*", r"<i>\1</i>", text)
             story.append(Paragraph(text, body_style))
 
@@ -516,6 +519,12 @@ def _markdown_to_pdf_bytes(title: str, date_str: str, markdown_text: str) -> byt
 def _notes_md_to_html(content: str) -> str:
     """Convert notes markdown to HTML with inline styles, bypassing Streamlit's renderer."""
     def inline(text: str) -> str:
+        # Links: [text](url) → <a>
+        text = re.sub(
+            r'\[([^\]]+)\]\(([^)]+)\)',
+            r'<a href="\2" style="color:#4A90D9;text-decoration:underline;">\1</a>',
+            text,
+        )
         text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text)
         text = re.sub(r'\*(.+?)\*', r'<em>\1</em>', text)
         return text
@@ -544,6 +553,12 @@ def _notes_md_to_html(content: str) -> str:
             parts.append('<hr style="margin:16px 0;border:none;border-top:1px solid #555;">')
         elif s.startswith("# "):
             continue  # skip H1 — shown via st.title
+        elif s.startswith("- ") or s.startswith("* "):
+            flush()
+            parts.append(
+                f'<p style="margin:0 0 6px;line-height:1.65;padding-left:16px;">'
+                f'&bull; {inline(s[2:])}</p>'
+            )
         elif s == "":
             flush()
         else:
@@ -683,8 +698,52 @@ def page_investment_actions(plan_id, plan_label):
 # App entry
 # ---------------------------------------------------------------------------
 
+def page_document_detail(doc_id: int):
+    """Display a single document's summary when accessed via ?doc=ID."""
+    session = get_session()
+    try:
+        doc = session.query(Document).get(doc_id)
+        if not doc:
+            st.error(f"Document #{doc_id} not found.")
+            return
+
+        plan = session.query(Plan).get(doc.plan_id) if doc.plan_id else None
+        summary = session.query(Summary).filter_by(document_id=doc.id).first()
+
+        plan_name = (plan.abbreviation or plan.name) if plan else doc.plan_id
+        date_str = doc.meeting_date.strftime("%B %d, %Y") if doc.meeting_date else "Unknown"
+        doc_type = (doc.doc_type or "document").replace("_", " ").title()
+
+        st.title(f"{plan_name} — {doc_type}")
+        st.caption(f"Meeting date: {date_str}")
+
+        if st.button("Back to dashboard"):
+            st.query_params.clear()
+            st.rerun()
+
+        st.divider()
+
+        if summary:
+            render_summary_card(doc, summary)
+        else:
+            st.info("This document has not been summarized yet.")
+
+        st.markdown(f"**Original source:** [{doc.url}]({doc.url})")
+    finally:
+        session.close()
+
+
 def main():
     plan_id, plan_label = render_sidebar()
+
+    # Handle deep-link to a specific document
+    doc_param = st.query_params.get("doc")
+    if doc_param:
+        try:
+            page_document_detail(int(doc_param))
+        except (ValueError, TypeError):
+            st.error(f"Invalid document ID: {doc_param}")
+        return
 
     tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
         "Notes", "Summary", "Updates", "Search", "Browse Recent", "Investment Actions", "Plans"
