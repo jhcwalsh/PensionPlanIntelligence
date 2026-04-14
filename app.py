@@ -746,6 +746,21 @@ def page_document_detail(doc_id: int):
             st.query_params.clear()
             st.rerun()
 
+        # Source file access: download if we have the local file on persistent storage
+        local_file = Path(doc.local_path) if doc.local_path else None
+        if local_file and local_file.exists():
+            try:
+                file_bytes = local_file.read_bytes()
+                mime = "application/pdf" if local_file.suffix.lower() == ".pdf" else "application/octet-stream"
+                st.download_button(
+                    label=f"Download source file ({local_file.name})",
+                    data=file_bytes,
+                    file_name=local_file.name,
+                    mime=mime,
+                )
+            except OSError as exc:
+                st.caption(f"Source file unavailable: {exc}")
+
         st.divider()
 
         if summary:
@@ -753,7 +768,13 @@ def page_document_detail(doc_id: int):
         else:
             st.info("This document has not been summarized yet.")
 
-        st.markdown(f"**Original source:** [{doc.url}]({doc.url})")
+        # Full extracted text — always available from the DB, even if the
+        # original URL breaks or the source file is missing
+        if doc.extracted_text:
+            with st.expander("Full extracted text", expanded=False):
+                st.text(doc.extracted_text)
+
+        st.caption(f"Original source (may break over time): {doc.url}")
     finally:
         session.close()
 

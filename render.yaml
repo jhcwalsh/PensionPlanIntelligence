@@ -11,3 +11,5 @@ services:
     envVars:
       - key: DB_PATH
         value: /data/pension.db
+      - key: DOWNLOADS_DIR
+        value: /data/downloads
