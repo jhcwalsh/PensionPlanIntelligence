@@ -348,6 +348,15 @@ FORMAT REQUIREMENTS:
 - Do NOT produce a section-by-section recap of each plan — synthesize across plans
 - Target 1,400–1,800 words total
 
+SOURCE LINKS:
+Each summary in the data below includes a doc_id (e.g. doc_id=42). Immediately before
+the **Practical implication:** / **Bottom line:** sentence at the end of each ## section,
+add a *Sources:* line listing the documents referenced in that section as markdown links.
+Use this exact format for each link:
+  [Plan Abbreviation — DocType — Date](?doc=ID)
+Example: *Sources: [CalPERS — Agenda — April 02, 2026](?doc=42), [LACERA — Board Pack — March 11, 2026](?doc=58)*
+Only cite documents whose content you actually used in that section.
+
 MEETING DATA:
 {meetings_text}"""
 
