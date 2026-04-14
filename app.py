@@ -112,6 +112,42 @@ def _safe_md(text: str) -> str:
     return text.replace("$", r"\$")
 
 
+DOWNLOADS_DIR = Path(os.environ.get("DOWNLOADS_DIR") or (Path(__file__).parent / "downloads"))
+
+
+def _retrieve_source_file(url: str, plan_id: str, filename: str) -> tuple[Path | None, int, str]:
+    """Lazily fetch a source document from its original URL and cache it on disk.
+
+    Returns (path, size_bytes, error_message). On success, error_message is "".
+    """
+    import requests
+
+    dest_dir = DOWNLOADS_DIR / plan_id
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / filename
+
+    if dest.exists():
+        return dest, dest.stat().st_size, ""
+
+    try:
+        headers = {"User-Agent": "Mozilla/5.0 (compatible; PensionPlanIntelligence/1.0)"}
+        resp = requests.get(url, headers=headers, timeout=60, stream=True)
+        resp.raise_for_status()
+
+        cd = resp.headers.get("Content-Disposition", "")
+        cd_match = re.search(r'filename="?([^";\n]+)"?', cd)
+        if cd_match:
+            dest = dest_dir / cd_match.group(1).strip()
+
+        with open(dest, "wb") as f:
+            for chunk in resp.iter_content(chunk_size=8192):
+                f.write(chunk)
+
+        return dest, dest.stat().st_size, ""
+    except Exception as exc:
+        return None, 0, str(exc)
+
+
 # ---------------------------------------------------------------------------
 # Sidebar
 # ---------------------------------------------------------------------------
@@ -746,9 +782,14 @@ def page_document_detail(doc_id: int):
             st.query_params.clear()
             st.rerun()
 
-        # Source file access: download if we have the local file on persistent storage
+        # Source file access. The file lives on the persistent disk at
+        # /data/downloads on Render. If it's missing (e.g. the doc was
+        # fetched before the persistent-disk migration), we lazily re-fetch
+        # from the original URL on demand so the copy gets cached on disk.
         local_file = Path(doc.local_path) if doc.local_path else None
-        if local_file and local_file.exists():
+        file_present = bool(local_file and local_file.exists())
+
+        if file_present:
             try:
                 file_bytes = local_file.read_bytes()
                 mime = "application/pdf" if local_file.suffix.lower() == ".pdf" else "application/octet-stream"
@@ -760,6 +801,23 @@ def page_document_detail(doc_id: int):
                 )
             except OSError as exc:
                 st.caption(f"Source file unavailable: {exc}")
+        elif doc.url:
+            if st.button("Retrieve source file"):
+                with st.spinner("Fetching from original source..."):
+                    path, size, err = _retrieve_source_file(
+                        doc.url, doc.plan_id, doc.filename or f"doc_{doc.id}.pdf"
+                    )
+                    if path:
+                        doc.local_path = str(path)
+                        doc.file_size_bytes = size
+                        session.commit()
+                        st.success(f"Retrieved {path.name} ({size:,} bytes). Reloading...")
+                        st.rerun()
+                    else:
+                        st.error(
+                            f"Couldn't retrieve the file — {err}. "
+                            "The full extracted text is still available below."
+                        )
 
         st.divider()
 

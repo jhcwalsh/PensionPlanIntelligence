@@ -7,7 +7,7 @@ services:
     disk:
       name: pension-db
       mountPath: /data
-      sizeGB: 1
+      sizeGB: 5
     envVars:
       - key: DB_PATH
         value: /data/pension.db
