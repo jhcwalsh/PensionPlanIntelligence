@@ -430,6 +430,11 @@ def main():
                         help="Only generate CIO insights document")
     parser.add_argument("--days", type=int, default=7,
                         help="Lookback window for highlights (default: 7)")
+    parser.add_argument("--no-validate", action="store_true",
+                        help="Skip post-generation fact-check of CIO insights")
+    parser.add_argument("--strict-validate", action="store_true",
+                        help="Exit non-zero if the CIO insights fact-check finds "
+                             "any unmatched tokens")
     args = parser.parse_args()
 
     # Step 1: Optionally run the full pipeline
@@ -497,7 +502,36 @@ def main():
                     f"{data['plans_with_activity']} plans, "
                     f"{len(data['meetings'])} meetings)...")
                 content = generate_note(prompt, MAX_TOKENS_TRENDS)
-                write_note(content, "2026_cio_insights.md")
+                note_path = write_note(content, "2026_cio_insights.md")
+
+                # Step 4b: Fact-check the generated note against the corpus
+                if not args.no_validate:
+                    console.rule("[bold blue]Validate CIO Insights[/bold blue]")
+                    from validate_insights import (
+                        extract_claims, verify, print_report,
+                    )
+                    import re as _re
+                    corpus = format_meetings_for_prompt(data["meetings"])
+                    corpus_doc_ids = {
+                        int(m) for m in _re.findall(r"doc_id=(\d+)", corpus)
+                    }
+                    claims = extract_claims(note_path.read_text(encoding="utf-8"))
+                    results = verify(claims, corpus, corpus_doc_ids)
+                    unmatched = print_report(results)
+                    if unmatched == 0:
+                        console.print(
+                            "[bold green]All checked tokens found in source corpus.[/bold green]"
+                        )
+                    else:
+                        console.print(
+                            f"[bold yellow]{unmatched} unmatched token(s) — "
+                            f"review above for possible hallucinations.[/bold yellow]"
+                        )
+                        if args.strict_validate:
+                            console.print(
+                                "[red]--strict-validate set; treating unmatched tokens as failure.[/red]"
+                            )
+                            raise SystemExit(1)
 
         console.rule("[bold green]Notes generation complete[/bold green]")
 
