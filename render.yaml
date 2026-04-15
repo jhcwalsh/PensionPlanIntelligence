@@ -13,3 +13,5 @@ services:
         value: /data/pension.db
       - key: DOWNLOADS_DIR
         value: /data/downloads
+      - key: APP_BASE_URL
+        value: https://pension-plan-intelligence.onrender.com

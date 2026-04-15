@@ -494,6 +494,20 @@ def _find_latest_trends() -> tuple[Path, str, str] | None:
     return (path, "2026 Meeting Agenda Trends", generated_date)
 
 
+def _absolute_url(href: str) -> str:
+    """Prepend APP_BASE_URL to relative links so they work in exported PDFs."""
+    base = os.environ.get("APP_BASE_URL", "").rstrip("/")
+    if not base:
+        return href
+    if href.startswith(("http://", "https://", "mailto:")):
+        return href
+    if href.startswith("?"):
+        return f"{base}/{href}"
+    if href.startswith("/"):
+        return f"{base}{href}"
+    return f"{base}/{href}"
+
+
 def _markdown_to_pdf_bytes(title: str, date_str: str, markdown_text: str) -> bytes:
     """Convert a markdown note to a PDF using reportlab."""
     from reportlab.lib.pagesizes import A4
@@ -501,6 +515,28 @@ def _markdown_to_pdf_bytes(title: str, date_str: str, markdown_text: str) -> byt
     from reportlab.lib.units import mm
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable
     from reportlab.lib import colors
+
+    # Links in PDFs must be absolute URLs — a relative ?doc=42 is meaningless
+    # once the PDF leaves the browser context. APP_BASE_URL is set on Render
+    # to the deployed app URL (e.g. https://pension-plan-intelligence.onrender.com).
+    base_url = os.environ.get("APP_BASE_URL", "").rstrip("/")
+
+    def _link_sub(match: "re.Match[str]") -> str:
+        label, href = match.group(1), match.group(2)
+        if base_url and not href.startswith(("http://", "https://", "mailto:")):
+            if href.startswith("?"):
+                href = f"{base_url}/{href}"
+            elif href.startswith("/"):
+                href = f"{base_url}{href}"
+            else:
+                href = f"{base_url}/{href}"
+        return f'<a href="{href}" color="blue">{label}</a>'
+
+    def _render_inline(text: str) -> str:
+        text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", _link_sub, text)
+        text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
+        text = re.sub(r"\*(.+?)\*", r"<i>\1</i>", text)
+        return text
 
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -549,12 +585,20 @@ def _markdown_to_pdf_bytes(title: str, date_str: str, markdown_text: str) -> byt
             pass  # already in title
         elif stripped.startswith("- ") or stripped.startswith("* "):
             text = stripped[2:]
-            text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<a href="\2" color="blue">\1</a>', text)
+            text = re.sub(
+                r"\[([^\]]+)\]\(([^)]+)\)",
+                lambda m: f'<a href="{_absolute_url(m.group(2))}" color="blue">{m.group(1)}</a>',
+                text,
+            )
             text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
             text = re.sub(r"\*(.+?)\*", r"<i>\1</i>", text)
             story.append(Paragraph(f"• {text}", bullet_style))
         else:
-            text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<a href="\2" color="blue">\1</a>', stripped)
+            text = re.sub(
+                r"\[([^\]]+)\]\(([^)]+)\)",
+                lambda m: f'<a href="{_absolute_url(m.group(2))}" color="blue">{m.group(1)}</a>',
+                stripped,
+            )
             text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
             text = re.sub(r"\*(.+?)\*", r"<i>\1</i>", text)
             story.append(Paragraph(text, body_style))
