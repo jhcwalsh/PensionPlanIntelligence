@@ -494,13 +494,19 @@ def _find_latest_trends() -> tuple[Path, str, str] | None:
     return (path, "2026 Meeting Agenda Trends", generated_date)
 
 
+DEFAULT_APP_BASE_URL = "https://pension-plan-intelligence.onrender.com"
+
+
 def _absolute_url(href: str) -> str:
-    """Prepend APP_BASE_URL to relative links so they work in exported PDFs."""
-    base = os.environ.get("APP_BASE_URL", "").rstrip("/")
-    if not base:
-        return href
+    """Prepend APP_BASE_URL to relative links so they work in exported PDFs.
+
+    Falls back to the default Render service URL so PDFs generated locally
+    (e.g. during dev or via a CLI) still link back to the deployed app
+    rather than the user's local filesystem.
+    """
     if href.startswith(("http://", "https://", "mailto:")):
         return href
+    base = (os.environ.get("APP_BASE_URL") or DEFAULT_APP_BASE_URL).rstrip("/")
     if href.startswith("?"):
         return f"{base}/{href}"
     if href.startswith("/"):
@@ -509,34 +515,17 @@ def _absolute_url(href: str) -> str:
 
 
 def _markdown_to_pdf_bytes(title: str, date_str: str, markdown_text: str) -> bytes:
-    """Convert a markdown note to a PDF using reportlab."""
+    """Convert a markdown note to a PDF using reportlab.
+
+    Relative links (e.g. ?doc=42) are rewritten to absolute URLs using
+    APP_BASE_URL so they resolve correctly when the PDF is opened
+    outside the app.
+    """
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import mm
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable
     from reportlab.lib import colors
-
-    # Links in PDFs must be absolute URLs — a relative ?doc=42 is meaningless
-    # once the PDF leaves the browser context. APP_BASE_URL is set on Render
-    # to the deployed app URL (e.g. https://pension-plan-intelligence.onrender.com).
-    base_url = os.environ.get("APP_BASE_URL", "").rstrip("/")
-
-    def _link_sub(match: "re.Match[str]") -> str:
-        label, href = match.group(1), match.group(2)
-        if base_url and not href.startswith(("http://", "https://", "mailto:")):
-            if href.startswith("?"):
-                href = f"{base_url}/{href}"
-            elif href.startswith("/"):
-                href = f"{base_url}{href}"
-            else:
-                href = f"{base_url}/{href}"
-        return f'<a href="{href}" color="blue">{label}</a>'
-
-    def _render_inline(text: str) -> str:
-        text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", _link_sub, text)
-        text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
-        text = re.sub(r"\*(.+?)\*", r"<i>\1</i>", text)
-        return text
 
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
