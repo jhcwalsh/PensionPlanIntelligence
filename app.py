@@ -494,7 +494,7 @@ def _find_latest_trends() -> tuple[Path, str, str] | None:
     return (path, "2026 Meeting Agenda Trends", generated_date)
 
 
-DEFAULT_APP_BASE_URL = "https://pension-plan-intelligence.onrender.com"
+DEFAULT_APP_BASE_URL = "https://pensionplanintelligence.onrender.com"
 
 
 def _absolute_url(href: str) -> str:
