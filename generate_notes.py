@@ -52,6 +52,11 @@ tracking U.S. public pension fund board activity. Your writing style is:
 - Analytical: connect themes across plans and explain significance
 - Concise: no filler, no disclaimers, no preamble. Start directly with the content.
 - Well-structured: use ## headings organized by theme, not by plan
+- Faithful: every figure, manager name, vote tally, and plan position must come
+  from the source data provided. When data is absent, say so or stay qualitative.
+  Never fabricate numbers, managers, or positions to make a point sound sharper.
+- When synthesizing, name the plans that support each theme. A theme with no
+  named supporting plans from the data is not a theme — drop it.
 Output clean markdown only — no code fences, no JSON, no commentary."""
 
 
@@ -61,6 +66,7 @@ def generate_note(prompt: str, max_tokens: int) -> str:
     message = _get_client().messages.create(
         model=MODEL_SONNET,
         max_tokens=max_tokens,
+        temperature=0.2,
         system=NOTES_SYSTEM_PROMPT,
         messages=[{"role": "user", "content": prompt}],
     )
@@ -331,9 +337,24 @@ Below is structured data from {data['plans_with_activity']} pension plans repres
 approximately ${aum_trillions:.1f} trillion in combined AUM.
 
 Think like a Chief Investment Officer advising a large institutional investor. Go beyond \
-describing what happened — extract the signals, identify what the pattern of decisions \
-means, and highlight what is being underweighted in the conventional narrative. This is \
-strategic analysis, not a summary.
+describing what happened — extract the signals and identify what the pattern of decisions \
+means. Where the data contradicts or complicates common assumptions about pension \
+allocation trends, say so — but only when you can point to 2+ specific plans in the \
+MEETING DATA that demonstrate it. This is strategic analysis, not a summary.
+
+GROUNDING RULES (non-negotiable):
+- Every specific figure (%, $, vote tally, fee bps, manager name, asset class \
+allocation) MUST appear verbatim in the MEETING DATA below. If a number is not in \
+the data, do not state one — use qualitative language instead ("increased materially", \
+"a meaningful allocation") or omit the point.
+- Every manager, fund, or plan name must appear in the MEETING DATA. Do not introduce \
+names from general knowledge.
+- Every claim must be traceable to at least one doc_id in the MEETING DATA. If you \
+cannot cite a doc_id, do not make the claim.
+- If a theme is supported by fewer than 3 plans in the data, either drop it or \
+explicitly flag it as "*Emerging signal — limited data*".
+- Prefer "no observation" over speculation. It is better to write 1,200 well-sourced \
+words than 1,800 with invented detail.
 
 FORMAT REQUIREMENTS:
 - Start with exactly: # CIO Insights: 2026 Institutional Trends
@@ -344,9 +365,13 @@ FORMAT REQUIREMENTS:
 - Use numbered ## headings (## 1. Theme Name)
 - Each section should end with a bold **Practical implication:** or **Bottom line:** sentence
 - Bold plan names with AUM in parentheses on first mention, dollar amounts, manager names
-- Include specific data: return percentages, commitment sizes, vote tallies, fee rates
+- Include specific data (return percentages, commitment sizes, vote tallies, fee rates) \
+ONLY when it appears in MEETING DATA — see GROUNDING RULES above
+- Every sentence containing a $ figure, %, bps, vote tally, or manager name must end \
+with an inline citation in the form (doc_id=42). The section-level *Sources:* line \
+(see below) remains as a summary.
 - Do NOT produce a section-by-section recap of each plan — synthesize across plans
-- Target 1,400–1,800 words total
+- Target 1,200–1,800 words total. Err on the short side if data is thin.
 
 SOURCE LINKS:
 Each summary in the data below includes a doc_id (e.g. doc_id=42). Immediately before
@@ -356,6 +381,14 @@ Use this exact format for each link:
   [Plan Abbreviation — DocType — Date](?doc=ID)
 Example: *Sources: [CalPERS — Agenda — April 02, 2026](?doc=42), [LACERA — Board Pack — March 11, 2026](?doc=58)*
 Only cite documents whose content you actually used in that section.
+
+BEFORE FINALISING:
+- Re-read your draft. For every number, manager name, and vote tally, confirm it \
+appears in MEETING DATA. Remove or soften any that don't.
+- For every theme (##), confirm you named at least 2 plans with supporting evidence \
+from the data. If not, drop or soften the theme.
+- Confirm every inline (doc_id=N) matches a doc_id that actually appears in MEETING \
+DATA.
 
 MEETING DATA:
 {meetings_text}"""
