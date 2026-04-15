@@ -16,6 +16,7 @@ Usage:
 import argparse
 import json
 import os
+import re
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -398,6 +399,38 @@ MEETING DATA:
 # File output
 # ---------------------------------------------------------------------------
 
+# Match a bare citation like:
+#   (doc_id=42)
+#   (doc_id=1, 5)                  — comma-separated digit list
+#   (doc_id=1, doc_id=5)           — repeating key
+# ...but not one already wrapped in markdown link syntax
+#   ([doc_id=42](?doc=42))
+_BARE_DOC_ID_CITATION_RE = re.compile(
+    r"\(doc_id=\d+(?:\s*,\s*(?:doc_id=)?\d+)*\)"
+)
+_DOC_ID_DIGITS_RE = re.compile(r"\d+")
+
+
+def _linkify_doc_id_citations(text: str) -> str:
+    """Rewrite inline ``(doc_id=N)`` citations as clickable markdown links.
+
+    Accepts any of:
+      ``(doc_id=42)``                       → ``([doc_id=42](?doc=42))``
+      ``(doc_id=1, 5)``                     → ``([doc_id=1](?doc=1), [doc_id=5](?doc=5))``
+      ``(doc_id=1, doc_id=5)``              → ``([doc_id=1](?doc=1), [doc_id=5](?doc=5))``
+
+    The outer parentheses are preserved so the rendered text still reads the
+    same, but each doc_id becomes a link that opens the source document in
+    the Streamlit app (matching the existing ``*Sources:*`` link format).
+    """
+    def _replace(m: "re.Match[str]") -> str:
+        ids = _DOC_ID_DIGITS_RE.findall(m.group(0))
+        parts = [f"[doc_id={i}](?doc={i})" for i in ids]
+        return "(" + ", ".join(parts) + ")"
+
+    return _BARE_DOC_ID_CITATION_RE.sub(_replace, text)
+
+
 def write_note(content: str, filename: str) -> Path:
     """Write a markdown note to the notes directory."""
     NOTES_DIR.mkdir(exist_ok=True)
@@ -408,6 +441,8 @@ def write_note(content: str, filename: str) -> Path:
         text = text.split("\n", 1)[1] if "\n" in text else text[3:]
     if text.endswith("```"):
         text = text[:-3].rstrip()
+    # Turn inline (doc_id=N) citations into clickable links
+    text = _linkify_doc_id_citations(text)
     path.write_text(text, encoding="utf-8")
     console.print(f"[bold green]Wrote {path}[/bold green] ({len(text):,} chars)")
     return path
@@ -510,10 +545,9 @@ def main():
                     from validate_insights import (
                         extract_claims, verify, print_report,
                     )
-                    import re as _re
                     corpus = format_meetings_for_prompt(data["meetings"])
                     corpus_doc_ids = {
-                        int(m) for m in _re.findall(r"doc_id=(\d+)", corpus)
+                        int(m) for m in re.findall(r"doc_id=(\d+)", corpus)
                     }
                     claims = extract_claims(note_path.read_text(encoding="utf-8"))
                     results = verify(claims, corpus, corpus_doc_ids)

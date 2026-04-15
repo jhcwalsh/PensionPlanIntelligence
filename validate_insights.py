@@ -51,7 +51,9 @@ BPS_RE = re.compile(r"\b\d+(?:\.\d+)?\s*(?:basis\s+points|bps)\b", re.IGNORECASE
 VOTE_RE = re.compile(
     r"\b(?:approved|voted?|passed)\s+\**(\d+-\d+)\**\b", re.IGNORECASE
 )
-DOC_ID_CITATION_RE = re.compile(r"\(doc_id=(\d+)\)")
+# Match either a bare ``(doc_id=N)`` citation or the linkified form
+# ``([doc_id=N](?doc=N))`` (generate_notes._linkify_doc_id_citations).
+DOC_ID_CITATION_RE = re.compile(r"doc_id=(\d+)")
 BOLD_RE = re.compile(r"\*\*([^*]+)\*\*")
 
 # Stop phrases to ignore when checking bolded entities: format markers, not
@@ -121,7 +123,7 @@ def extract_claims(note_text: str) -> dict:
         # Skip compound numeric claims — any bold that starts with $ or a digit
         # is a quantitative claim whose individual numbers are already checked
         # by the dollar/percent/bps extractors.
-        if t and (t[0].isdigit() or t[0] == "$" or t[0] == "-"):
+        if t and (t[0].isdigit() or t[0] in "$-+"):
             continue
         entity_bolds.append(t)
 
