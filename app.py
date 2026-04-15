@@ -112,6 +112,42 @@ def _safe_md(text: str) -> str:
     return text.replace("$", r"\$")
 
 
+DOWNLOADS_DIR = Path(os.environ.get("DOWNLOADS_DIR") or (Path(__file__).parent / "downloads"))
+
+
+def _retrieve_source_file(url: str, plan_id: str, filename: str) -> tuple[Path | None, int, str]:
+    """Lazily fetch a source document from its original URL and cache it on disk.
+
+    Returns (path, size_bytes, error_message). On success, error_message is "".
+    """
+    import requests
+
+    dest_dir = DOWNLOADS_DIR / plan_id
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / filename
+
+    if dest.exists():
+        return dest, dest.stat().st_size, ""
+
+    try:
+        headers = {"User-Agent": "Mozilla/5.0 (compatible; PensionPlanIntelligence/1.0)"}
+        resp = requests.get(url, headers=headers, timeout=60, stream=True)
+        resp.raise_for_status()
+
+        cd = resp.headers.get("Content-Disposition", "")
+        cd_match = re.search(r'filename="?([^";\n]+)"?', cd)
+        if cd_match:
+            dest = dest_dir / cd_match.group(1).strip()
+
+        with open(dest, "wb") as f:
+            for chunk in resp.iter_content(chunk_size=8192):
+                f.write(chunk)
+
+        return dest, dest.stat().st_size, ""
+    except Exception as exc:
+        return None, 0, str(exc)
+
+
 # ---------------------------------------------------------------------------
 # Sidebar
 # ---------------------------------------------------------------------------
@@ -458,8 +494,33 @@ def _find_latest_trends() -> tuple[Path, str, str] | None:
     return (path, "2026 Meeting Agenda Trends", generated_date)
 
 
+DEFAULT_APP_BASE_URL = "https://pensionplanintelligence.onrender.com"
+
+
+def _absolute_url(href: str) -> str:
+    """Prepend APP_BASE_URL to relative links so they work in exported PDFs.
+
+    Falls back to the default Render service URL so PDFs generated locally
+    (e.g. during dev or via a CLI) still link back to the deployed app
+    rather than the user's local filesystem.
+    """
+    if href.startswith(("http://", "https://", "mailto:")):
+        return href
+    base = (os.environ.get("APP_BASE_URL") or DEFAULT_APP_BASE_URL).rstrip("/")
+    if href.startswith("?"):
+        return f"{base}/{href}"
+    if href.startswith("/"):
+        return f"{base}{href}"
+    return f"{base}/{href}"
+
+
 def _markdown_to_pdf_bytes(title: str, date_str: str, markdown_text: str) -> bytes:
-    """Convert a markdown note to a PDF using reportlab."""
+    """Convert a markdown note to a PDF using reportlab.
+
+    Relative links (e.g. ?doc=42) are rewritten to absolute URLs using
+    APP_BASE_URL so they resolve correctly when the PDF is opened
+    outside the app.
+    """
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import mm
@@ -512,11 +573,22 @@ def _markdown_to_pdf_bytes(title: str, date_str: str, markdown_text: str) -> byt
         elif stripped.startswith("# "):
             pass  # already in title
         elif stripped.startswith("- ") or stripped.startswith("* "):
-            text = stripped[2:].replace("**", "<b>", 1).replace("**", "</b>", 1)
+            text = stripped[2:]
+            text = re.sub(
+                r"\[([^\]]+)\]\(([^)]+)\)",
+                lambda m: f'<a href="{_absolute_url(m.group(2))}" color="blue">{m.group(1)}</a>',
+                text,
+            )
+            text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
+            text = re.sub(r"\*(.+?)\*", r"<i>\1</i>", text)
             story.append(Paragraph(f"• {text}", bullet_style))
         else:
-            # Bold markers
-            text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", stripped)
+            text = re.sub(
+                r"\[([^\]]+)\]\(([^)]+)\)",
+                lambda m: f'<a href="{_absolute_url(m.group(2))}" color="blue">{m.group(1)}</a>',
+                stripped,
+            )
+            text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
             text = re.sub(r"\*(.+?)\*", r"<i>\1</i>", text)
             story.append(Paragraph(text, body_style))
 
@@ -527,6 +599,12 @@ def _markdown_to_pdf_bytes(title: str, date_str: str, markdown_text: str) -> byt
 def _notes_md_to_html(content: str) -> str:
     """Convert notes markdown to HTML with inline styles, bypassing Streamlit's renderer."""
     def inline(text: str) -> str:
+        # Links: [text](url) → <a>
+        text = re.sub(
+            r'\[([^\]]+)\]\(([^)]+)\)',
+            r'<a href="\2" style="color:#4A90D9;text-decoration:underline;">\1</a>',
+            text,
+        )
         text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text)
         text = re.sub(r'\*(.+?)\*', r'<em>\1</em>', text)
         return text
@@ -555,6 +633,12 @@ def _notes_md_to_html(content: str) -> str:
             parts.append('<hr style="margin:16px 0;border:none;border-top:1px solid #555;">')
         elif s.startswith("# "):
             continue  # skip H1 — shown via st.title
+        elif s.startswith("- ") or s.startswith("* "):
+            flush()
+            parts.append(
+                f'<p style="margin:0 0 6px;line-height:1.65;padding-left:16px;">'
+                f'&bull; {inline(s[2:])}</p>'
+            )
         elif s == "":
             flush()
         else:
@@ -708,8 +792,95 @@ def page_investment_actions(plan_id, plan_label):
 # App entry
 # ---------------------------------------------------------------------------
 
+def page_document_detail(doc_id: int):
+    """Display a single document's summary when accessed via ?doc=ID."""
+    session = get_session()
+    try:
+        doc = session.query(Document).get(doc_id)
+        if not doc:
+            st.error(f"Document #{doc_id} not found.")
+            return
+
+        plan = session.query(Plan).get(doc.plan_id) if doc.plan_id else None
+        summary = session.query(Summary).filter_by(document_id=doc.id).first()
+
+        plan_name = (plan.abbreviation or plan.name) if plan else doc.plan_id
+        date_str = doc.meeting_date.strftime("%B %d, %Y") if doc.meeting_date else "Unknown"
+        doc_type = (doc.doc_type or "document").replace("_", " ").title()
+
+        st.title(f"{plan_name} — {doc_type}")
+        st.caption(f"Meeting date: {date_str}")
+
+        if st.button("Back to dashboard"):
+            st.query_params.clear()
+            st.rerun()
+
+        # Source file access. The file lives on the persistent disk at
+        # /data/downloads on Render. If it's missing (e.g. the doc was
+        # fetched before the persistent-disk migration), we lazily re-fetch
+        # from the original URL on demand so the copy gets cached on disk.
+        local_file = Path(doc.local_path) if doc.local_path else None
+        file_present = bool(local_file and local_file.exists())
+
+        if file_present:
+            try:
+                file_bytes = local_file.read_bytes()
+                mime = "application/pdf" if local_file.suffix.lower() == ".pdf" else "application/octet-stream"
+                st.download_button(
+                    label=f"Download source file ({local_file.name})",
+                    data=file_bytes,
+                    file_name=local_file.name,
+                    mime=mime,
+                )
+            except OSError as exc:
+                st.caption(f"Source file unavailable: {exc}")
+        elif doc.url:
+            if st.button("Retrieve source file"):
+                with st.spinner("Fetching from original source..."):
+                    path, size, err = _retrieve_source_file(
+                        doc.url, doc.plan_id, doc.filename or f"doc_{doc.id}.pdf"
+                    )
+                    if path:
+                        doc.local_path = str(path)
+                        doc.file_size_bytes = size
+                        session.commit()
+                        st.success(f"Retrieved {path.name} ({size:,} bytes). Reloading...")
+                        st.rerun()
+                    else:
+                        st.error(
+                            f"Couldn't retrieve the file — {err}. "
+                            "The full extracted text is still available below."
+                        )
+
+        st.divider()
+
+        if summary:
+            render_summary_card(doc, summary)
+        else:
+            st.info("This document has not been summarized yet.")
+
+        # Full extracted text — always available from the DB, even if the
+        # original URL breaks or the source file is missing
+        if doc.extracted_text:
+            with st.expander("Full extracted text", expanded=False):
+                st.text(doc.extracted_text)
+
+        st.caption(f"Original source (may break over time): {doc.url}")
+    finally:
+        session.close()
+
+
 def main():
     plan_id, plan_label = render_sidebar()
+
+    # Handle deep-link to a specific document
+    doc_param = st.query_params.get("doc")
+    if doc_param:
+        try:
+            page_document_detail(int(doc_param))
+        except (ValueError, TypeError):
+            st.error(f"Invalid document ID: {doc_param}")
+        return
 
     tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
         "Notes", "Summary", "Updates", "Search", "Browse Recent", "Investment Actions", "Plans"

@@ -25,7 +25,7 @@ from database import Document, Plan, get_session, init_db, upsert_plan, document
 
 console = Console(legacy_windows=False)
 
-DOWNLOADS_DIR = Path(__file__).parent / "downloads"
+DOWNLOADS_DIR = Path(os.environ.get("DOWNLOADS_DIR") or (Path(__file__).parent / "downloads"))
 PLANS_FILE = Path(__file__).parent / "data" / "known_plans.json"
 
 DOC_EXTENSIONS = {".pdf", ".docx", ".doc", ".xlsx"}
