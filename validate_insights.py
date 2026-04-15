@@ -51,9 +51,12 @@ BPS_RE = re.compile(r"\b\d+(?:\.\d+)?\s*(?:basis\s+points|bps)\b", re.IGNORECASE
 VOTE_RE = re.compile(
     r"\b(?:approved|voted?|passed)\s+\**(\d+-\d+)\**\b", re.IGNORECASE
 )
-# Match either a bare ``(doc_id=N)`` citation or the linkified form
-# ``([doc_id=N](?doc=N))`` (generate_notes._linkify_doc_id_citations).
-DOC_ID_CITATION_RE = re.compile(r"doc_id=(\d+)")
+# Find doc_id references in any form the note may contain:
+#   bare           "(doc_id=42)"
+#   legacy link    "[doc_id=42](?doc=42)"
+#   current link   "[source](?doc=42)"
+# All three expose the digit via either ``doc_id=N`` or ``?doc=N``.
+DOC_ID_CITATION_RE = re.compile(r"(?:doc_id=|\?doc=)(\d+)")
 BOLD_RE = re.compile(r"\*\*([^*]+)\*\*")
 
 # Stop phrases to ignore when checking bolded entities: format markers, not
@@ -128,7 +131,10 @@ def extract_claims(note_text: str) -> dict:
         entity_bolds.append(t)
 
     return {
-        "doc_ids": sorted({int(m) for m in DOC_ID_CITATION_RE.findall(body)}),
+        # Scan the raw note text (not the md-link-stripped body) so we
+        # catch doc_ids exposed only via ``?doc=N`` in markdown link targets
+        # (e.g. ``[source](?doc=42)``).
+        "doc_ids": sorted({int(m) for m in DOC_ID_CITATION_RE.findall(note_text)}),
         "dollars": sorted(set(DOLLAR_RE.findall(body_no_sources))),
         "percents": sorted(set(PERCENT_RE.findall(body_no_sources))),
         "bps": sorted(set(BPS_RE.findall(body_no_sources))),

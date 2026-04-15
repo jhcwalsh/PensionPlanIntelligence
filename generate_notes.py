@@ -404,28 +404,44 @@ MEETING DATA:
 #   (doc_id=1, 5)                  — comma-separated digit list
 #   (doc_id=1, doc_id=5)           — repeating key
 # ...but not one already wrapped in markdown link syntax
-#   ([doc_id=42](?doc=42))
+#   ([source](?doc=42))
 _BARE_DOC_ID_CITATION_RE = re.compile(
     r"\(doc_id=\d+(?:\s*,\s*(?:doc_id=)?\d+)*\)"
 )
 _DOC_ID_DIGITS_RE = re.compile(r"\d+")
 
+# Back-compat: rewrite earlier "[doc_id=N](?doc=N)" link text to "[source](?doc=N)"
+# so previously-published notes get the nicer visual on the next write.
+_OLD_LINKED_CITATION_RE = re.compile(r"\[doc_id=\d+\]\(\?doc=(\d+)\)")
+
 
 def _linkify_doc_id_citations(text: str) -> str:
     """Rewrite inline ``(doc_id=N)`` citations as clickable markdown links.
 
-    Accepts any of:
-      ``(doc_id=42)``                       → ``([doc_id=42](?doc=42))``
-      ``(doc_id=1, 5)``                     → ``([doc_id=1](?doc=1), [doc_id=5](?doc=5))``
-      ``(doc_id=1, doc_id=5)``              → ``([doc_id=1](?doc=1), [doc_id=5](?doc=5))``
+    The visible link text is always the word ``source`` — the underlying
+    ``?doc=N`` target opens the source document in the Streamlit app.
 
-    The outer parentheses are preserved so the rendered text still reads the
-    same, but each doc_id becomes a link that opens the source document in
-    the Streamlit app (matching the existing ``*Sources:*`` link format).
+    Accepts any of these inputs:
+      ``(doc_id=42)``                       → ``([source](?doc=42))``
+      ``(doc_id=1, 5)``                     → ``([source](?doc=1), [source](?doc=5))``
+      ``(doc_id=1, doc_id=5)``              → ``([source](?doc=1), [source](?doc=5))``
+      ``([doc_id=42](?doc=42))`` (legacy)   → ``([source](?doc=42))``
+
+    The outer parentheses are preserved so the rendered text still reads
+    the same. Each citation becomes a clickable ``(source)`` link
+    matching the format used by the existing ``*Sources:*`` line. The
+    function is idempotent — re-running on already-linkified text is a
+    no-op.
     """
+    # Pass 1: convert previously-linkified citations that used the old
+    # "doc_id=N" link text to the new "source" link text.
+    text = _OLD_LINKED_CITATION_RE.sub(r"[source](?doc=\1)", text)
+
+    # Pass 2: convert bare (doc_id=N) / (doc_id=1, 5) / (doc_id=1, doc_id=5)
+    # forms into parenthesised source link(s).
     def _replace(m: "re.Match[str]") -> str:
         ids = _DOC_ID_DIGITS_RE.findall(m.group(0))
-        parts = [f"[doc_id={i}](?doc={i})" for i in ids]
+        parts = [f"[source](?doc={i})" for i in ids]
         return "(" + ", ".join(parts) + ")"
 
     return _BARE_DOC_ID_CITATION_RE.sub(_replace, text)
