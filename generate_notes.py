@@ -165,7 +165,7 @@ def gather_trends_data(session) -> dict:
 # Prompt construction
 # ---------------------------------------------------------------------------
 
-MAX_PROMPT_CHARS = 150_000  # ~37k tokens — keeps input well within context window
+MAX_PROMPT_CHARS = 500_000  # ~125k tokens — well under Sonnet's 200k context
 
 
 def format_meetings_for_prompt(meetings: list[dict]) -> str:

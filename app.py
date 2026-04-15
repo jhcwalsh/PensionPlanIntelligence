@@ -860,10 +860,12 @@ def page_document_detail(doc_id: int):
             st.info("This document has not been summarized yet.")
 
         # Full extracted text — always available from the DB, even if the
-        # original URL breaks or the source file is missing
+        # original URL breaks or the source file is missing. Rendered via
+        # st.code so Streamlit supplies its built-in copy-to-clipboard icon
+        # in the top-right of the block.
         if doc.extracted_text:
             with st.expander("Full extracted text", expanded=False):
-                st.text(doc.extracted_text)
+                st.code(doc.extracted_text, language=None)
 
         st.caption(f"Original source (may break over time): {doc.url}")
     finally:

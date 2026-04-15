@@ -41,9 +41,16 @@ ROOT = Path(__file__).parent
 # the first match wins. Plan-name + AUM bolds (e.g. "**CalPERS ($502B)**") are
 # excluded from the "manager name" check because plan identity is obvious and
 # already covered by the doc_id citation.
-PLAN_AUM_RE = re.compile(r"\*\*[^*]+\s\(\$[\d,.]+\s*[BMT]\)\*\*")
+# Plan-with-AUM bolds such as "**CalPERS ($502B)**" and "**Colorado PERA
+# ($60B, CO)**" — optional ", STATE" tolerated after the AUM.
+PLAN_AUM_RE = re.compile(
+    r"\*\*[^*]+\s\(\$[\d,.]+\s*[BMT](?:,\s*[A-Z]{2})?\)\*\*"
+)
+# Dollar amounts — a word boundary after the optional unit stops the
+# single-letter units (T/B/M/K) from devouring the first letter of the
+# following word (e.g. "$920,000 mainframe" → "$920,000 m").
 DOLLAR_RE = re.compile(
-    r"\$[\d,]+(?:\.\d+)?\s*(?:trillion|billion|million|thousand|T|B|M|K)?",
+    r"\$[\d,]+(?:\.\d+)?(?:\s*(?:trillion|billion|million|thousand|T|B|M|K)\b)?",
     re.IGNORECASE,
 )
 PERCENT_RE = re.compile(r"-?\d+(?:\.\d+)?%")
