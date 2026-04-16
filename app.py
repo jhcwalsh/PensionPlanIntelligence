@@ -970,7 +970,7 @@ def _admin_plan_coverage_df():
 def page_admin():
     """Admin views: pipeline / data-quality diagnostics for the site owner."""
     st.title("Admin")
-    (tab_coverage,) = st.tabs(["Plan Coverage"])
+    tab_coverage, tab_backlog = st.tabs(["Plan Coverage", "Pipeline Backlog"])
 
     with tab_coverage:
         st.caption(
@@ -996,6 +996,66 @@ def page_admin():
             use_container_width=True,
             hide_index=True,
         )
+
+    with tab_backlog:
+        st.caption(
+            "Plans where the pipeline has work outstanding — either "
+            "downloaded documents that haven't been extracted, or "
+            "extracted text that hasn't been summarised. Rows where "
+            "Downloaded == Extracted == Summarized are hidden."
+        )
+        df = _admin_plan_coverage_df()
+        if df.empty:
+            st.warning("No plans in the database yet.")
+        else:
+            # Compute the two backlog deltas and filter
+            df = df.copy()
+            df["Extract pending"] = df["Downloaded"] - df["Extracted"]
+            df["Summarize pending"] = df["Extracted"] - df["Summarized"]
+            backlog = df[
+                (df["Extract pending"] > 0) | (df["Summarize pending"] > 0)
+            ].copy()
+
+            if backlog.empty:
+                st.success(
+                    "Pipeline is fully caught up — every downloaded document "
+                    "has been extracted and summarised."
+                )
+            else:
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Plans with backlog", len(backlog))
+                c2.metric(
+                    "Extract pending", int(backlog["Extract pending"].sum())
+                )
+                c3.metric(
+                    "Summarize pending", int(backlog["Summarize pending"].sum())
+                )
+
+                # Reorder columns to put the backlog deltas next to the counts
+                cols = [
+                    "Plan", "Abbrev", "State",
+                    "Downloaded", "Extracted", "Summarized",
+                    "Extract pending", "Summarize pending",
+                    "Last download",
+                ]
+                st.dataframe(
+                    backlog[cols].sort_values(
+                        ["Summarize pending", "Extract pending"],
+                        ascending=False,
+                    ),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+                st.info(
+                    "Close the backlog by running the pipeline with the step "
+                    "that applies:\n\n"
+                    "`python pipeline.py --extract-only` — fills both Extract "
+                    "and Summarize gaps (extractor runs, then summariser).\n\n"
+                    "`python pipeline.py --summarize-only` — summarises any "
+                    "documents that have already been extracted but not yet "
+                    "processed by Claude."
+                )
 
 
 def main():
