@@ -266,10 +266,10 @@
     "abbreviation": "ILSRS",
     "state": "IL",
     "aum_billions": 25,
-    "website": "https://www.srs.illinois.gov",
-    "materials_url": "https://www.srs.illinois.gov/GARS/board_information.htm",
-    "materials_type": "html_links",
-    "investment_only": true,
+    "website": "https://ilsrs.illinois.gov",
+    "materials_url": "https://ilsrs.illinois.gov/gars/contact/board-meeting-minutes.html",
+    "materials_type": "playwright",
+    "investment_only": false,
     "doc_types": [
       "agenda",
       "minutes"
@@ -548,7 +548,7 @@
     "aum_billions": 25,
     "website": "https://www.trsl.org",
     "materials_url": "https://www.trsl.org/about/board-of-trustees/meeting-information",
-    "materials_type": "html_links",
+    "materials_type": "playwright",
     "investment_only": true,
     "doc_types": [
       "agenda",
@@ -624,7 +624,7 @@
     "website": "https://ers.ehawaii.gov",
     "materials_url": "https://ers.ehawaii.gov/resources/board-of-trustees/board-of-trustees-minutes",
     "materials_type": "html_links",
-    "investment_only": true,
+    "investment_only": false,
     "doc_types": [
       "agenda",
       "minutes"
@@ -699,7 +699,7 @@
     "website": "https://retirement.wyo.gov",
     "materials_url": "https://retirement.wyo.gov/about/board-meeting-minutes/",
     "materials_type": "html_links",
-    "investment_only": true,
+    "investment_only": false,
     "doc_types": [
       "agenda",
       "minutes"
@@ -1406,7 +1406,7 @@
     "state": "NH",
     "aum_billions": 9,
     "website": "https://www.nhrs.org",
-    "materials_url": "https://www.nhrs.org/about-nhrs/board-of-trustees/meeting-minutes",
+    "materials_url": "https://www.nhrs.org/funding-and-investments/independent-investment-committee/meeting-minutes",
     "materials_type": "html_links",
     "investment_only": false,
     "doc_types": [
@@ -1548,7 +1548,7 @@
     "state": "CT",
     "aum_billions": 22,
     "website": "https://portal.ct.gov/TRB",
-    "materials_url": "https://portal.ct.gov/TRB/Content/About-Us/Board-Members/Board-Meeting-Minutes",
+    "materials_url": "https://portal.ct.gov/trb/content/other-resources/board-information-and-meeting-schedules/board-meetings/2025",
     "materials_type": "html_links",
     "investment_only": false,
     "doc_types": [
