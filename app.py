@@ -702,11 +702,11 @@ def _render_note_page(md_path: Path, title: str, generated_date: str, pdf_filena
 
 
 def page_notes():
-    tab_trends, tab_week, tab_insights_recent, tab_insights = st.tabs([
+    tab_trends, tab_week, tab_insights_monthly, tab_insights_year = st.tabs([
         "2026 Agenda Trends",
         "7-Day Highlights",
-        "Insights (30 days)",
-        "Insights (YTD)",
+        "Monthly CIO Insights",
+        "2026 CIO Insights",
     ])
 
     with tab_trends:
@@ -723,8 +723,8 @@ def page_notes():
         else:
             st.info("No trends document found. Run `python generate_notes.py` to generate.")
 
-    with tab_insights_recent:
-        st.title("CIO Insights — Rolling Window")
+    with tab_insights_monthly:
+        st.title("Monthly CIO Insights")
         result = _find_latest_insights_recent()
         if result:
             path, title, gen_date = result
@@ -736,12 +736,12 @@ def page_notes():
             )
         else:
             st.info(
-                "No rolling-window insights document found. "
+                "No monthly insights document found. "
                 "Run `python generate_notes.py --insights-30day-only` to generate."
             )
 
-    with tab_insights:
-        st.title("CIO Insights — Year to Date")
+    with tab_insights_year:
+        st.title("2026 CIO Insights")
         result = _find_latest_insights()
         if result:
             path, title, gen_date = result
@@ -752,7 +752,7 @@ def page_notes():
                 pdf_filename="2026_cio_insights.pdf",
             )
         else:
-            st.info("No YTD insights document found. Run `python generate_notes.py --insights-ytd-only` to generate.")
+            st.info("No 2026 insights document found. Run `python generate_notes.py --insights-ytd-only` to generate.")
 
     with tab_week:
         st.title("7-Day Highlights")
