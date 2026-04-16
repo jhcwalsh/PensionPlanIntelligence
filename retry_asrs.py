@@ -1,5 +1,6 @@
 """Re-download failed ASRS documents using curl_cffi (Cloudflare-protected), then extract + summarize."""
 import sys
+from datetime import datetime
 from pathlib import Path
 
 if sys.platform == 'win32' and hasattr(sys.stdout, 'reconfigure'):
@@ -47,6 +48,7 @@ def retry_failed(plan_id: str = "asrs"):
             if path and size > 0:
                 doc.local_path = str(path)
                 doc.file_size_bytes = size
+                doc.downloaded_at = datetime.utcnow()
                 doc.extraction_status = "pending"
                 redownloaded_ids.append(doc.id)
                 console.print(f"  [green]OK[/green] {doc.filename} ({size:,} bytes)")

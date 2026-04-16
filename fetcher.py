@@ -122,7 +122,10 @@ def guess_doc_type(url: str, link_text: str) -> str:
 # ---------------------------------------------------------------------------
 
 def load_plans() -> list[dict]:
-    with open(PLANS_FILE) as f:
+    # Explicit UTF-8: known_plans.json contains accented characters (e.g.
+    # "San José") and Python's default encoding is platform-dependent
+    # (cp1252 on Windows), which would otherwise produce mojibake.
+    with open(PLANS_FILE, encoding="utf-8") as f:
         return json.load(f)
 
 
