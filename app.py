@@ -917,6 +917,87 @@ def page_document_detail(doc_id: int):
         session.close()
 
 
+def _admin_plan_coverage_df():
+    """Build the per-plan coverage table used by the Admin page.
+
+    Returns a pandas DataFrame with one row per tracked plan, summarising
+    how many documents have been downloaded, extracted and summarised,
+    plus the timestamp of the most recent download.
+    """
+    import pandas as pd
+    from sqlalchemy import case, distinct, func
+
+    session = get_db_session()
+    rows = (
+        session.query(
+            Plan.name.label("plan"),
+            Plan.abbreviation.label("abbrev"),
+            Plan.state.label("state"),
+            func.count(distinct(Document.id)).label("downloaded"),
+            func.sum(
+                case((Document.extraction_status == "done", 1), else_=0)
+            ).label("extracted"),
+            func.count(distinct(Summary.id)).label("summarized"),
+            func.max(Document.downloaded_at).label("last_download"),
+        )
+        .outerjoin(Document, Document.plan_id == Plan.id)
+        .outerjoin(Summary, Summary.document_id == Document.id)
+        .group_by(Plan.id)
+        .order_by(Plan.name)
+        .all()
+    )
+
+    df = pd.DataFrame(
+        [
+            {
+                "Plan": r.plan,
+                "Abbrev": r.abbrev or "",
+                "State": r.state or "",
+                "Downloaded": int(r.downloaded or 0),
+                "Extracted": int(r.extracted or 0),
+                "Summarized": int(r.summarized or 0),
+                "Last download": (
+                    r.last_download.strftime("%Y-%m-%d %H:%M")
+                    if r.last_download else "—"
+                ),
+            }
+            for r in rows
+        ]
+    )
+    return df
+
+
+def page_admin():
+    """Admin views: pipeline / data-quality diagnostics for the site owner."""
+    st.title("Admin")
+    (tab_coverage,) = st.tabs(["Plan Coverage"])
+
+    with tab_coverage:
+        st.caption(
+            "One row per tracked plan — counts of documents downloaded, "
+            "text extracted, Claude summaries generated, plus the timestamp "
+            "of the most recent document download for that plan."
+        )
+        df = _admin_plan_coverage_df()
+
+        if df.empty:
+            st.warning("No plans in the database yet.")
+            return
+
+        # Headline totals at the top
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Plans tracked", len(df))
+        c2.metric("Documents downloaded", int(df["Downloaded"].sum()))
+        c3.metric("Documents extracted", int(df["Extracted"].sum()))
+        c4.metric("Documents summarized", int(df["Summarized"].sum()))
+
+        st.dataframe(
+            df,
+            use_container_width=True,
+            hide_index=True,
+        )
+
+
 def main():
     plan_id, plan_label = render_sidebar()
 
@@ -929,8 +1010,9 @@ def main():
             st.error(f"Invalid document ID: {doc_param}")
         return
 
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
-        "Notes", "Summary", "Updates", "Search", "Browse Recent", "Investment Actions", "Plans"
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+        "Notes", "Summary", "Updates", "Search", "Browse Recent",
+        "Investment Actions", "Plans", "Admin",
     ])
 
     with tab1:
@@ -947,6 +1029,8 @@ def main():
         page_investment_actions(plan_id, plan_label)
     with tab7:
         page_plans()
+    with tab8:
+        page_admin()
 
 
 if __name__ == "__main__":
