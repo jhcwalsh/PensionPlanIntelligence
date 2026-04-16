@@ -224,8 +224,7 @@ def _get_client() -> anthropic.Anthropic:
 
 
 def _max_tokens(model: str) -> int:
-    # Haiku responses are short; Sonnet handles complex multi-field JSON
-    return 1024 if model == MODEL_HAIKU else 2500
+    return 4096 if model == MODEL_HAIKU else 4096
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=2, min=4, max=30))

@@ -463,7 +463,7 @@ def _find_all_highlights() -> list[tuple[Path, str, str]]:
 
 
 def _find_latest_insights() -> tuple[Path, str, str] | None:
-    """Find the CIO Insights note and extract its generated date."""
+    """Find the YTD CIO Insights note and extract its generated date."""
     path = NOTES_DIR / "2026_cio_insights.md"
     if not path.exists():
         return None
@@ -471,6 +471,29 @@ def _find_latest_insights() -> tuple[Path, str, str] | None:
     gen_match = re.search(r"\*Generated:\s*(.+?)\*", content)
     generated_date = gen_match.group(1).strip() if gen_match else "Unknown"
     return (path, "CIO Insights: 2026 Institutional Trends", generated_date)
+
+
+def _find_latest_insights_recent() -> tuple[Path, str, str] | None:
+    """Find the rolling-window (e.g. 30-day) CIO Insights note.
+
+    Picks the most recently modified ``cio_insights_*day.md`` file so the
+    window length is discovered automatically rather than hard-coded.
+    """
+    candidates = sorted(
+        NOTES_DIR.glob("cio_insights_*day.md"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    if not candidates:
+        return None
+    path = candidates[0]
+    content = path.read_text(encoding="utf-8")
+    gen_match = re.search(r"\*Generated:\s*(.+?)\*", content)
+    generated_date = gen_match.group(1).strip() if gen_match else "Unknown"
+    # Derive the window length from the filename (e.g. cio_insights_30day.md)
+    m = re.match(r"cio_insights_(\d+)day\.md", path.name)
+    days = m.group(1) if m else "?"
+    return (path, f"CIO Insights: Past {days} Days", generated_date)
 
 
 def _find_latest_trends() -> tuple[Path, str, str] | None:
@@ -679,7 +702,12 @@ def _render_note_page(md_path: Path, title: str, generated_date: str, pdf_filena
 
 
 def page_notes():
-    tab_trends, tab_week, tab_insights = st.tabs(["2026 Agenda Trends", "7-Day Highlights", "Insights"])
+    tab_trends, tab_week, tab_insights_monthly, tab_insights_year = st.tabs([
+        "2026 Agenda Trends",
+        "7-Day Highlights",
+        "Monthly CIO Insights",
+        "2026 CIO Insights",
+    ])
 
     with tab_trends:
         st.title("2026 Meeting Agenda Trends")
@@ -695,8 +723,25 @@ def page_notes():
         else:
             st.info("No trends document found. Run `python generate_notes.py` to generate.")
 
-    with tab_insights:
-        st.title("CIO Insights")
+    with tab_insights_monthly:
+        st.title("Monthly CIO Insights")
+        result = _find_latest_insights_recent()
+        if result:
+            path, title, gen_date = result
+            _render_note_page(
+                md_path=path,
+                title=title,
+                generated_date=gen_date,
+                pdf_filename=path.stem + ".pdf",
+            )
+        else:
+            st.info(
+                "No monthly insights document found. "
+                "Run `python generate_notes.py --insights-30day-only` to generate."
+            )
+
+    with tab_insights_year:
+        st.title("2026 CIO Insights")
         result = _find_latest_insights()
         if result:
             path, title, gen_date = result
@@ -707,7 +752,7 @@ def page_notes():
                 pdf_filename="2026_cio_insights.pdf",
             )
         else:
-            st.info("No insights document found. Run `python generate_notes.py --insights-only` to generate.")
+            st.info("No 2026 insights document found. Run `python generate_notes.py --insights-ytd-only` to generate.")
 
     with tab_week:
         st.title("7-Day Highlights")
@@ -860,14 +905,157 @@ def page_document_detail(doc_id: int):
             st.info("This document has not been summarized yet.")
 
         # Full extracted text — always available from the DB, even if the
-        # original URL breaks or the source file is missing
+        # original URL breaks or the source file is missing. Rendered via
+        # st.code so Streamlit supplies its built-in copy-to-clipboard icon
+        # in the top-right of the block.
         if doc.extracted_text:
             with st.expander("Full extracted text", expanded=False):
-                st.text(doc.extracted_text)
+                st.code(doc.extracted_text, language=None)
 
         st.caption(f"Original source (may break over time): {doc.url}")
     finally:
         session.close()
+
+
+def _admin_plan_coverage_df():
+    """Build the per-plan coverage table used by the Admin page.
+
+    Returns a pandas DataFrame with one row per tracked plan, summarising
+    how many documents have been downloaded, extracted and summarised,
+    plus the timestamp of the most recent download.
+    """
+    import pandas as pd
+    from sqlalchemy import case, distinct, func
+
+    session = get_db_session()
+    rows = (
+        session.query(
+            Plan.name.label("plan"),
+            Plan.abbreviation.label("abbrev"),
+            Plan.state.label("state"),
+            func.count(distinct(Document.id)).label("downloaded"),
+            func.sum(
+                case((Document.extraction_status == "done", 1), else_=0)
+            ).label("extracted"),
+            func.count(distinct(Summary.id)).label("summarized"),
+            func.max(Document.downloaded_at).label("last_download"),
+        )
+        .outerjoin(Document, Document.plan_id == Plan.id)
+        .outerjoin(Summary, Summary.document_id == Document.id)
+        .group_by(Plan.id)
+        .order_by(Plan.name)
+        .all()
+    )
+
+    df = pd.DataFrame(
+        [
+            {
+                "Plan": r.plan,
+                "Abbrev": r.abbrev or "",
+                "State": r.state or "",
+                "Downloaded": int(r.downloaded or 0),
+                "Extracted": int(r.extracted or 0),
+                "Summarized": int(r.summarized or 0),
+                "Last download": (
+                    r.last_download.strftime("%Y-%m-%d %H:%M")
+                    if r.last_download else "—"
+                ),
+            }
+            for r in rows
+        ]
+    )
+    return df
+
+
+def page_admin():
+    """Admin views: pipeline / data-quality diagnostics for the site owner."""
+    st.title("Admin")
+    tab_coverage, tab_backlog = st.tabs(["Plan Coverage", "Pipeline Backlog"])
+
+    with tab_coverage:
+        st.caption(
+            "One row per tracked plan — counts of documents downloaded, "
+            "text extracted, Claude summaries generated, plus the timestamp "
+            "of the most recent document download for that plan."
+        )
+        df = _admin_plan_coverage_df()
+
+        if df.empty:
+            st.warning("No plans in the database yet.")
+            return
+
+        # Headline totals at the top
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Plans tracked", len(df))
+        c2.metric("Documents downloaded", int(df["Downloaded"].sum()))
+        c3.metric("Documents extracted", int(df["Extracted"].sum()))
+        c4.metric("Documents summarized", int(df["Summarized"].sum()))
+
+        st.dataframe(
+            df,
+            use_container_width=True,
+            hide_index=True,
+        )
+
+    with tab_backlog:
+        st.caption(
+            "Plans where the pipeline has work outstanding — either "
+            "downloaded documents that haven't been extracted, or "
+            "extracted text that hasn't been summarised. Rows where "
+            "Downloaded == Extracted == Summarized are hidden."
+        )
+        df = _admin_plan_coverage_df()
+        if df.empty:
+            st.warning("No plans in the database yet.")
+        else:
+            # Compute the two backlog deltas and filter
+            df = df.copy()
+            df["Extract pending"] = df["Downloaded"] - df["Extracted"]
+            df["Summarize pending"] = df["Extracted"] - df["Summarized"]
+            backlog = df[
+                (df["Extract pending"] > 0) | (df["Summarize pending"] > 0)
+            ].copy()
+
+            if backlog.empty:
+                st.success(
+                    "Pipeline is fully caught up — every downloaded document "
+                    "has been extracted and summarised."
+                )
+            else:
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Plans with backlog", len(backlog))
+                c2.metric(
+                    "Extract pending", int(backlog["Extract pending"].sum())
+                )
+                c3.metric(
+                    "Summarize pending", int(backlog["Summarize pending"].sum())
+                )
+
+                # Reorder columns to put the backlog deltas next to the counts
+                cols = [
+                    "Plan", "Abbrev", "State",
+                    "Downloaded", "Extracted", "Summarized",
+                    "Extract pending", "Summarize pending",
+                    "Last download",
+                ]
+                st.dataframe(
+                    backlog[cols].sort_values(
+                        ["Summarize pending", "Extract pending"],
+                        ascending=False,
+                    ),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+                st.info(
+                    "Close the backlog by running the pipeline with the step "
+                    "that applies:\n\n"
+                    "`python pipeline.py --extract-only` — fills both Extract "
+                    "and Summarize gaps (extractor runs, then summariser).\n\n"
+                    "`python pipeline.py --summarize-only` — summarises any "
+                    "documents that have already been extracted but not yet "
+                    "processed by Claude."
+                )
 
 
 def main():
@@ -882,8 +1070,9 @@ def main():
             st.error(f"Invalid document ID: {doc_param}")
         return
 
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
-        "Notes", "Summary", "Updates", "Search", "Browse Recent", "Investment Actions", "Plans"
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+        "Notes", "Summary", "Updates", "Search", "Browse Recent",
+        "Investment Actions", "Plans", "Admin",
     ])
 
     with tab1:
@@ -900,6 +1089,8 @@ def main():
         page_investment_actions(plan_id, plan_label)
     with tab7:
         page_plans()
+    with tab8:
+        page_admin()
 
 
 if __name__ == "__main__":
