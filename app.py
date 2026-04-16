@@ -463,7 +463,7 @@ def _find_all_highlights() -> list[tuple[Path, str, str]]:
 
 
 def _find_latest_insights() -> tuple[Path, str, str] | None:
-    """Find the CIO Insights note and extract its generated date."""
+    """Find the YTD CIO Insights note and extract its generated date."""
     path = NOTES_DIR / "2026_cio_insights.md"
     if not path.exists():
         return None
@@ -471,6 +471,29 @@ def _find_latest_insights() -> tuple[Path, str, str] | None:
     gen_match = re.search(r"\*Generated:\s*(.+?)\*", content)
     generated_date = gen_match.group(1).strip() if gen_match else "Unknown"
     return (path, "CIO Insights: 2026 Institutional Trends", generated_date)
+
+
+def _find_latest_insights_recent() -> tuple[Path, str, str] | None:
+    """Find the rolling-window (e.g. 30-day) CIO Insights note.
+
+    Picks the most recently modified ``cio_insights_*day.md`` file so the
+    window length is discovered automatically rather than hard-coded.
+    """
+    candidates = sorted(
+        NOTES_DIR.glob("cio_insights_*day.md"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    if not candidates:
+        return None
+    path = candidates[0]
+    content = path.read_text(encoding="utf-8")
+    gen_match = re.search(r"\*Generated:\s*(.+?)\*", content)
+    generated_date = gen_match.group(1).strip() if gen_match else "Unknown"
+    # Derive the window length from the filename (e.g. cio_insights_30day.md)
+    m = re.match(r"cio_insights_(\d+)day\.md", path.name)
+    days = m.group(1) if m else "?"
+    return (path, f"CIO Insights: Past {days} Days", generated_date)
 
 
 def _find_latest_trends() -> tuple[Path, str, str] | None:
@@ -679,7 +702,12 @@ def _render_note_page(md_path: Path, title: str, generated_date: str, pdf_filena
 
 
 def page_notes():
-    tab_trends, tab_week, tab_insights = st.tabs(["2026 Agenda Trends", "7-Day Highlights", "Insights"])
+    tab_trends, tab_week, tab_insights_recent, tab_insights = st.tabs([
+        "2026 Agenda Trends",
+        "7-Day Highlights",
+        "Insights (30 days)",
+        "Insights (YTD)",
+    ])
 
     with tab_trends:
         st.title("2026 Meeting Agenda Trends")
@@ -695,8 +723,25 @@ def page_notes():
         else:
             st.info("No trends document found. Run `python generate_notes.py` to generate.")
 
+    with tab_insights_recent:
+        st.title("CIO Insights — Rolling Window")
+        result = _find_latest_insights_recent()
+        if result:
+            path, title, gen_date = result
+            _render_note_page(
+                md_path=path,
+                title=title,
+                generated_date=gen_date,
+                pdf_filename=path.stem + ".pdf",
+            )
+        else:
+            st.info(
+                "No rolling-window insights document found. "
+                "Run `python generate_notes.py --insights-30day-only` to generate."
+            )
+
     with tab_insights:
-        st.title("CIO Insights")
+        st.title("CIO Insights — Year to Date")
         result = _find_latest_insights()
         if result:
             path, title, gen_date = result
@@ -707,7 +752,7 @@ def page_notes():
                 pdf_filename="2026_cio_insights.pdf",
             )
         else:
-            st.info("No insights document found. Run `python generate_notes.py --insights-only` to generate.")
+            st.info("No YTD insights document found. Run `python generate_notes.py --insights-ytd-only` to generate.")
 
     with tab_week:
         st.title("7-Day Highlights")
