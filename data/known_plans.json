@@ -11,7 +11,11 @@
     "sub_page_pattern": "calpers\\.ca\\.gov/about/board/board-meetings/(pctm|invest)",
     "max_sub_pages": 12,
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"],
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ],
     "notes": "PCTM = Portfolio Construction and Trade Management Committee (investment)"
   },
   {
@@ -26,7 +30,11 @@
     "sub_page_pattern": "calstrs\\.com/\\d{4}-\\d{2}-\\d{2}-board-meeting",
     "max_sub_pages": 8,
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
   },
   {
     "id": "nycers",
@@ -38,7 +46,11 @@
     "materials_url": "https://www.nycers.org/post/board-meeting-agendas",
     "materials_type": "html_links",
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
   },
   {
     "id": "nystrs",
@@ -50,7 +62,11 @@
     "materials_url": "https://www.nystrs.org/about-us/retirement-board/board-meetings/",
     "materials_type": "playwright",
     "investment_only": true,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
   },
   {
     "id": "nycrs_comptroller",
@@ -62,8 +78,11 @@
     "materials_url": "https://comptroller.nyc.gov/bamlibrary/",
     "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack"],
-    "notes": "This page IS the investment advisory committee — disable filter"
+    "doc_types": [
+      "agenda",
+      "board_pack"
+    ],
+    "notes": "This page IS the investment advisory committee \u00e2\u20ac\u201d disable filter"
   },
   {
     "id": "trs_texas",
@@ -72,10 +91,17 @@
     "state": "TX",
     "aum_billions": 200,
     "website": "https://www.trs.texas.gov",
-    "materials_url": "https://www.trs.texas.gov/about/trustees/board-meeting-materials",
+    "materials_url": "https://www.trs.texas.gov/about/trustees/board-meetings",
     "materials_type": "playwright",
-    "investment_only": true,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ],
+    "sub_page_pattern": "trs\\.texas\\.gov/about/trustees/board-meetings/board-meeting-",
+    "max_sub_pages": 8,
+    "playwright_wait_selector": "a[href*=\"board-meetings/board-meeting-\"]"
   },
   {
     "id": "ers_texas",
@@ -87,7 +113,11 @@
     "materials_url": "https://ers.texas.gov/about-ers/ers-board-of-trustees/board-materials",
     "materials_type": "html_links",
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
   },
   {
     "id": "frs",
@@ -96,10 +126,16 @@
     "state": "FL",
     "aum_billions": 210,
     "website": "https://www.myfrs.com",
-    "materials_url": "https://www.sbafla.com/oversight/investment-advisory-council/investment-advisory-council-meeting-materials/?year=2026",
+    "materials_url": "https://www.sbafla.com/oversight/investment-advisory-council/investment-advisory-council-meeting-materials/",
     "materials_type": "playwright",
     "investment_only": true,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ],
+    "playwright_wait_selector": "a[href$=\".pdf\"]",
+    "notes": "IAC materials listing page returns 403 even with Playwright; PDFs use random slugs at sbafla.com/media/ \u2014 not indexable via standard scraping"
   },
   {
     "id": "opers",
@@ -111,7 +147,11 @@
     "materials_url": "https://www.opers.org/about/board/meetings/",
     "materials_type": "playwright",
     "investment_only": true,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
   },
   {
     "id": "strs_ohio",
@@ -123,7 +163,11 @@
     "materials_url": "https://www.strsoh.org/about/board-meetings.html",
     "materials_type": "html_links",
     "investment_only": true,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
   },
   {
     "id": "psers",
@@ -135,7 +179,11 @@
     "materials_url": "https://www.pa.gov/agencies/psers/board-of-trustees/board-of-trustees-meetings",
     "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
   },
   {
     "id": "sers_pa",
@@ -147,7 +195,11 @@
     "materials_url": "https://sers.pa.gov/About-Board-Meeting-Assets.html",
     "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
   },
   {
     "id": "pera_colorado",
@@ -159,7 +211,11 @@
     "materials_url": "https://copera.org/about/board-and-leadership/board-meeting-archive/",
     "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
   },
   {
     "id": "lacera",
@@ -171,8 +227,12 @@
     "materials_url": "https://www.lacera.gov/accountability/boi-and-committees",
     "materials_type": "html_links",
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"],
-    "notes": "Pointing directly at Board of Investments — disable filter"
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ],
+    "notes": "Pointing directly at Board of Investments \u00e2\u20ac\u201d disable filter"
   },
   {
     "id": "scers",
@@ -184,7 +244,10 @@
     "materials_url": "https://www.scers.gov/retirement-board-meetings",
     "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "minutes"]
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
   },
   {
     "id": "njdpb",
@@ -196,8 +259,11 @@
     "materials_url": "https://www.nj.gov/treasury/doinvest/calendar.shtml",
     "materials_type": "html_links",
     "investment_only": false,
-    "notes": "State Investment Council — already scoped to investment; disable filter",
-    "doc_types": ["agenda", "minutes"]
+    "notes": "State Investment Council \u00e2\u20ac\u201d already scoped to investment; disable filter",
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
   },
   {
     "id": "ilsrs",
@@ -205,11 +271,15 @@
     "abbreviation": "ILSRS",
     "state": "IL",
     "aum_billions": 25,
-    "website": "https://www.srs.illinois.gov",
-    "materials_url": "https://www.srs.illinois.gov/GARS/board_information.htm",
-    "materials_type": "html_links",
-    "investment_only": true,
-    "doc_types": ["agenda", "minutes"]
+    "website": "https://ilsrs.illinois.gov",
+    "materials_url": "https://ilsrs.illinois.gov/sers/about/sers-board-meeting-dates.html",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ],
+    "playwright_wait_selector": ".cmp-list__item-link"
   },
   {
     "id": "imrf",
@@ -221,7 +291,11 @@
     "materials_url": "https://www.imrf.org/en/about-imrf/board-of-trustees/board-meeting-calendar",
     "materials_type": "html_links",
     "investment_only": true,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
   },
   {
     "id": "wperp",
@@ -233,7 +307,10 @@
     "materials_url": "https://etf.wi.gov/about-etf/governing-boards/retirement-boards-meeting-agendas-and-materials",
     "materials_type": "html_links",
     "investment_only": false,
-    "doc_types": ["agenda", "minutes"]
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
   },
   {
     "id": "ipers",
@@ -245,8 +322,12 @@
     "materials_url": "https://ipers.org/about/governance/investment-board/investment-board-agendas-materials-minutes",
     "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"],
-    "notes": "URL is already scoped to investment board — disable filter"
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ],
+    "notes": "URL is already scoped to investment board \u00e2\u20ac\u201d disable filter"
   },
   {
     "id": "nmpera",
@@ -257,8 +338,13 @@
     "website": "https://www.nmpera.org",
     "materials_url": "https://www.nmpera.org/board-of-trustees/meeting-information",
     "materials_type": "playwright",
-    "investment_only": true,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ],
+    "playwright_wait_selector": "a[href$=\".pdf\"]"
   },
   {
     "id": "nmerb",
@@ -270,8 +356,14 @@
     "materials_url": "https://www.erb.nm.gov/board/upcoming-board-meetings/",
     "materials_type": "playwright",
     "investment_only": true,
-    "doc_types": ["agenda", "board_pack", "minutes"],
-    "extra_pages": ["https://www.erb.nm.gov/board/board-minutes/"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ],
+    "extra_pages": [
+      "https://www.erb.nm.gov/board/board-minutes/"
+    ]
   },
   {
     "id": "tmrs",
@@ -283,7 +375,10 @@
     "materials_url": "https://www.tmrs.com/board-of-trustees",
     "materials_type": "html_links",
     "investment_only": false,
-    "doc_types": ["agenda", "minutes"]
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
   },
   {
     "id": "tcdrs",
@@ -295,7 +390,10 @@
     "materials_url": "https://www.tcdrs.org/about-us/governance/",
     "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "minutes"]
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
   },
   {
     "id": "hfrrf",
@@ -307,7 +405,9 @@
     "materials_url": "https://www.hfrrf.org/about-us/board-of-trustees/board-minutes/",
     "materials_type": "html_links",
     "investment_only": false,
-    "doc_types": ["minutes"]
+    "doc_types": [
+      "minutes"
+    ]
   },
   {
     "id": "hpops",
@@ -319,7 +419,10 @@
     "materials_url": "https://www.hpops.org/about-us/calendar/",
     "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "minutes"]
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
   },
   {
     "id": "hmeps",
@@ -329,9 +432,13 @@
     "aum_billions": 4,
     "website": "https://www.hmeps.org",
     "materials_url": "https://hmeps.org/agenda/",
-    "materials_type": "html_links",
+    "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "minutes"]
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ],
+    "playwright_wait_selector": "a[href$=\".pdf\"]"
   },
   {
     "id": "dpfp",
@@ -343,8 +450,13 @@
     "materials_url": "https://www.dpfp.org/-board/board-meeting-agendas/",
     "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "minutes"],
-    "extra_pages": ["https://www.dpfp.org/-board/board-meeting-minutes/"]
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ],
+    "extra_pages": [
+      "https://www.dpfp.org/-board/board-meeting-minutes/"
+    ]
   },
   {
     "id": "safppf",
@@ -356,7 +468,10 @@
     "materials_url": "https://www.safppf.org/Agendas-Minutes",
     "materials_type": "html_links",
     "investment_only": false,
-    "doc_types": ["agenda", "minutes"]
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
   },
   {
     "id": "coaers",
@@ -368,7 +483,12 @@
     "materials_url": "https://www.coaers.org/board-agendas-minutes",
     "materials_type": "html_links",
     "investment_only": false,
-    "doc_types": ["agenda", "minutes"]
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ],
+    "sub_page_pattern": "coaers\\.org/\\d{4}-\\d{2}-\\d{2}-coaers",
+    "max_sub_pages": 12
   },
   {
     "id": "kyret_ky",
@@ -380,7 +500,10 @@
     "materials_url": "https://www.kyret.ky.gov/About/Meeting-Calendar/Pages/default.aspx",
     "materials_type": "playwright",
     "investment_only": true,
-    "doc_types": ["agenda", "minutes"]
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
   },
   {
     "id": "tcrs_tn",
@@ -391,8 +514,13 @@
     "website": "https://treasury.tn.gov",
     "materials_url": "https://treasury.tn.gov/Retirement/Boards-and-Governance/Board-Meetings",
     "materials_type": "playwright",
-    "investment_only": true,
-    "doc_types": ["agenda", "minutes"]
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ],
+    "playwright_wait_selector": "a[href*=\"DocumentDownload.ashx\"]",
+    "sub_page_pattern": "treasury\\.tn\\.gov/Retirement/Boards-and-Governance/Board-Meetings/"
   },
   {
     "id": "rsa_al",
@@ -403,8 +531,12 @@
     "website": "https://www.rsa-al.gov",
     "materials_url": "https://www.rsa-al.gov/ers/board-of-control/ers-board-meetings/",
     "materials_type": "html_links",
-    "investment_only": true,
-    "doc_types": ["agenda", "minutes"]
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ],
+    "notes": "Posts Vimeo recordings; PDF materials availability varies by meeting"
   },
   {
     "id": "peba_sc",
@@ -414,9 +546,12 @@
     "aum_billions": 35,
     "website": "https://www.peba.sc.gov",
     "materials_url": "https://www.peba.sc.gov/meeting-schedule",
-    "materials_type": "playwright",
-    "investment_only": true,
-    "doc_types": ["agenda", "minutes"]
+    "materials_type": "html_links",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
   },
   {
     "id": "trsl_la",
@@ -426,9 +561,13 @@
     "aum_billions": 25,
     "website": "https://www.trsl.org",
     "materials_url": "https://www.trsl.org/about/board-of-trustees/meeting-information",
-    "materials_type": "html_links",
-    "investment_only": true,
-    "doc_types": ["agenda", "minutes"]
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ],
+    "playwright_wait_selector": "a[href$=\".pdf\"]"
   },
   {
     "id": "lasers_la",
@@ -438,9 +577,14 @@
     "aum_billions": 13,
     "website": "https://lasersonline.org",
     "materials_url": "https://lasersonline.org/about/board-of-trustees/meeting-agendas-minutes/",
-    "materials_type": "html_links",
-    "investment_only": true,
-    "doc_types": ["agenda", "minutes"]
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ],
+    "playwright_wait_selector": "div.entry-content",
+    "notes": "Site returns 403 on all pages including homepage; PDFs at /wp-content/uploads/ are individually accessible but listing page is blocked"
   },
   {
     "id": "pers_ms",
@@ -452,7 +596,10 @@
     "materials_url": "https://www.pers.ms.gov/leadership",
     "materials_type": "playwright",
     "investment_only": true,
-    "doc_types": ["agenda", "minutes"]
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
   },
   {
     "id": "atrs_ar",
@@ -461,10 +608,13 @@
     "state": "AR",
     "aum_billions": 20,
     "website": "https://www.artrs.gov",
-    "materials_url": "https://www.artrs.gov/board-calendar",
-    "materials_type": "playwright",
-    "investment_only": true,
-    "doc_types": ["agenda", "minutes"]
+    "materials_url": "https://www.artrs.gov/board-minutes",
+    "materials_type": "html_links",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
   },
   {
     "id": "trs_ok",
@@ -474,9 +624,12 @@
     "aum_billions": 19,
     "website": "https://oklahoma.gov/trs.html",
     "materials_url": "https://oklahoma.gov/trs/about-us1/schedules-and-agendas.html",
-    "materials_type": "playwright",
-    "investment_only": true,
-    "doc_types": ["agenda", "minutes"]
+    "materials_type": "html_links",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
   },
   {
     "id": "ers_hi",
@@ -487,8 +640,11 @@
     "website": "https://ers.ehawaii.gov",
     "materials_url": "https://ers.ehawaii.gov/resources/board-of-trustees/board-of-trustees-minutes",
     "materials_type": "html_links",
-    "investment_only": true,
-    "doc_types": ["agenda", "minutes"]
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
   },
   {
     "id": "armb_ak",
@@ -500,7 +656,10 @@
     "materials_url": "https://treasury.dor.alaska.gov/armb/meetings-and-minutes/archive",
     "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "minutes"]
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
   },
   {
     "id": "mboi_mt",
@@ -512,7 +671,10 @@
     "materials_url": "https://investmentmt.com/Board/Meetings",
     "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "minutes"]
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
   },
   {
     "id": "persi_id",
@@ -522,9 +684,12 @@
     "aum_billions": 26,
     "website": "https://www.persi.idaho.gov",
     "materials_url": "https://www.persi.idaho.gov/retirement-board/",
-    "materials_type": "playwright",
-    "investment_only": true,
-    "doc_types": ["agenda", "minutes"]
+    "materials_type": "html_links",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
   },
   {
     "id": "urs_ut",
@@ -534,9 +699,12 @@
     "aum_billions": 47,
     "website": "https://www.urs.org",
     "materials_url": "https://newsroom.urs.org/board-meetings",
-    "materials_type": "playwright",
-    "investment_only": true,
-    "doc_types": ["agenda", "minutes"]
+    "materials_type": "html_links",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
   },
   {
     "id": "wrs_wy",
@@ -547,8 +715,11 @@
     "website": "https://retirement.wyo.gov",
     "materials_url": "https://retirement.wyo.gov/about/board-meeting-minutes/",
     "materials_type": "html_links",
-    "investment_only": true,
-    "doc_types": ["agenda", "minutes"]
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
   },
   {
     "id": "sdrs_sd",
@@ -556,11 +727,15 @@
     "abbreviation": "SDRS",
     "state": "SD",
     "aum_billions": 15,
-    "website": "https://sdrs.sd.gov",
-    "materials_url": "https://sdrs.sd.gov/about/trustees/meetings.aspx",
-    "materials_type": "playwright",
-    "investment_only": true,
-    "doc_types": ["agenda", "minutes"]
+    "website": "https://boardsandcommissions.sd.gov",
+    "materials_url": "https://boardsandcommissions.sd.gov/Meetings.aspx?BoardID=86",
+    "materials_type": "html_links",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ],
+    "playwright_wait_selector": "a[href*=\"/bcuploads/\"]"
   },
   {
     "id": "sib_nd",
@@ -572,7 +747,10 @@
     "materials_url": "https://www.rio.nd.gov/sib/sib-investment-committee-meeting-materials",
     "materials_type": "html_links",
     "investment_only": false,
-    "doc_types": ["agenda", "minutes"]
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
   },
   {
     "id": "nic_ne",
@@ -584,7 +762,10 @@
     "materials_url": "https://nic.nebraska.gov/meetings",
     "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "minutes"]
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
   },
   {
     "id": "kpers_ks",
@@ -595,8 +776,12 @@
     "website": "https://www.kspers.gov",
     "materials_url": "https://www.kspers.gov/about/board",
     "materials_type": "playwright",
-    "investment_only": true,
-    "doc_types": ["agenda", "minutes"]
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ],
+    "playwright_wait_selector": "a[href*=\"/bot/\"]"
   },
   {
     "id": "nyscrf",
@@ -605,10 +790,16 @@
     "state": "NY",
     "aum_billions": 270,
     "website": "https://www.osc.ny.gov",
-    "materials_url": "https://www.osc.ny.gov/common-retirement-fund/meetings",
-    "materials_type": "playwright",
-    "investment_only": true,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "materials_url": "https://www.osc.ny.gov/common-retirement-fund/resources/investment-advisory-committee",
+    "materials_type": "html_links",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ],
+    "playwright_wait_selector": "a[href$=\".pdf\"]",
+    "notes": "NY Comptroller is sole trustee; IAC is advisory only \u2014 meeting materials not publicly posted"
   },
   {
     "id": "wsib",
@@ -620,7 +811,11 @@
     "materials_url": "https://www.sib.wa.gov/meetings.html",
     "materials_type": "html_links",
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
   },
   {
     "id": "trsnyc",
@@ -630,9 +825,15 @@
     "aum_billions": 100,
     "website": "https://www.trsnyc.org",
     "materials_url": "https://www.trsnyc.org/memberportal/About-Us/MeetingSum",
-    "materials_type": "playwright",
+    "materials_type": "html_links",
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ],
+    "sub_page_pattern": "trsnyc\\.org/memberportal/About-Us/MeetingSum\\d{4}",
+    "max_sub_pages": 3
   },
   {
     "id": "ga_trs",
@@ -644,7 +845,11 @@
     "materials_url": "https://www.trsga.com/about-us/board-of-trustees/board-meetings",
     "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
   },
   {
     "id": "mn_sbi",
@@ -656,7 +861,11 @@
     "materials_url": "https://www.msbi.us/board-meetings",
     "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
   },
   {
     "id": "vrs",
@@ -668,7 +877,11 @@
     "materials_url": "https://www.varetire.org/about/board/meetings/",
     "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
   },
   {
     "id": "ncrs",
@@ -683,7 +896,11 @@
     "sub_page_pattern": "/news/events/tsers-and-lgers-board-trustees-meeting",
     "sub_page_skip_committee_filter": true,
     "max_sub_pages": 8,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
   },
   {
     "id": "or_pers",
@@ -695,7 +912,11 @@
     "materials_url": "https://www.oregon.gov/pers/Pages/Board/PERS-Board-Information.aspx",
     "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
   },
   {
     "id": "ma_prim",
@@ -705,9 +926,13 @@
     "aum_billions": 110,
     "website": "https://www.mapension.com",
     "materials_url": "https://www.mapension.com/records-of-interest/",
-    "materials_type": "playwright",
+    "materials_type": "html_links",
     "investment_only": true,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
   },
   {
     "id": "mi_ors",
@@ -716,10 +941,15 @@
     "state": "MI",
     "aum_billions": 80,
     "website": "https://www.michigan.gov/ors",
-    "materials_url": "https://www.michigan.gov/ors/about-ors/meetings",
+    "materials_url": "https://www.michigan.gov/treasury/about/investments/board/state-of-michigan-investment-board-meeting-schedule-and-agenda",
     "materials_type": "playwright",
-    "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "investment_only": true,
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ],
+    "notes": "SMIB = State of Michigan Investment Board, manages ORS pension assets"
   },
   {
     "id": "md_sra",
@@ -731,7 +961,11 @@
     "materials_url": "https://sra.maryland.gov/meeting-schedule",
     "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
   },
   {
     "id": "il_trs",
@@ -741,9 +975,13 @@
     "aum_billions": 65,
     "website": "https://www.trsil.org",
     "materials_url": "https://www.trsil.org/trustees/board-of-trustees-meeting",
-    "materials_type": "playwright",
+    "materials_type": "html_links",
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
   },
   {
     "id": "mo_psrs",
@@ -755,7 +993,11 @@
     "materials_url": "https://www.psrs-peers.org/About-Us/Board",
     "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
   },
   {
     "id": "asrs",
@@ -767,7 +1009,11 @@
     "materials_url": "https://www.azasrs.gov/content/board-and-committee-meetings",
     "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
   },
   {
     "id": "nv_pers",
@@ -776,10 +1022,15 @@
     "state": "NV",
     "aum_billions": 55,
     "website": "https://www.nvpers.org",
-    "materials_url": "https://www.nvpers.org/board/meetings",
+    "materials_url": "https://www.nvpers.org/boardBusiness/currentInfo",
     "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ],
+    "playwright_wait_selector": "a[href*=\"/sites/default/files/meetings/\"]"
   },
   {
     "id": "inprs",
@@ -791,7 +1042,11 @@
     "materials_url": "https://www.in.gov/inprs/boardmtgs.htm",
     "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
   },
   {
     "id": "sf_sfers",
@@ -799,11 +1054,16 @@
     "abbreviation": "SFERS",
     "state": "CA",
     "aum_billions": 35,
-    "website": "https://www.sfers.org",
-    "materials_url": "https://www.sfers.org/board-committees/board-meetings",
+    "website": "https://www.mysfers.org",
+    "materials_url": "https://mysfers.org/about-sfers/retirement-board-3/agendas-minutes/investment-committee/",
     "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ],
+    "playwright_wait_selector": "a[href*=\"/uploads/\"]"
   },
   {
     "id": "ct_sers",
@@ -811,11 +1071,14 @@
     "abbreviation": "CT SERS",
     "state": "CT",
     "aum_billions": 20,
-    "website": "https://portal.ct.gov/osc",
-    "materials_url": "https://portal.ct.gov/OPM/Emprel/Retirement/SERS-Meetings",
-    "materials_type": "playwright",
+    "website": "https://osc.ct.gov",
+    "materials_url": "https://osc.ct.gov/public/retirement/commission/meetings/",
+    "materials_type": "html_links",
     "investment_only": false,
-    "doc_types": ["agenda", "minutes"]
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
   },
   {
     "id": "mn_pera",
@@ -824,10 +1087,13 @@
     "state": "MN",
     "aum_billions": 30,
     "website": "https://www.mnpera.org",
-    "materials_url": "https://www.mnpera.org/about/board/agenda",
-    "materials_type": "playwright",
+    "materials_url": "https://mnpera.org/board-trustees/minute-archive",
+    "materials_type": "html_links",
     "investment_only": false,
-    "doc_types": ["agenda", "minutes"]
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
   },
   {
     "id": "mn_tra",
@@ -836,10 +1102,14 @@
     "state": "MN",
     "aum_billions": 30,
     "website": "https://www.minnesotatra.org",
-    "materials_url": "https://minnesotatra.org/about/board/agendas-minutes",
+    "materials_url": "https://minnesotatra.org/about/board/board-documents/",
     "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "minutes"]
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ],
+    "playwright_wait_selector": "a[href*=\"/wp-content/uploads/\"]"
   },
   {
     "id": "mn_msrs",
@@ -847,11 +1117,15 @@
     "abbreviation": "MSRS",
     "state": "MN",
     "aum_billions": 25,
-    "website": "https://www.msrs.us",
-    "materials_url": "https://msrs.us/about/board-meetings",
+    "website": "https://www.mnretire.gov",
+    "materials_url": "https://www.mnretire.gov/board-meeting-calendar",
     "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "minutes"]
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ],
+    "playwright_wait_selector": "a[href*=\"/sites/default/files/\"]"
   },
   {
     "id": "lacers",
@@ -863,7 +1137,11 @@
     "materials_url": "https://www.lacers.org/agendas-and-minutes",
     "materials_type": "html_links",
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
   },
   {
     "id": "ocers",
@@ -875,7 +1153,11 @@
     "materials_url": "https://www.ocers.org/board-committee-meetings",
     "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
   },
   {
     "id": "ktrs",
@@ -887,7 +1169,11 @@
     "materials_url": "https://www.trs.ky.gov/administration/board-of-trustees-meeting-materials",
     "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
   },
   {
     "id": "ga_ers",
@@ -896,10 +1182,14 @@
     "state": "GA",
     "aum_billions": 20,
     "website": "https://www.ers.ga.gov",
-    "materials_url": "https://www.ers.ga.gov/board-portal",
+    "materials_url": "https://www.ers.ga.gov/boards-trustees",
     "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "minutes"]
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ],
+    "playwright_wait_selector": "a[href*=\"/sites/main/files/file-attachments/\"]"
   },
   {
     "id": "wv_imb",
@@ -908,10 +1198,16 @@
     "state": "WV",
     "aum_billions": 18,
     "website": "https://www.wvimb.org",
-    "materials_url": "https://www.wvimb.org/meetings",
+    "materials_url": "https://wvimb.org/home/reports/",
     "materials_type": "playwright",
     "investment_only": true,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ],
+    "notes": "Only financial statements posted publicly; board meeting minutes not available online",
+    "playwright_wait_selector": "a[href$=\".pdf\"]"
   },
   {
     "id": "me_pers",
@@ -921,9 +1217,13 @@
     "aum_billions": 18,
     "website": "https://www.mainepers.org",
     "materials_url": "https://www.mainepers.org/about/board-of-trustees/meeting-information",
-    "materials_type": "playwright",
+    "materials_type": "html_links",
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
   },
   {
     "id": "wv_cprb",
@@ -932,10 +1232,13 @@
     "state": "WV",
     "aum_billions": 18,
     "website": "https://www.wvretirement.com",
-    "materials_url": "https://www.wvretirement.com/BrdMtng.htm",
+    "materials_url": "https://www.wvretirement.com/Board-Agenda.html",
     "materials_type": "html_links",
     "investment_only": false,
-    "doc_types": ["agenda", "minutes"]
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
   },
   {
     "id": "ctpf",
@@ -947,7 +1250,13 @@
     "materials_url": "https://ctpf.org/post/board-meetings",
     "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ],
+    "playwright_wait_selector": "a[href$=\".pdf\"]",
+    "notes": "Board materials hosted on Diligent Community platform; direct PDFs may not be accessible"
   },
   {
     "id": "sbcera",
@@ -956,10 +1265,15 @@
     "state": "CA",
     "aum_billions": 16,
     "website": "https://www.sbcera.org",
-    "materials_url": "https://www.sbcera.org/calendar",
+    "materials_url": "https://sbcera.legistar.com/Calendar.aspx",
     "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ],
+    "playwright_wait_selector": ".rgRow"
   },
   {
     "id": "sdcera",
@@ -971,7 +1285,11 @@
     "materials_url": "https://www.sdcera.org/about-sdcera/board-of-retirement/board-committee-meetings",
     "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
   },
   {
     "id": "dcrb",
@@ -980,10 +1298,15 @@
     "state": "DC",
     "aum_billions": 13,
     "website": "https://www.dcrb.dc.gov",
-    "materials_url": "https://www.dcrb.dc.gov/service/board-of-trustees-meetings",
+    "materials_url": "https://dcrb.dc.gov/publications",
     "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ],
+    "playwright_wait_selector": "a[href*=\"sites/default/files\"]"
   },
   {
     "id": "mi_mers",
@@ -995,7 +1318,11 @@
     "materials_url": "https://www.mersofmich.com/mers/about-mers/mers-board/board-meetings",
     "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
   },
   {
     "id": "cook_county",
@@ -1007,7 +1334,10 @@
     "materials_url": "https://www.cookcountypension.com/agendaminutes",
     "materials_type": "html_links",
     "investment_only": false,
-    "doc_types": ["agenda", "minutes"]
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
   },
   {
     "id": "de_pers",
@@ -1015,11 +1345,15 @@
     "abbreviation": "DPERS",
     "state": "DE",
     "aum_billions": 12,
-    "website": "https://budget.delaware.gov/omb/pensions.shtml",
-    "materials_url": "https://budget.delaware.gov/omb/pensions.shtml",
-    "materials_type": "playwright",
+    "website": "https://open.omb.delaware.gov",
+    "materials_url": "https://open.omb.delaware.gov/information/boardTrustMinutes/trusteesMinutes.shtml",
+    "materials_type": "html_links",
     "investment_only": false,
-    "doc_types": ["agenda", "minutes"]
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ],
+    "sub_page_pattern": "botMinutes\\.shtml"
   },
   {
     "id": "mo_mosers",
@@ -1031,7 +1365,11 @@
     "materials_url": "https://www.mosers.org/leadership/board-meetings",
     "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
   },
   {
     "id": "ok_pers",
@@ -1040,10 +1378,14 @@
     "state": "OK",
     "aum_billions": 10,
     "website": "https://www.opers.ok.gov",
-    "materials_url": "https://www.opers.ok.gov/board-meetings",
+    "materials_url": "https://www.opers.ok.gov/board-of-trustees/",
     "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "minutes"]
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ],
+    "notes": "Board roster page exists but meeting agendas/minutes not publicly posted on website"
   },
   {
     "id": "ri_ers",
@@ -1052,10 +1394,16 @@
     "state": "RI",
     "aum_billions": 10,
     "website": "https://www.ersri.org",
-    "materials_url": "https://www.ersri.org/about-ersri/retirement-board",
-    "materials_type": "playwright",
+    "materials_url": "https://data.treasury.ri.gov/en/dataset?q=ersri+retirement+board+meeting&sort=metadata_modified+desc",
+    "materials_type": "html_links",
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ],
+    "sub_page_pattern": "data\\.treasury\\.ri\\.gov/en/dataset/\\d{4}-\\d+-\\d+-ersri",
+    "max_sub_pages": 6
   },
   {
     "id": "acera",
@@ -1067,7 +1415,11 @@
     "materials_url": "https://www.acera.org/board-meetings",
     "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
   },
   {
     "id": "cccera",
@@ -1075,11 +1427,15 @@
     "abbreviation": "CCCERA",
     "state": "CA",
     "aum_billions": 10,
-    "website": "https://www.cccera.org",
-    "materials_url": "https://www.cccera.org/board-meetings",
-    "materials_type": "playwright",
+    "website": "https://www.cccera.gov",
+    "materials_url": "https://www.cccera.gov/agenda-minutes",
+    "materials_type": "html_links",
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
   },
   {
     "id": "nhrs",
@@ -1088,10 +1444,13 @@
     "state": "NH",
     "aum_billions": 9,
     "website": "https://www.nhrs.org",
-    "materials_url": "https://www.nhrs.org/about-nhrs/board-of-trustees/meeting-minutes",
+    "materials_url": "https://www.nhrs.org/about-nhrs/board-of-trustees/meeting-minutes/board-of-trustees-minutes",
     "materials_type": "html_links",
     "investment_only": false,
-    "doc_types": ["agenda", "minutes"]
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
   },
   {
     "id": "vcera",
@@ -1100,10 +1459,16 @@
     "state": "CA",
     "aum_billions": 8,
     "website": "https://www.vcera.org",
-    "materials_url": "https://www.vcera.org/board-retirement-administration/meeting-agendas-minutes",
+    "materials_url": "https://vcera.primegov.com/public/portal",
     "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ],
+    "playwright_wait_selector": ".meeting-list",
+    "sub_page_pattern": "vcera\\.org/board-retirement-administration/\\d{4}"
   },
   {
     "id": "mo_lagers",
@@ -1112,10 +1477,13 @@
     "state": "MO",
     "aum_billions": 8,
     "website": "https://www.molagers.org",
-    "materials_url": "https://www.molagers.org/about/board-of-trustees/meeting-agendas",
-    "materials_type": "playwright",
+    "materials_url": "https://www.molagers.org/about-us/lagers-board-of-trustees/",
+    "materials_type": "html_links",
     "investment_only": false,
-    "doc_types": ["agenda", "minutes"]
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
   },
   {
     "id": "vt_pension",
@@ -1123,11 +1491,16 @@
     "abbreviation": "VPIC",
     "state": "VT",
     "aum_billions": 6,
-    "website": "https://www.vermontpension.org",
-    "materials_url": "https://www.vermontpension.org/meetings",
+    "website": "https://vpic.vermont.gov",
+    "materials_url": "https://vpic.vermont.gov/meetings/meeting-materials",
     "materials_type": "playwright",
     "investment_only": true,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ],
+    "playwright_wait_selector": "a[href*=\"vermont.gov\"]"
   },
   {
     "id": "smcera",
@@ -1135,11 +1508,17 @@
     "abbreviation": "SMCERA",
     "state": "CA",
     "aum_billions": 5,
-    "website": "https://www.smcera.org",
-    "materials_url": "https://www.smcera.org/about/board-meetings",
+    "website": "https://www.samcera.gov",
+    "materials_url": "https://www.samcera.gov/board-meeting-materials",
     "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ],
+    "playwright_wait_selector": "a[href$=\".pdf\"]",
+    "notes": "Organization is SamCERA (San Mateo County ERA); migrated from smcera.org to samcera.gov"
   },
   {
     "id": "kcera",
@@ -1148,21 +1527,29 @@
     "state": "CA",
     "aum_billions": 4,
     "website": "https://www.kcera.org",
-    "materials_url": "https://www.kcera.org/board/agendas-and-minutes",
-    "materials_type": "html_links",
+    "materials_url": "https://www.kcera.org/board-meeting-agendas-minutes",
+    "materials_type": "playwright",
     "investment_only": false,
-    "doc_types": ["agenda", "board_pack", "minutes"]
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ],
+    "playwright_wait_selector": "a[href*=\"kcera-board\"]"
   },
   {
     "id": "sj_federated",
-    "name": "City of San José Federated City Employees' Retirement System",
+    "name": "City of San Jos\u00c3\u00a9 Federated City Employees' Retirement System",
     "abbreviation": "SJFCERS",
     "state": "CA",
     "aum_billions": 4,
-    "website": "https://www.sanjoseca.gov/your-government/departments-offices/retirement-services",
-    "materials_url": "https://www.sanjoseca.gov/your-government/departments-offices/retirement-services/pension-division/board-of-administration",
-    "materials_type": "playwright",
+    "website": "https://www.sjretirement.com",
+    "materials_url": "https://www.sjretirement.com/boards/federated-city-employees-board-of-directors/boards-federated-agendas-minutes-and-audio/",
+    "materials_type": "html_links",
     "investment_only": false,
-    "doc_types": ["agenda", "minutes"]
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
   }
 ]
