@@ -3,13 +3,13 @@ Generate analyst notes from summarized pension plan data.
 
 Checks for latest documents across all plans, then uses Claude to produce:
   - 7-Day Highlights: a weekly briefing of recent board/committee activity
-  - 2026 Agenda Trends: a cumulative thematic analysis of the year's meetings
+  - CIO Insights: a strategic analysis document for institutional investors
 
 Usage:
     python generate_notes.py                    # run pipeline first, then generate notes
     python generate_notes.py --skip-pipeline    # only generate notes (assume DB is current)
     python generate_notes.py --highlights-only  # only generate 7-day highlights
-    python generate_notes.py --trends-only      # only generate trends document
+    python generate_notes.py --insights-only    # only generate CIO insights
     python generate_notes.py --days 14          # use 14-day window for highlights
 """
 
@@ -280,49 +280,6 @@ MEETING DATA:
 {meetings_text}"""
 
 
-def build_trends_prompt(data: dict) -> str:
-    """Build the Claude prompt for 2026 agenda trends generation."""
-    today_str = datetime.utcnow().strftime("%B %d, %Y")
-    month_range = data["date_range_str"]
-    aum_trillions = data["total_aum"] / 1000
-    meetings_text = format_meetings_for_prompt(data["meetings"])
-
-    return f"""\
-Write a comprehensive 2026 Meeting Agenda Trends analysis covering all U.S.
-public pension plan board and investment committee activity from {month_range}.
-
-Below is structured data from {data['plans_with_activity']} pension plans with documented
-meeting activity in 2026, representing approximately ${aum_trillions:.1f} trillion in
-combined AUM. Synthesize this into a deep analytical document.
-
-FORMAT REQUIREMENTS:
-- Start with exactly: # 2026 Meeting Agenda Trends: Key Topics & Announcements
-- Second line: *Covering {month_range} across {data['plans_with_activity']} major U.S. pension plans (~${aum_trillions:.1f} trillion AUM)*
-- Third line must be exactly: *Generated: {today_str}*
-- Then a --- horizontal rule
-- Use ## headings organized by theme. Standard sections:
-  1. Private Markets Deployment (PE, credit, real assets, secondaries commitments)
-  2. Manager Hires and Mandate Changes
-  3. Portfolio Strategy Shifts (allocation reviews, TPA adoption, benchmarks)
-  4. Performance Data (fund returns vs benchmarks)
-  5. Governance, ESG, and Leadership Transitions
-- For each theme, synthesize ACROSS plans — do not list plan-by-plan
-- Bold (**) plan names with AUM in parentheses on first mention, dollar amounts,
-  and manager names
-- Include specific numbers: commitment sizes, return percentages, vote tallies
-- Target 1500–1800 words total
-
-SOURCE LINKS:
-Each summary in the data below includes a doc_id (e.g. doc_id=42). At the end of
-each ## section, add a *Sources:* line listing the documents referenced in that
-section as markdown links. Use this exact format for each link:
-  [Plan Abbreviation — DocType — Date](?doc=ID)
-Example: *Sources: [CalPERS — Agenda — April 02, 2026](?doc=42), [LACERA — Board Pack — March 11, 2026](?doc=58)*
-Only cite documents whose content you actually used in that section.
-
-MEETING DATA:
-{meetings_text}"""
-
 
 def build_insights_prompt(data: dict) -> str:
     """Build the Claude prompt for the CIO Insights note."""
@@ -475,9 +432,7 @@ def main():
                         help="Skip fetch/extract/summarize, only generate notes")
     parser.add_argument("--highlights-only", action="store_true",
                         help="Only generate 7-day highlights")
-    parser.add_argument("--trends-only", action="store_true",
-                        help="Only generate trends document")
-    parser.add_argument("--insights-only", action="store_true",
+parser.add_argument("--insights-only", action="store_true",
                         help="Only generate CIO insights document")
     parser.add_argument("--days", type=int, default=7,
                         help="Lookback window for highlights (default: 7)")
@@ -502,9 +457,8 @@ def main():
     session = get_session()
 
     try:
-        only_one = args.highlights_only or args.trends_only or args.insights_only
+        only_one = args.highlights_only or args.insights_only
         do_highlights = args.highlights_only or not only_one
-        do_trends = args.trends_only or not only_one
         do_insights = args.insights_only or not only_one
 
         # Step 2: Generate 7-day highlights
@@ -525,22 +479,7 @@ def main():
                 today = datetime.utcnow().strftime("%Y-%m-%d")
                 write_note(content, f"7day_highlights_{today}.md")
 
-        # Step 3: Generate 2026 agenda trends
-        if do_trends:
-            console.rule("[bold blue]Generate 2026 Agenda Trends[/bold blue]")
-            data = gather_trends_data(session)
-            if not data["meetings"]:
-                console.print("[yellow]No 2026 meetings found. Skipping trends.[/yellow]")
-            else:
-                prompt = build_trends_prompt(data)
-                console.print(
-                    f"Calling Claude Sonnet ({len(prompt):,} char prompt, "
-                    f"{data['plans_with_activity']} plans, "
-                    f"{len(data['meetings'])} meetings)...")
-                content = generate_note(prompt, MAX_TOKENS_TRENDS)
-                write_note(content, "2026_meeting_trends_summary.md")
-
-        # Step 4: Generate CIO insights
+        # Step 3: Generate CIO insights
         if do_insights:
             console.rule("[bold blue]Generate CIO Insights[/bold blue]")
             data = gather_trends_data(session)
