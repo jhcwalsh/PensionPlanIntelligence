@@ -36,6 +36,7 @@ DOC_URL_PATTERNS = [
     r"/media/\d+/download",              # IPERS, Drupal-based sites
     r"/download\?",                       # Generic inline downloads (ETF Wisconsin)
     r"/files/.*\?",                       # Some Drupal sites
+    r"DocumentDownload\.ashx",            # EasyDNNNews CMS (TCRS Tennessee)
     r"/iip/\w+/file/getfile/",           # AgendasSuite (ERS Texas, etc.)
     r"/documents/files/governance/",     # NCRS (myncretirement.gov)
 ]
@@ -281,7 +282,7 @@ def extract_doc_links(soup: BeautifulSoup, base_url: str,
     seen_urls = set()
 
     for a_tag in soup.find_all("a", href=True):
-        href = a_tag["href"].strip()
+        href = a_tag["href"].strip().rstrip('"\'> ')  # fix malformed href endings
         link_text = a_tag.get_text(strip=True)
 
         full_url = urljoin(base_url, href)
