@@ -38,6 +38,7 @@ DOC_URL_PATTERNS = [
     r"/files/.*\?",                       # Some Drupal sites
     r"/iip/\w+/file/getfile/",           # AgendasSuite (ERS Texas, etc.)
     r"/documents/files/governance/",     # NCRS (myncretirement.gov)
+    r"/DocumentDownload\.ashx",          # DotNetNuke/EasyDNNNews (TCRS Tennessee, etc.)
 ]
 
 # A document link must match at least one of these to be kept
@@ -278,7 +279,7 @@ def extract_doc_links(soup: BeautifulSoup, base_url: str,
     seen_urls = set()
 
     for a_tag in soup.find_all("a", href=True):
-        href = a_tag["href"].strip()
+        href = a_tag["href"].strip().strip('"').strip("'")  # handle malformed HTML with extra quotes
         link_text = a_tag.get_text(strip=True)
 
         full_url = urljoin(base_url, href)
