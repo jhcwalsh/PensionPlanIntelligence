@@ -618,11 +618,9 @@ def main():
     session = get_session()
 
     try:
-        only_one = (args.highlights_only or args.trends_only
-                    or args.insights_only or args.insights_ytd_only
-                    or args.insights_30day_only)
+        only_one = (args.highlights_only or args.insights_only
+                    or args.insights_ytd_only or args.insights_30day_only)
         do_highlights = args.highlights_only or not only_one
-        do_trends = args.trends_only or not only_one
         # YTD insights run when: default, --insights-only, or --insights-ytd-only
         do_insights_ytd = (args.insights_ytd_only or args.insights_only
                            or not only_one)
@@ -678,22 +676,7 @@ def main():
                 today = datetime.utcnow().strftime("%Y-%m-%d")
                 write_note(content, f"7day_highlights_{today}.md")
 
-        # Step 3: Generate 2026 agenda trends
-        if do_trends:
-            console.rule("[bold blue]Generate 2026 Agenda Trends[/bold blue]")
-            data = gather_trends_data(session)
-            if not data["meetings"]:
-                console.print("[yellow]No 2026 meetings found. Skipping trends.[/yellow]")
-            else:
-                prompt = build_trends_prompt(data)
-                console.print(
-                    f"Calling Claude Sonnet ({len(prompt):,} char prompt, "
-                    f"{data['plans_with_activity']} plans, "
-                    f"{len(data['meetings'])} meetings)...")
-                content = generate_note(prompt, MAX_TOKENS_TRENDS)
-                write_note(content, "2026_meeting_trends_summary.md")
-
-        # Step 4: Generate YTD CIO insights
+        # Step 3: Generate YTD CIO insights
         if do_insights_ytd:
             console.rule("[bold blue]Generate CIO Insights (YTD)[/bold blue]")
             data = gather_trends_data(session)
@@ -709,7 +692,7 @@ def main():
                 note_path = write_note(content, "2026_cio_insights.md")
                 _validate_insights_note(note_path, data, "CIO Insights (YTD)")
 
-        # Step 5: Generate rolling 30-day CIO insights
+        # Step 4: Generate rolling 30-day CIO insights
         if do_insights_30day:
             window_days = args.insights_30day_days
             console.rule(
@@ -727,7 +710,7 @@ def main():
                     f"Calling Claude Sonnet ({len(prompt):,} char prompt, "
                     f"{data['plans_with_activity']} plans, "
                     f"{len(data['meetings'])} meetings)...")
-                content = generate_note(prompt, MAX_TOKENS_TRENDS)
+                content = generate_note(prompt, MAX_TOKENS_INSIGHTS)
                 note_path = write_note(content, f"cio_insights_{window_days}day.md")
                 _validate_insights_note(
                     note_path, data, f"CIO Insights ({window_days}-day)"

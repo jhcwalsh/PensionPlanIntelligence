@@ -496,26 +496,6 @@ def _find_latest_insights_recent() -> tuple[Path, str, str] | None:
     return (path, f"CIO Insights: Past {days} Days", generated_date)
 
 
-def _find_latest_trends() -> tuple[Path, str, str] | None:
-    """Find the 2026 trends summary and extract its generated date.
-
-    Returns (path, title, generated_date) or None.
-    """
-    path = NOTES_DIR / "2026_meeting_trends_summary.md"
-    if not path.exists():
-        return None
-
-    content = path.read_text(encoding="utf-8")
-    # Try *Generated: ...* first, then fall back to *Covering ...*
-    gen_match = re.search(r"\*Generated:\s*(.+?)\*", content)
-    if gen_match:
-        generated_date = gen_match.group(1).strip()
-    else:
-        cov_match = re.search(r"\*Covering\s+(.+?)\*", content)
-        generated_date = cov_match.group(1).strip() if cov_match else "Unknown"
-
-    return (path, "2026 Meeting Agenda Trends", generated_date)
-
 
 DEFAULT_APP_BASE_URL = "https://pensionplanintelligence.onrender.com"
 
@@ -702,26 +682,11 @@ def _render_note_page(md_path: Path, title: str, generated_date: str, pdf_filena
 
 
 def page_notes():
-    tab_trends, tab_week, tab_insights_monthly, tab_insights_year = st.tabs([
-        "2026 Agenda Trends",
+    tab_week, tab_insights_monthly, tab_insights_year = st.tabs([
         "7-Day Highlights",
         "Monthly CIO Insights",
         "2026 CIO Insights",
     ])
-
-    with tab_trends:
-        st.title("2026 Meeting Agenda Trends")
-        result = _find_latest_trends()
-        if result:
-            path, title, gen_date = result
-            _render_note_page(
-                md_path=path,
-                title=title,
-                generated_date=gen_date,
-                pdf_filename="2026_meeting_agenda_trends.pdf",
-            )
-        else:
-            st.info("No trends document found. Run `python generate_notes.py` to generate.")
 
     with tab_insights_monthly:
         st.title("Monthly CIO Insights")
