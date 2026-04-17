@@ -163,6 +163,78 @@ def gather_trends_data(session) -> dict:
     }
 
 
+def gather_recent_insights_data(session, days: int = 30) -> dict:
+    """Collect meetings whose ``meeting_date`` falls within the last N days.
+
+    Unlike :func:`gather_trends_data` (which uses a ``downloaded_at``
+    filter inherited from :func:`get_new_meetings`), this gathers by
+    true meeting date — meetings that actually happened recently rather
+    than documents downloaded recently. Meant for the rolling-window
+    CIO Insights variant.
+    """
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    recent_docs = (
+        session.query(Document)
+        .filter(Document.meeting_date >= cutoff)
+        .order_by(Document.meeting_date.desc())
+        .all()
+    )
+
+    # Group by (plan_id, meeting_date), same grouping shape that
+    # get_new_meetings returns so format_meetings_for_prompt works.
+    grouped: dict[tuple, dict] = {}
+    for doc in recent_docs:
+        key = (doc.plan_id, doc.meeting_date)
+        if key not in grouped:
+            plan = session.get(Plan, doc.plan_id)
+            grouped[key] = {
+                "plan": plan,
+                "meeting_date": doc.meeting_date,
+                "all_docs": [],
+                "agenda_doc": None,
+                "agenda_summary": None,
+            }
+        grouped[key]["all_docs"].append(doc)
+        entry = grouped[key]
+        if doc.doc_type == "agenda":
+            entry["agenda_doc"] = doc
+        elif entry["agenda_doc"] is None and doc.doc_type in ("board_pack", "minutes"):
+            entry["agenda_doc"] = doc
+
+    meetings = sorted(
+        grouped.values(),
+        key=lambda e: e["meeting_date"] or datetime.min,
+        reverse=True,
+    )
+
+    if not meetings:
+        return {"meetings": [], "plans_with_activity": 0, "total_aum": 0,
+                "days": days, "date_range_str": f"Last {days} days"}
+
+    for m in meetings:
+        m["all_summaries"] = _enrich_meeting_summaries(session, m)
+
+    plan_ids = {m["plan"].id for m in meetings if m["plan"]}
+    plans = session.query(Plan).filter(Plan.id.in_(plan_ids)).all()
+    total_aum = sum(p.aum_billions or 0 for p in plans)
+
+    dates = [m["meeting_date"] for m in meetings if m["meeting_date"]]
+    if dates:
+        earliest = min(dates)
+        latest = max(dates)
+        date_range_str = f"{earliest.strftime('%B %d, %Y')} – {latest.strftime('%B %d, %Y')}"
+    else:
+        date_range_str = f"Last {days} days"
+
+    return {
+        "meetings": meetings,
+        "plans_with_activity": len(plan_ids),
+        "total_aum": total_aum,
+        "days": days,
+        "date_range_str": date_range_str,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Prompt construction
 # ---------------------------------------------------------------------------
@@ -353,6 +425,87 @@ MEETING DATA:
 {meetings_text}"""
 
 
+def build_recent_insights_prompt(data: dict) -> str:
+    """Build the Claude prompt for the rolling-window (e.g. 30-day) CIO Insights note."""
+    today_str = datetime.utcnow().strftime("%B %d, %Y")
+    aum_trillions = data["total_aum"] / 1000
+    meetings_text = format_meetings_for_prompt(data["meetings"])
+    days = data.get("days", 30)
+    window_label = f"the past {days} days"
+    date_range = data.get("date_range_str", window_label)
+
+    return f"""\
+Write a CIO Insights briefing synthesizing the most important strategic themes and \
+implications from U.S. public pension plan board and investment committee activity \
+over {window_label} ({date_range}).
+
+Below is structured data from {data['plans_with_activity']} pension plans representing \
+approximately ${aum_trillions:.1f} trillion in combined AUM that held meetings in this \
+window.
+
+Think like a Chief Investment Officer advising a large institutional investor. Go beyond \
+describing what happened — extract the signals and identify what the pattern of decisions \
+means. Where the data contradicts or complicates common assumptions about pension \
+allocation trends, say so — but only when you can point to 2+ specific plans in the \
+MEETING DATA that demonstrate it. Because this is a rolling {days}-day window the \
+evidence base is smaller than a YTD briefing; weight observations accordingly and \
+prefer depth on a few well-evidenced themes over many thin ones.
+
+GROUNDING RULES (non-negotiable):
+- Every specific figure (%, $, vote tally, fee bps, manager name, asset class \
+allocation) MUST appear verbatim in the MEETING DATA below. If a number is not in \
+the data, do not state one — use qualitative language instead ("increased materially", \
+"a meaningful allocation") or omit the point.
+- Every manager, fund, or plan name must appear in the MEETING DATA. Do not introduce \
+names from general knowledge.
+- Every claim must be traceable to at least one doc_id in the MEETING DATA. If you \
+cannot cite a doc_id, do not make the claim.
+- If a theme is supported by fewer than 2 plans in the data, either drop it or \
+explicitly flag it as "*Emerging signal — limited data*". (Threshold relaxed from 3 \
+to 2 because of the smaller window.)
+- Prefer "no observation" over speculation. It is better to write 800 well-sourced \
+words than 1,400 with invented detail.
+
+FORMAT REQUIREMENTS:
+- Start with exactly: # CIO Insights: Past {days} Days
+- Second line: *Synthesized from board and investment committee activity across \
+{data['plans_with_activity']} U.S. public pension plans (~${aum_trillions:.1f} trillion AUM) \
+— meetings held {date_range}*
+- Third line must be exactly: *Generated: {today_str}*
+- Then a --- horizontal rule
+- Use numbered ## headings (## 1. Theme Name). Aim for 3–5 themes — fewer if the \
+data is thin.
+- Each section should end with a bold **Practical implication:** or **Bottom line:** sentence
+- Bold plan names with AUM in parentheses on first mention, dollar amounts, manager names
+- Include specific data (return percentages, commitment sizes, vote tallies, fee rates) \
+ONLY when it appears in MEETING DATA — see GROUNDING RULES above
+- Every sentence containing a $ figure, %, bps, vote tally, or manager name must end \
+with an inline citation in the form (doc_id=42). The section-level *Sources:* line \
+(see below) remains as a summary.
+- Do NOT produce a section-by-section recap of each plan — synthesize across plans
+- Target 800–1,400 words total. Err on the short side if data is thin.
+
+SOURCE LINKS:
+Each summary in the data below includes a doc_id (e.g. doc_id=42). Immediately before
+the **Practical implication:** / **Bottom line:** sentence at the end of each ## section,
+add a *Sources:* line listing the documents referenced in that section as markdown links.
+Use this exact format for each link:
+  [Plan Abbreviation — DocType — Date](?doc=ID)
+Example: *Sources: [CalPERS — Agenda — April 02, 2026](?doc=42), [LACERA — Board Pack — March 11, 2026](?doc=58)*
+Only cite documents whose content you actually used in that section.
+
+BEFORE FINALISING:
+- Re-read your draft. For every number, manager name, and vote tally, confirm it \
+appears in MEETING DATA. Remove or soften any that don't.
+- For every theme (##), confirm you named at least 2 plans with supporting evidence \
+from the data. If not, drop or soften the theme.
+- Confirm every inline (doc_id=N) matches a doc_id that actually appears in MEETING \
+DATA.
+
+MEETING DATA:
+{meetings_text}"""
+
+
 # ---------------------------------------------------------------------------
 # File output
 # ---------------------------------------------------------------------------
@@ -434,7 +587,14 @@ def main():
     parser.add_argument("--highlights-only", action="store_true",
                         help="Only generate 7-day highlights")
     parser.add_argument("--insights-only", action="store_true",
-                        help="Only generate CIO insights document")
+                        help="Only generate both CIO insights variants (YTD and 30-day)")
+    parser.add_argument("--insights-ytd-only", action="store_true",
+                        help="Only generate the YTD CIO insights document")
+    parser.add_argument("--insights-30day-only", action="store_true",
+                        help="Only generate the rolling 30-day CIO insights document")
+    parser.add_argument("--insights-30day-days", type=int, default=30,
+                        help="Window length in days for the rolling CIO insights "
+                             "note (default: 30)")
     parser.add_argument("--days", type=int, default=7,
                         help="Lookback window for highlights (default: 7)")
     parser.add_argument("--no-validate", action="store_true",
@@ -458,9 +618,47 @@ def main():
     session = get_session()
 
     try:
-        only_one = args.highlights_only or args.insights_only
+        only_one = (args.highlights_only or args.trends_only
+                    or args.insights_only or args.insights_ytd_only
+                    or args.insights_30day_only)
         do_highlights = args.highlights_only or not only_one
-        do_insights = args.insights_only or not only_one
+        do_trends = args.trends_only or not only_one
+        # YTD insights run when: default, --insights-only, or --insights-ytd-only
+        do_insights_ytd = (args.insights_ytd_only or args.insights_only
+                           or not only_one)
+        # 30-day insights run when: default, --insights-only, or --insights-30day-only
+        do_insights_30day = (args.insights_30day_only or args.insights_only
+                             or not only_one)
+
+        def _validate_insights_note(note_path: Path, data: dict, label: str):
+            """Fact-check a CIO insights note against the corpus it was built from."""
+            if args.no_validate:
+                return
+            console.rule(f"[bold blue]Validate {label}[/bold blue]")
+            from validate_insights import (
+                extract_claims, verify, print_report,
+            )
+            corpus = format_meetings_for_prompt(data["meetings"])
+            corpus_doc_ids = {
+                int(m) for m in re.findall(r"doc_id=(\d+)", corpus)
+            }
+            claims = extract_claims(note_path.read_text(encoding="utf-8"))
+            results = verify(claims, corpus, corpus_doc_ids)
+            unmatched = print_report(results)
+            if unmatched == 0:
+                console.print(
+                    "[bold green]All checked tokens found in source corpus.[/bold green]"
+                )
+            else:
+                console.print(
+                    f"[bold yellow]{unmatched} unmatched token(s) — "
+                    f"review above for possible hallucinations.[/bold yellow]"
+                )
+                if args.strict_validate:
+                    console.print(
+                        "[red]--strict-validate set; treating unmatched tokens as failure.[/red]"
+                    )
+                    raise SystemExit(1)
 
         # Step 2: Generate 7-day highlights
         if do_highlights:
@@ -480,12 +678,27 @@ def main():
                 today = datetime.utcnow().strftime("%Y-%m-%d")
                 write_note(content, f"7day_highlights_{today}.md")
 
-        # Step 3: Generate CIO insights
-        if do_insights:
-            console.rule("[bold blue]Generate CIO Insights[/bold blue]")
+        # Step 3: Generate 2026 agenda trends
+        if do_trends:
+            console.rule("[bold blue]Generate 2026 Agenda Trends[/bold blue]")
             data = gather_trends_data(session)
             if not data["meetings"]:
-                console.print("[yellow]No 2026 meetings found. Skipping insights.[/yellow]")
+                console.print("[yellow]No 2026 meetings found. Skipping trends.[/yellow]")
+            else:
+                prompt = build_trends_prompt(data)
+                console.print(
+                    f"Calling Claude Sonnet ({len(prompt):,} char prompt, "
+                    f"{data['plans_with_activity']} plans, "
+                    f"{len(data['meetings'])} meetings)...")
+                content = generate_note(prompt, MAX_TOKENS_TRENDS)
+                write_note(content, "2026_meeting_trends_summary.md")
+
+        # Step 4: Generate YTD CIO insights
+        if do_insights_ytd:
+            console.rule("[bold blue]Generate CIO Insights (YTD)[/bold blue]")
+            data = gather_trends_data(session)
+            if not data["meetings"]:
+                console.print("[yellow]No 2026 meetings found. Skipping YTD insights.[/yellow]")
             else:
                 prompt = build_insights_prompt(data)
                 console.print(
@@ -494,34 +707,31 @@ def main():
                     f"{len(data['meetings'])} meetings)...")
                 content = generate_note(prompt, MAX_TOKENS_INSIGHTS, model=MODEL_OPUS)
                 note_path = write_note(content, "2026_cio_insights.md")
+                _validate_insights_note(note_path, data, "CIO Insights (YTD)")
 
-                # Step 4b: Fact-check the generated note against the corpus
-                if not args.no_validate:
-                    console.rule("[bold blue]Validate CIO Insights[/bold blue]")
-                    from validate_insights import (
-                        extract_claims, verify, print_report,
-                    )
-                    corpus = format_meetings_for_prompt(data["meetings"])
-                    corpus_doc_ids = {
-                        int(m) for m in re.findall(r"doc_id=(\d+)", corpus)
-                    }
-                    claims = extract_claims(note_path.read_text(encoding="utf-8"))
-                    results = verify(claims, corpus, corpus_doc_ids)
-                    unmatched = print_report(results)
-                    if unmatched == 0:
-                        console.print(
-                            "[bold green]All checked tokens found in source corpus.[/bold green]"
-                        )
-                    else:
-                        console.print(
-                            f"[bold yellow]{unmatched} unmatched token(s) — "
-                            f"review above for possible hallucinations.[/bold yellow]"
-                        )
-                        if args.strict_validate:
-                            console.print(
-                                "[red]--strict-validate set; treating unmatched tokens as failure.[/red]"
-                            )
-                            raise SystemExit(1)
+        # Step 5: Generate rolling 30-day CIO insights
+        if do_insights_30day:
+            window_days = args.insights_30day_days
+            console.rule(
+                f"[bold blue]Generate CIO Insights ({window_days}-day)[/bold blue]"
+            )
+            data = gather_recent_insights_data(session, days=window_days)
+            if not data["meetings"]:
+                console.print(
+                    f"[yellow]No meetings in the last {window_days} days. "
+                    f"Skipping {window_days}-day insights.[/yellow]"
+                )
+            else:
+                prompt = build_recent_insights_prompt(data)
+                console.print(
+                    f"Calling Claude Sonnet ({len(prompt):,} char prompt, "
+                    f"{data['plans_with_activity']} plans, "
+                    f"{len(data['meetings'])} meetings)...")
+                content = generate_note(prompt, MAX_TOKENS_TRENDS)
+                note_path = write_note(content, f"cio_insights_{window_days}day.md")
+                _validate_insights_note(
+                    note_path, data, f"CIO Insights ({window_days}-day)"
+                )
 
         console.rule("[bold green]Notes generation complete[/bold green]")
 

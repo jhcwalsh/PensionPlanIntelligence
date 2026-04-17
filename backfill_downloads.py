@@ -23,6 +23,7 @@ import os
 import re
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 import requests
@@ -137,6 +138,10 @@ def main():
         if path:
             doc.local_path = str(path)
             doc.file_size_bytes = size
+            # Stamp downloaded_at so the Admin pipeline-coverage view sees
+            # these records as freshly downloaded rather than "never".
+            if doc.downloaded_at is None:
+                doc.downloaded_at = datetime.utcnow()
             session.commit()
             ok += 1
             print(f"[{i}/{len(missing)}] OK   {doc.plan_id}/{path.name} ({size:,} bytes)")

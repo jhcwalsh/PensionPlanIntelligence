@@ -1164,5 +1164,66 @@
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": ["agenda", "minutes"]
+  },
+  {
+    "id": "ucrp",
+    "name": "University of California Retirement Plan",
+    "abbreviation": "UCRP",
+    "state": "CA",
+    "aum_billions": 90,
+    "website": "https://www.ucop.edu/investment-office/",
+    "materials_url": "https://regents.universityofcalifornia.edu/regmeet/",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": ["agenda", "board_pack", "minutes"],
+    "notes": "Managed by UC Office of the CIO; oversight via Regents' Investments Committee"
+  },
+  {
+    "id": "lafpp",
+    "name": "Los Angeles Fire and Police Pensions",
+    "abbreviation": "LAFPP",
+    "state": "CA",
+    "aum_billions": 30,
+    "website": "https://www.lafpp.com",
+    "materials_url": "https://www.lafpp.com/board-meeting-agendas-minutes",
+    "materials_type": "html_links",
+    "investment_only": false,
+    "doc_types": ["agenda", "board_pack", "minutes"]
+  },
+  {
+    "id": "ct_trb",
+    "name": "Connecticut Teachers' Retirement Board",
+    "abbreviation": "CT TRB",
+    "state": "CT",
+    "aum_billions": 22,
+    "website": "https://portal.ct.gov/TRB",
+    "materials_url": "https://portal.ct.gov/TRB/Content/About-Us/Board-Members/Board-Meeting-Minutes",
+    "materials_type": "html_links",
+    "investment_only": false,
+    "doc_types": ["agenda", "minutes"]
+  },
+  {
+    "id": "ohsers",
+    "name": "School Employees Retirement System of Ohio",
+    "abbreviation": "SERS Ohio",
+    "state": "OH",
+    "aum_billions": 18,
+    "website": "https://www.ohsers.org",
+    "materials_url": "https://www.ohsers.org/about-us/board-of-trustees/",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": ["agenda", "board_pack", "minutes"]
+  },
+  {
+    "id": "op_f",
+    "name": "Ohio Police & Fire Pension Fund",
+    "abbreviation": "OP&F",
+    "state": "OH",
+    "aum_billions": 18,
+    "website": "https://www.op-f.org",
+    "materials_url": "https://www.op-f.org/about-op-f/board-of-trustees/",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": ["agenda", "board_pack", "minutes"]
   }
 ]

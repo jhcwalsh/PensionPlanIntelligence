@@ -27,7 +27,9 @@ from rich.console import Console
 from rich.table import Table
 
 from database import SessionLocal
-from generate_notes import format_meetings_for_prompt, gather_trends_data
+from generate_notes import (
+    format_meetings_for_prompt, gather_recent_insights_data, gather_trends_data,
+)
 
 console = Console(legacy_windows=False)
 ROOT = Path(__file__).parent
@@ -41,10 +43,16 @@ ROOT = Path(__file__).parent
 # the first match wins. Plan-name + AUM bolds (e.g. "**CalPERS ($502B)**") are
 # excluded from the "manager name" check because plan identity is obvious and
 # already covered by the doc_id citation.
-# Plan-with-AUM bolds such as "**CalPERS ($502B)**" and "**Colorado PERA
-# ($60B, CO)**" — optional ", STATE" tolerated after the AUM.
+# Plan-with-AUM bolds — permissive enough to match any of:
+#   **CalPERS ($502B)**
+#   **Colorado PERA ($60B, CO)**
+#   **CalPERS (~$502B, CA)**
+#   **Dallas Police & Fire Pension System (~$2.2B AUM)**
+#   **SIB-ND (~$27.7B total AUM, ND)**
+# Requires a bolded span containing "(~?$N[unit] ...)" — content between
+# the unit and the closing paren is free-form (state code, " AUM" etc.).
 PLAN_AUM_RE = re.compile(
-    r"\*\*[^*]+\s\(\$[\d,.]+\s*[BMT](?:,\s*[A-Z]{2})?\)\*\*"
+    r"\*\*[^*]+?\(\s*~?\$[\d,.]+\s*[BMTKbmtk][^)]*\)\*\*"
 )
 # Dollar amounts — a word boundary after the optional unit stops the
 # single-letter units (T/B/M/K) from devouring the first letter of the
@@ -254,9 +262,20 @@ def main():
     note_text = args.note.read_text(encoding="utf-8")
     console.print(f"[bold]Loaded:[/bold] {args.note} ({len(note_text):,} chars)")
 
-    console.print("[bold]Rebuilding MEETING DATA corpus from DB...[/bold]")
+    # Pick the corpus used when the note was generated. Rolling-window
+    # notes are named like "cio_insights_30day.md"; everything else uses
+    # the YTD trends corpus.
+    window_match = re.match(r"cio_insights_(\d+)day\.md", args.note.name)
     session = SessionLocal()
-    data = gather_trends_data(session)
+    if window_match:
+        days = int(window_match.group(1))
+        console.print(
+            f"[bold]Rebuilding {days}-day MEETING DATA corpus from DB...[/bold]"
+        )
+        data = gather_recent_insights_data(session, days=days)
+    else:
+        console.print("[bold]Rebuilding YTD MEETING DATA corpus from DB...[/bold]")
+        data = gather_trends_data(session)
     corpus = format_meetings_for_prompt(data["meetings"])
     corpus_doc_ids = {
         int(m) for m in re.findall(r"doc_id=(\d+)", corpus)
