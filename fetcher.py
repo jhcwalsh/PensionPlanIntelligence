@@ -39,6 +39,7 @@ DOC_URL_PATTERNS = [
     r"DocumentDownload\.ashx",            # EasyDNNNews CMS (TCRS Tennessee)
     r"/iip/\w+/file/getfile/",           # AgendasSuite (ERS Texas, etc.)
     r"/documents/files/governance/",     # NCRS (myncretirement.gov)
+    r"/DocumentDownload\.ashx",          # DotNetNuke/EasyDNNNews (TCRS Tennessee, etc.)
 ]
 
 # A document link must match at least one of these to be kept

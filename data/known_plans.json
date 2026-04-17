@@ -481,7 +481,7 @@
     "aum_billions": 3,
     "website": "https://www.coaers.org",
     "materials_url": "https://www.coaers.org/board-agendas-minutes",
-    "materials_type": "html_links",
+    "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
       "agenda",
@@ -774,7 +774,7 @@
     "state": "KS",
     "aum_billions": 26,
     "website": "https://www.kspers.gov",
-    "materials_url": "https://www.kspers.gov/about/board",
+    "materials_url": "https://www.kspers.gov/BOT/Meetings",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
@@ -1247,8 +1247,8 @@
     "state": "IL",
     "aum_billions": 18,
     "website": "https://www.ctpf.org",
-    "materials_url": "https://ctpf.org/post/board-meetings",
-    "materials_type": "playwright",
+    "materials_url": "https://ctpf.org/forms-publications/board-trustees-meeting-minutes",
+    "materials_type": "html_links",
     "investment_only": false,
     "doc_types": [
       "agenda",
@@ -1505,7 +1505,7 @@
   {
     "id": "smcera",
     "name": "San Mateo County Employees' Retirement Association",
-    "abbreviation": "SMCERA",
+    "abbreviation": "SamCERA",
     "state": "CA",
     "aum_billions": 5,
     "website": "https://www.samcera.gov",
