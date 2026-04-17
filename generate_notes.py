@@ -32,6 +32,8 @@ from database import (
 # Reuse the summarizer's client setup (handles API key + OAuth fallback)
 from summarizer import _get_client, MODEL_SONNET
 
+MODEL_OPUS = "claude-opus-4-6"
+
 _ENV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
 load_dotenv(_ENV_PATH, override=True)
 
@@ -62,10 +64,10 @@ Output clean markdown only — no code fences, no JSON, no commentary."""
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=2, min=4, max=30))
-def generate_note(prompt: str, max_tokens: int) -> str:
-    """Call Claude Sonnet to generate an analytical markdown note."""
+def generate_note(prompt: str, max_tokens: int, model: str = MODEL_SONNET) -> str:
+    """Call Claude to generate an analytical markdown note."""
     message = _get_client().messages.create(
-        model=MODEL_SONNET,
+        model=model,
         max_tokens=max_tokens,
         temperature=0.2,
         system=NOTES_SYSTEM_PROMPT,
@@ -474,7 +476,7 @@ def main():
                     f"Calling Claude Sonnet ({len(prompt):,} char prompt, "
                     f"{data['plans_with_activity']} plans, "
                     f"{len(data['meetings'])} meetings)...")
-                content = generate_note(prompt, MAX_TOKENS_HIGHLIGHTS)
+                content = generate_note(prompt, MAX_TOKENS_HIGHLIGHTS, model=MODEL_SONNET)
                 today = datetime.utcnow().strftime("%Y-%m-%d")
                 write_note(content, f"7day_highlights_{today}.md")
 
@@ -487,10 +489,10 @@ def main():
             else:
                 prompt = build_insights_prompt(data)
                 console.print(
-                    f"Calling Claude Sonnet ({len(prompt):,} char prompt, "
+                    f"Calling Claude Opus ({len(prompt):,} char prompt, "
                     f"{data['plans_with_activity']} plans, "
                     f"{len(data['meetings'])} meetings)...")
-                content = generate_note(prompt, MAX_TOKENS_INSIGHTS)
+                content = generate_note(prompt, MAX_TOKENS_INSIGHTS, model=MODEL_OPUS)
                 note_path = write_note(content, "2026_cio_insights.md")
 
                 # Step 4b: Fact-check the generated note against the corpus
