@@ -431,14 +431,15 @@
     "state": "TX",
     "aum_billions": 4,
     "website": "https://www.hmeps.org",
-    "materials_url": "https://hmeps.org/agenda/",
+    "materials_url": "https://hmeps.org/news-and-updates/",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "minutes"
     ],
-    "playwright_wait_selector": "a[href$=\".pdf\"]"
+    "playwright_wait_selector": "a[href$=\".pdf\"]",
+    "sub_page_pattern": "hmeps\\.org/\\d{4}/\\d{2}/"
   },
   {
     "id": "dpfp",
@@ -576,15 +577,14 @@
     "state": "LA",
     "aum_billions": 13,
     "website": "https://lasersonline.org",
-    "materials_url": "https://lasersonline.org/about/board-of-trustees/meeting-agendas-minutes/",
+    "materials_url": "https://lasersonline.org/about/board-of-trustees/board-meetings/",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "minutes"
     ],
-    "playwright_wait_selector": "div.entry-content",
-    "notes": "Site returns 403 on all pages including homepage; PDFs at /wp-content/uploads/ are individually accessible but listing page is blocked"
+    "playwright_wait_selector": "a[href*=\"/wp-content/uploads/\"]"
   },
   {
     "id": "pers_ms",
@@ -798,8 +798,7 @@
       "board_pack",
       "minutes"
     ],
-    "playwright_wait_selector": "a[href$=\".pdf\"]",
-    "notes": "NY Comptroller is sole trustee; IAC is advisory only \u2014 meeting materials not publicly posted"
+    "sub_page_pattern": "osc\\.ny\\.gov/files/common-retirement-fund/"
   },
   {
     "id": "wsib",
@@ -925,14 +924,16 @@
     "state": "MA",
     "aum_billions": 110,
     "website": "https://www.mapension.com",
-    "materials_url": "https://www.mapension.com/records-of-interest/",
-    "materials_type": "html_links",
+    "materials_url": "https://www.mapension.com/events/",
+    "materials_type": "playwright",
     "investment_only": true,
     "doc_types": [
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "playwright_wait_selector": "a[href*=\"/wp-content/uploads/\"]",
+    "sub_page_pattern": "mapension\\.com/prim_events/"
   },
   {
     "id": "mi_ors",
@@ -1055,7 +1056,7 @@
     "state": "CA",
     "aum_billions": 35,
     "website": "https://www.mysfers.org",
-    "materials_url": "https://mysfers.org/about-sfers/retirement-board-3/agendas-minutes/investment-committee/",
+    "materials_url": "https://mysfers.org/about-sfers/retirement-board-3/agendas-minutes/full-board/",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
@@ -1063,7 +1064,7 @@
       "board_pack",
       "minutes"
     ],
-    "playwright_wait_selector": "a[href*=\"/uploads/\"]"
+    "playwright_wait_selector": "a[href*=\"cdn.mysfers.org\"]"
   },
   {
     "id": "ct_sers",
@@ -1087,13 +1088,14 @@
     "state": "MN",
     "aum_billions": 30,
     "website": "https://www.mnpera.org",
-    "materials_url": "https://mnpera.org/board-trustees/minute-archive",
+    "materials_url": "https://mnpera.org/about/board/agenda/",
     "materials_type": "html_links",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "sub_page_pattern": "mnpera\\.org/.*-board-meeting"
   },
   {
     "id": "mn_tra",
@@ -1247,16 +1249,15 @@
     "state": "IL",
     "aum_billions": 18,
     "website": "https://www.ctpf.org",
-    "materials_url": "https://ctpf.org/forms-publications/board-trustees-meeting-minutes",
-    "materials_type": "html_links",
+    "materials_url": "https://ctpf.org/forms-publications/board-trustees-meeting-materials-and-video",
+    "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "board_pack",
       "minutes"
     ],
-    "playwright_wait_selector": "a[href$=\".pdf\"]",
-    "notes": "Board materials hosted on Diligent Community platform; direct PDFs may not be accessible"
+    "playwright_wait_selector": "a[href$=\".pdf\"]"
   },
   {
     "id": "sbcera",
@@ -1385,7 +1386,7 @@
       "agenda",
       "minutes"
     ],
-    "notes": "Board roster page exists but meeting agendas/minutes not publicly posted on website"
+    "playwright_wait_selector": "a[href*=\"/wp-content/uploads/\"]"
   },
   {
     "id": "ri_ers",
@@ -1459,16 +1460,14 @@
     "state": "CA",
     "aum_billions": 8,
     "website": "https://www.vcera.org",
-    "materials_url": "https://vcera.primegov.com/public/portal",
-    "materials_type": "playwright",
+    "materials_url": "https://www.vcera.org/meeting-agendas-minutes",
+    "materials_type": "html_links",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "board_pack",
       "minutes"
-    ],
-    "playwright_wait_selector": ".meeting-list",
-    "sub_page_pattern": "vcera\\.org/board-retirement-administration/\\d{4}"
+    ]
   },
   {
     "id": "mo_lagers",
@@ -1509,7 +1508,7 @@
     "state": "CA",
     "aum_billions": 5,
     "website": "https://www.samcera.gov",
-    "materials_url": "https://www.samcera.gov/board-meeting-materials",
+    "materials_url": "https://www.samcera.gov/about-samcera/board-of-retirement/board-of-retirement-meetings",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
@@ -1517,8 +1516,7 @@
       "board_pack",
       "minutes"
     ],
-    "playwright_wait_selector": "a[href$=\".pdf\"]",
-    "notes": "Organization is SamCERA (San Mateo County ERA); migrated from smcera.org to samcera.gov"
+    "playwright_wait_selector": "a[href*=\"content.samcera.gov\"]"
   },
   {
     "id": "kcera",
