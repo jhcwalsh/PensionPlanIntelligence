@@ -82,7 +82,7 @@
       "agenda",
       "board_pack"
     ],
-    "notes": "This page IS the investment advisory committee \u00e2\u20ac\u201d disable filter"
+    "notes": "This page IS the investment advisory committee â€” disable filter"
   },
   {
     "id": "trs_texas",
@@ -135,7 +135,7 @@
       "minutes"
     ],
     "playwright_wait_selector": "a[href$=\".pdf\"]",
-    "notes": "IAC materials listing page returns 403 even with Playwright; PDFs use random slugs at sbafla.com/media/ \u2014 not indexable via standard scraping"
+    "notes": "IAC materials listing page returns 403 even with Playwright; PDFs use random slugs at sbafla.com/media/ — not indexable via standard scraping"
   },
   {
     "id": "opers",
@@ -232,7 +232,7 @@
       "board_pack",
       "minutes"
     ],
-    "notes": "Pointing directly at Board of Investments \u00e2\u20ac\u201d disable filter"
+    "notes": "Pointing directly at Board of Investments â€” disable filter"
   },
   {
     "id": "scers",
@@ -259,7 +259,7 @@
     "materials_url": "https://www.nj.gov/treasury/doinvest/calendar.shtml",
     "materials_type": "html_links",
     "investment_only": false,
-    "notes": "State Investment Council \u00e2\u20ac\u201d already scoped to investment; disable filter",
+    "notes": "State Investment Council â€” already scoped to investment; disable filter",
     "doc_types": [
       "agenda",
       "minutes"
@@ -327,7 +327,7 @@
       "board_pack",
       "minutes"
     ],
-    "notes": "URL is already scoped to investment board \u00e2\u20ac\u201d disable filter"
+    "notes": "URL is already scoped to investment board â€” disable filter"
   },
   {
     "id": "nmpera",
@@ -799,7 +799,7 @@
       "minutes"
     ],
     "playwright_wait_selector": "a[href$=\".pdf\"]",
-    "notes": "NY Comptroller is sole trustee; IAC is advisory only \u2014 meeting materials not publicly posted"
+    "notes": "NY Comptroller is sole trustee; IAC is advisory only — meeting materials not publicly posted"
   },
   {
     "id": "wsib",
@@ -1539,13 +1539,845 @@
   },
   {
     "id": "sj_federated",
-    "name": "City of San Jos\u00c3\u00a9 Federated City Employees' Retirement System",
+    "name": "City of San JosÃ© Federated City Employees' Retirement System",
     "abbreviation": "SJFCERS",
     "state": "CA",
     "aum_billions": 4,
     "website": "https://www.sjretirement.com",
     "materials_url": "https://www.sjretirement.com/boards/federated-city-employees-board-of-directors/boards-federated-agendas-minutes-and-audio/",
     "materials_type": "html_links",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
+  },
+  {
+    "id": "nycppf",
+    "name": "New York City Police Pension Fund",
+    "abbreviation": "NYCPPF",
+    "state": "NY",
+    "aum_billions": 31.0,
+    "website": "https://www.nycppf.org",
+    "materials_url": "https://www.nycppf.org/about/board-meetings",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
+  },
+  {
+    "id": "lafpp",
+    "name": "Los Angeles Fire and Police Pensions",
+    "abbreviation": "LAFPP",
+    "state": "CA",
+    "aum_billions": 29.0,
+    "website": "https://www.lafpp.com",
+    "materials_url": "https://www.lafpp.com/about/board-of-fire-and-police-pension-commissioners/commission-meetings",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
+  },
+  {
+    "id": "surs_il",
+    "name": "State Universities Retirement System of Illinois",
+    "abbreviation": "SURS",
+    "state": "IL",
+    "aum_billions": 22.0,
+    "website": "https://www.surs.org",
+    "materials_url": "https://www.surs.org/governance/board-of-trustees",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
+  },
+  {
+    "id": "ct_trs",
+    "name": "Connecticut Teachers' Retirement System",
+    "abbreviation": "CT TRS",
+    "state": "CT",
+    "aum_billions": 19.0,
+    "website": "https://portal.ct.gov/TRB",
+    "materials_url": "https://portal.ct.gov/TRB/Content/About-TRB/Board-of-Trustees/Board-Meeting-Minutes-and-Agendas",
+    "materials_type": "html_links",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
+  },
+  {
+    "id": "sers_oh",
+    "name": "School Employees Retirement System of Ohio",
+    "abbreviation": "SERS Ohio",
+    "state": "OH",
+    "aum_billions": 18.0,
+    "website": "https://www.ohsers.org",
+    "materials_url": "https://www.ohsers.org/about-sers/board-of-trustees/board-meeting-information",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
+  },
+  {
+    "id": "opf_oh",
+    "name": "Ohio Police & Fire Pension Fund",
+    "abbreviation": "OP&F",
+    "state": "OH",
+    "aum_billions": 17.0,
+    "website": "https://www.op-f.org",
+    "materials_url": "https://www.op-f.org/about-op-f/board-of-trustees/board-meeting-information",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
+  },
+  {
+    "id": "sdcers_ca",
+    "name": "San Diego City Employees' Retirement System",
+    "abbreviation": "SDCERS",
+    "state": "CA",
+    "aum_billions": 12.0,
+    "website": "https://www.sdcers.org",
+    "materials_url": "https://www.sdcers.org/about/board-of-administration/board-meeting-agendas-minutes",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
+  },
+  {
+    "id": "fdny_pension",
+    "name": "New York City Fire Department Pension Fund",
+    "abbreviation": "FDNY Pension",
+    "state": "NY",
+    "aum_billions": 12.0,
+    "website": "https://www.nyc.gov/site/olr/fdny/fdny-pension-fund.page",
+    "materials_url": "https://www.nyc.gov/site/olr/fdny/fdny-pension-fund.page",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
+  },
+  {
+    "id": "psprs_az",
+    "name": "Public Safety Personnel Retirement System of Arizona",
+    "abbreviation": "PSPRS",
+    "state": "AZ",
+    "aum_billions": 12.0,
+    "website": "https://www.psprs.az.gov",
+    "materials_url": "https://www.psprs.az.gov/board/board-meeting-information",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
+  },
+  {
+    "id": "bers_nyc",
+    "name": "New York City Board of Education Retirement System",
+    "abbreviation": "BERS",
+    "state": "NY",
+    "aum_billions": 7.0,
+    "website": "https://www.bers.nyc.gov",
+    "materials_url": "https://www.bers.nyc.gov/site/bers/about/board-meetings.page",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
+  },
+  {
+    "id": "brs_ma",
+    "name": "Boston Retirement System",
+    "abbreviation": "BRS",
+    "state": "MA",
+    "aum_billions": 7.0,
+    "website": "https://www.cityofboston.gov/retirement",
+    "materials_url": "https://www.cityofboston.gov/retirement/boardmeetings/",
+    "materials_type": "html_links",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
+  },
+  {
+    "id": "fppa_co",
+    "name": "Fire and Police Pension Association of Colorado",
+    "abbreviation": "FPPA",
+    "state": "CO",
+    "aum_billions": 6.5,
+    "website": "https://www.cofppa.org",
+    "materials_url": "https://www.cofppa.org/board-of-directors/board-meeting-materials",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
+  },
+  {
+    "id": "fcrs_va",
+    "name": "Fairfax County Retirement Systems",
+    "abbreviation": "FCRS",
+    "state": "VA",
+    "aum_billions": 6.0,
+    "website": "https://www.fairfaxcounty.gov/retirement",
+    "materials_url": "https://www.fairfaxcounty.gov/retirement/board-of-trustees-meetings",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
+  },
+  {
+    "id": "pbpr_pa",
+    "name": "Philadelphia Board of Pensions and Retirement",
+    "abbreviation": "PBPR",
+    "state": "PA",
+    "aum_billions": 6.0,
+    "website": "https://www.phila.gov/departments/board-of-pensions-and-retirement",
+    "materials_url": "https://www.phila.gov/departments/board-of-pensions-and-retirement/board-meetings",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
+  },
+  {
+    "id": "ipopif_il",
+    "name": "Illinois Police Officers' Pension Investment Fund",
+    "abbreviation": "IPOPIF",
+    "state": "IL",
+    "aum_billions": 5.5,
+    "website": "https://www.ipopif.org",
+    "materials_url": "https://www.ipopif.org/board-of-directors/meetings",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
+  },
+  {
+    "id": "sjpf_ca",
+    "name": "City of San Jose Police & Fire Department Retirement Plan",
+    "abbreviation": "SJPF",
+    "state": "CA",
+    "aum_billions": 4.5,
+    "website": "https://www.sjretirement.com",
+    "materials_url": "https://www.sjretirement.com/boards/police-fire-department-board-of-directors/board-pf-agendas-minutes",
+    "materials_type": "html_links",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
+  },
+  {
+    "id": "mcers_az",
+    "name": "Maricopa County Employees' Retirement System",
+    "abbreviation": "MCERS",
+    "state": "AZ",
+    "aum_billions": 3.5,
+    "website": "https://www.maricopa.gov/5707/Employees-Retirement-System",
+    "materials_url": "https://www.maricopa.gov/5707/Employees-Retirement-System",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
+  },
+  {
+    "id": "pers_phoenix",
+    "name": "City of Phoenix Employees' Retirement System",
+    "abbreviation": "PERS Phoenix",
+    "state": "AZ",
+    "aum_billions": 3.5,
+    "website": "https://www.phoenix.gov/retirement",
+    "materials_url": "https://www.phoenix.gov/retirement/board",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
+  },
+  {
+    "id": "scers_wa",
+    "name": "Seattle City Employees' Retirement System",
+    "abbreviation": "SCERS Seattle",
+    "state": "WA",
+    "aum_billions": 3.5,
+    "website": "https://www.seattle.gov/retirement",
+    "materials_url": "https://www.seattle.gov/retirement/about-scers/board-meetings",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
+  },
+  {
+    "id": "kcers_wa",
+    "name": "King County Employees' Retirement System",
+    "abbreviation": "KCERS",
+    "state": "WA",
+    "aum_billions": 3.5,
+    "website": "https://www.kingcounty.gov/en/dept/retirement",
+    "materials_url": "https://www.kingcounty.gov/en/dept/retirement/governance/board",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
+  },
+  {
+    "id": "derp_co",
+    "name": "Denver Employees Retirement Plan",
+    "abbreviation": "DERP",
+    "state": "CO",
+    "aum_billions": 3.5,
+    "website": "https://www.derp.org",
+    "materials_url": "https://www.derp.org/board-of-directors/board-meetings",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
+  },
+  {
+    "id": "rcera_ca",
+    "name": "Riverside County Employees' Retirement Association",
+    "abbreviation": "RCERA",
+    "state": "CA",
+    "aum_billions": 3.0,
+    "website": "https://www.rcera.org",
+    "materials_url": "https://www.rcera.org/board-of-retirement/agendas-minutes",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
+  },
+  {
+    "id": "gmebs_ga",
+    "name": "Georgia Municipal Employees Benefit System",
+    "abbreviation": "GMEBS",
+    "state": "GA",
+    "aum_billions": 3.0,
+    "website": "https://www.gmebs.org",
+    "materials_url": "https://www.gmebs.org/board-of-trustees/board-meetings",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
+  },
+  {
+    "id": "mpers_la",
+    "name": "Municipal Police Employees' Retirement System of Louisiana",
+    "abbreviation": "MPERS",
+    "state": "LA",
+    "aum_billions": 3.0,
+    "website": "https://www.mpers.org",
+    "materials_url": "https://www.mpers.org/board-of-trustees/meetings",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
+  },
+  {
+    "id": "dgrs_mi",
+    "name": "Detroit General Retirement System",
+    "abbreviation": "DGRS",
+    "state": "MI",
+    "aum_billions": 3.0,
+    "website": "https://www.detroitgrs.com",
+    "materials_url": "https://www.detroitgrs.com/board-of-trustees/board-meetings",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
+  },
+  {
+    "id": "fpdr_or",
+    "name": "Portland Fire & Police Disability and Retirement Fund",
+    "abbreviation": "FPDR",
+    "state": "OR",
+    "aum_billions": 3.0,
+    "website": "https://www.portlandfpdr.com",
+    "materials_url": "https://www.portlandfpdr.com/board/board-meetings",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
+  },
+  {
+    "id": "fpif_il",
+    "name": "Illinois Firefighters' Pension Investment Fund",
+    "abbreviation": "FPIF",
+    "state": "IL",
+    "aum_billions": 3.0,
+    "website": "https://fpif.org",
+    "materials_url": "https://fpif.org/board-of-directors/board-meetings",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
+  },
+  {
+    "id": "sonoma_era",
+    "name": "Sonoma County Employees' Retirement Association",
+    "abbreviation": "Sonoma ERA",
+    "state": "CA",
+    "aum_billions": 2.8,
+    "website": "https://www.scretire.org",
+    "materials_url": "https://www.scretire.org/retirement-board/agenda-and-minutes",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
+  },
+  {
+    "id": "dpfrs_mi",
+    "name": "Detroit Police and Fire Retirement System",
+    "abbreviation": "DPFRS",
+    "state": "MI",
+    "aum_billions": 2.8,
+    "website": "https://www.dpfrs.com",
+    "materials_url": "https://www.dpfrs.com/board-of-trustees/board-meeting-information",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
+  },
+  {
+    "id": "mfprsi_ia",
+    "name": "Municipal Fire and Police Retirement System of Iowa",
+    "abbreviation": "MFPRSI",
+    "state": "IA",
+    "aum_billions": 2.8,
+    "website": "https://www.mfprsi.org",
+    "materials_url": "https://www.mfprsi.org/board/board-meetings",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
+  },
+  {
+    "id": "scers_suffolk",
+    "name": "Suffolk County Employees' Retirement System",
+    "abbreviation": "SCERS Suffolk",
+    "state": "NY",
+    "aum_billions": 2.7,
+    "website": "https://www.suffolkcountyny.gov/departments/retirement",
+    "materials_url": "https://www.suffolkcountyny.gov/departments/retirement/board",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
+  },
+  {
+    "id": "fwerf_tx",
+    "name": "Fort Worth Employees' Retirement Fund",
+    "abbreviation": "FWERF",
+    "state": "TX",
+    "aum_billions": 2.5,
+    "website": "https://www.fortworthtexas.gov/departments/retirement",
+    "materials_url": "https://www.fortworthtexas.gov/departments/retirement",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
+  },
+  {
+    "id": "mers_wi",
+    "name": "Employes' Retirement System of the City of Milwaukee",
+    "abbreviation": "ERS Milwaukee",
+    "state": "WI",
+    "aum_billions": 2.5,
+    "website": "https://city.milwaukee.gov/Retirement",
+    "materials_url": "https://city.milwaukee.gov/Retirement/board",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
+  },
+  {
+    "id": "jaxpf_fl",
+    "name": "Jacksonville Police and Fire Pension Fund",
+    "abbreviation": "JPFPF",
+    "state": "FL",
+    "aum_billions": 2.5,
+    "website": "https://www.jpfpension.com",
+    "materials_url": "https://www.jpfpension.com/board/board-meetings",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
+  },
+  {
+    "id": "sjcera_ca",
+    "name": "San Joaquin County Employees' Retirement Association",
+    "abbreviation": "SJCERA",
+    "state": "CA",
+    "aum_billions": 2.5,
+    "website": "https://www.sjcera.org",
+    "materials_url": "https://www.sjcera.org/governance/board-of-retirement",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
+  },
+  {
+    "id": "fcera_ca",
+    "name": "Fresno County Employees' Retirement Association",
+    "abbreviation": "FCERA",
+    "state": "CA",
+    "aum_billions": 2.5,
+    "website": "https://www.fcera.org",
+    "materials_url": "https://www.fcera.org/board-of-retirement/agendas-minutes",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
+  },
+  {
+    "id": "stancera_ca",
+    "name": "Stanislaus County Employees' Retirement Association",
+    "abbreviation": "StanCERA",
+    "state": "CA",
+    "aum_billions": 2.5,
+    "website": "https://www.stancera.org",
+    "materials_url": "https://www.stancera.org/board/board-meetings",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
+  },
+  {
+    "id": "acrs_pa",
+    "name": "Allegheny County Retirement System",
+    "abbreviation": "ACRS",
+    "state": "PA",
+    "aum_billions": 2.5,
+    "website": "https://www.alleghenycounty.us/human-resources/retirement",
+    "materials_url": "https://www.alleghenycounty.us/human-resources/retirement",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
+  },
+  {
+    "id": "bcers_md",
+    "name": "Baltimore County Employees' Retirement System",
+    "abbreviation": "BCERS",
+    "state": "MD",
+    "aum_billions": 2.5,
+    "website": "https://www.baltimorecountymd.gov/departments/humanresources/retirement",
+    "materials_url": "https://www.baltimorecountymd.gov/departments/humanresources/retirement",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
+  },
+  {
+    "id": "mcers_md",
+    "name": "Montgomery County Employees' Retirement System",
+    "abbreviation": "MCERS MD",
+    "state": "MD",
+    "aum_billions": 2.5,
+    "website": "https://www.montgomerycountymd.gov/mcers",
+    "materials_url": "https://www.montgomerycountymd.gov/mcers",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
+  },
+  {
+    "id": "opprs_ok",
+    "name": "Oklahoma Police Pension and Retirement System",
+    "abbreviation": "OPPRS",
+    "state": "OK",
+    "aum_billions": 2.5,
+    "website": "https://www.ok.gov/opprs",
+    "materials_url": "https://www.ok.gov/opprs/Board/Board_Meetings",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
+  },
+  {
+    "id": "metro_nashville_ers",
+    "name": "Metropolitan Government of Nashville Employees' Benefit Trust Fund",
+    "abbreviation": "Metro Nashville ERS",
+    "state": "TN",
+    "aum_billions": 2.3,
+    "website": "https://www.nashville.gov/departments/treasury/pension-administration",
+    "materials_url": "https://www.nashville.gov/departments/treasury/pension-administration",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
+  },
+  {
+    "id": "bcers_city",
+    "name": "Baltimore City Employees' Retirement System",
+    "abbreviation": "BCERS Baltimore",
+    "state": "MD",
+    "aum_billions": 2.3,
+    "website": "https://www.bcers.org",
+    "materials_url": "https://www.bcers.org/board-trustees/board-meetings",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ]
+  },
+  {
+    "id": "pbcpf_fl",
+    "name": "Palm Beach County Police and Firefighters' Retirement System",
+    "abbreviation": "PBCPF",
+    "state": "FL",
+    "aum_billions": 2.0,
+    "website": "https://www.pbcpf.com",
+    "materials_url": "https://www.pbcpf.com/boardmeetings",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
+  },
+  {
+    "id": "ocers_fl",
+    "name": "Orange County Employees Retirement System (Florida)",
+    "abbreviation": "OCERS FL",
+    "state": "FL",
+    "aum_billions": 2.0,
+    "website": "https://www.ocfl.net/Retirement",
+    "materials_url": "https://www.ocfl.net/Retirement/BoardMeetings",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
+  },
+  {
+    "id": "atlanta_ers",
+    "name": "City of Atlanta General Employees' Pension Fund",
+    "abbreviation": "Atlanta ERS",
+    "state": "GA",
+    "aum_billions": 2.0,
+    "website": "https://www.atlantaga.gov/government/departments/finance/pension",
+    "materials_url": "https://www.atlantaga.gov/government/departments/finance/pension",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
+  },
+  {
+    "id": "lfrs_la",
+    "name": "Louisiana Firefighters' Retirement System",
+    "abbreviation": "LFRS",
+    "state": "LA",
+    "aum_billions": 2.0,
+    "website": "https://www.lfrs.org",
+    "materials_url": "https://www.lfrs.org/board-of-trustees/meetings",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
+  },
+  {
+    "id": "ofprs_ok",
+    "name": "Oklahoma Firefighters' Pension and Retirement System",
+    "abbreviation": "OFPRS",
+    "state": "OK",
+    "aum_billions": 2.0,
+    "website": "https://firefighterspension.com",
+    "materials_url": "https://firefighterspension.com/board/board-meetings",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
+  },
+  {
+    "id": "corp_az",
+    "name": "Corrections Officer Retirement Plan of Arizona",
+    "abbreviation": "CORP AZ",
+    "state": "AZ",
+    "aum_billions": 2.0,
+    "website": "https://www.psprs.az.gov/corp",
+    "materials_url": "https://www.psprs.az.gov/corp/board-meeting-information",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
+  },
+  {
+    "id": "ncers_ny",
+    "name": "Nassau County Employees' Retirement System",
+    "abbreviation": "NCERS Nassau",
+    "state": "NY",
+    "aum_billions": 2.0,
+    "website": "https://www.nassaucountyny.gov/retirement",
+    "materials_url": "https://www.nassaucountyny.gov/retirement",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
+  },
+  {
+    "id": "crs_oh",
+    "name": "Cincinnati Retirement System",
+    "abbreviation": "CRS Cincinnati",
+    "state": "OH",
+    "aum_billions": 2.0,
+    "website": "https://www.cincinnati-oh.gov/finance/retirement-system",
+    "materials_url": "https://www.cincinnati-oh.gov/finance/retirement-system/board-meetings",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
+  },
+  {
+    "id": "epcp_tx",
+    "name": "El Paso City Employees' Pension Fund",
+    "abbreviation": "EPCP",
+    "state": "TX",
+    "aum_billions": 2.0,
+    "website": "https://www.elpasotexas.gov/pension",
+    "materials_url": "https://www.elpasotexas.gov/pension",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
+  },
+  {
+    "id": "pmpf_pa",
+    "name": "Pittsburgh Municipal Pension Fund",
+    "abbreviation": "PMPF",
+    "state": "PA",
+    "aum_billions": 2.0,
+    "website": "https://pittsburghpa.gov/bureau-of-pensions",
+    "materials_url": "https://pittsburghpa.gov/bureau-of-pensions/board-meetings",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "minutes"
+    ]
+  },
+  {
+    "id": "pgcers_md",
+    "name": "Prince George's County Employees' Retirement System",
+    "abbreviation": "PGCERS",
+    "state": "MD",
+    "aum_billions": 1.8,
+    "website": "https://www.princegeorgescountymd.gov/retirement",
+    "materials_url": "https://www.princegeorgescountymd.gov/retirement",
+    "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
       "agenda",
