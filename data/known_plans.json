@@ -1592,14 +1592,15 @@
     "state": "IL",
     "aum_billions": 22.0,
     "website": "https://www.surs.org",
-    "materials_url": "https://www.surs.org/governance/board-of-trustees",
+    "materials_url": "https://www.surs.org/governance/board-of-trustees/meeting-minutes/",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "notes": "Board-of-trustees index page has 0 links; meeting minutes are on the /meeting-minutes/ sub-page"
   },
   {
     "id": "ct_trs",
@@ -1608,13 +1609,17 @@
     "state": "CT",
     "aum_billions": 19.0,
     "website": "https://portal.ct.gov/TRB",
-    "materials_url": "https://portal.ct.gov/TRB/Content/About-TRB/Board-of-Trustees/Board-Meeting-Minutes-and-Agendas",
-    "materials_type": "html_links",
+    "materials_url": "https://portal.ct.gov/trb/content/other-resources/board-information-and-meeting-schedules/board-meetings/2026",
+    "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "extra_pages": [
+      "https://portal.ct.gov/trb/content/other-resources/board-information-and-meeting-schedules/board-meetings/2025"
+    ],
+    "notes": "Correct URL path is /trb/content/other-resources/.../board-meetings/[YEAR]; original /TRB/Content/ path 404s"
   },
   {
     "id": "sers_oh",
@@ -1662,7 +1667,11 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "extra_pages": [
+      "https://www.sdcers.org/board-meeting-agendas/board-agenda"
+    ],
+    "notes": "Main board-meeting-agendas-minutes page has no direct links; board agendas are on /board-meeting-agendas/board-agenda"
   },
   {
     "id": "fdny_pension",
@@ -1695,7 +1704,8 @@
       "board_pack",
       "minutes"
     ],
-    "notes": "Correct domain is psprs.com not psprs.az.gov"
+    "notes": "PDFs loaded via JS dropdown <select> menus on single page; Playwright needed to render them",
+    "playwright_wait_selector": ".psprs-accordion, .accordion-content, select"
   },
   {
     "id": "bers_nyc",
@@ -1799,28 +1809,14 @@
     "state": "CA",
     "aum_billions": 4.5,
     "website": "https://www.sjretirement.com",
-    "materials_url": "https://www.sjretirement.com/boards/police-fire-department-board-of-directors/board-pf-agendas-minutes",
+    "materials_url": "https://www.sjretirement.com/boards/police-and-fire/boards-policeandfire-agendas-minutes-and-audio",
     "materials_type": "html_links",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "minutes"
-    ]
-  },
-  {
-    "id": "mcers_az",
-    "name": "Maricopa County Employees' Retirement System",
-    "abbreviation": "MCERS",
-    "state": "AZ",
-    "aum_billions": 3.5,
-    "website": "https://www.maricopa.gov/5707/Employees-Retirement-System",
-    "materials_url": "https://www.maricopa.gov/5707/Employees-Retirement-System",
-    "materials_type": "playwright",
-    "investment_only": false,
-    "doc_types": [
-      "agenda",
-      "minutes"
-    ]
+    ],
+    "notes": "Original URL 404s; correct path is /boards/police-and-fire/boards-policeandfire-agendas-minutes-and-audio"
   },
   {
     "id": "pers_phoenix",
@@ -1868,7 +1864,10 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "sub_page_pattern": "derp-retirement-board-meeting-[\\d]+-[\\d]+-[\\d]+",
+    "max_sub_pages": 12,
+    "notes": "Main schedules-agendas-minutes page links to individual meeting sub-pages; PDFs in /wp-content/uploads/"
   },
   {
     "id": "rcera_ca",
@@ -1876,15 +1875,16 @@
     "abbreviation": "RCERA",
     "state": "CA",
     "aum_billions": 3.0,
-    "website": "https://www.rcera.org",
-    "materials_url": "https://www.rcera.org/board-of-retirement/agendas-minutes",
+    "website": "https://www.rcers.org",
+    "materials_url": "https://www.rcers.org/board-of-retirement/agendas-minutes",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "notes": "Original domain rcera.org fails DNS; correct domain is rcers.org but site may be offline intermittently"
   },
   {
     "id": "gmebs_ga",
@@ -1965,7 +1965,11 @@
       "agenda",
       "minutes"
     ],
-    "notes": "CRITICAL: correct domain is ifpif.org not fpif.org (fpif.org = unrelated Foreign Policy in Focus publication)"
+    "notes": "Main /meetings/ page links to committee sub-pages; board minutes and investment committee minutes have direct PDFs on sub-pages",
+    "extra_pages": [
+      "https://ifpif.org/meetings/board-meetings/",
+      "https://ifpif.org/meetings/investments-operations-committee/"
+    ]
   },
   {
     "id": "sonoma_era",
@@ -2182,14 +2186,15 @@
     "abbreviation": "OPPRS",
     "state": "OK",
     "aum_billions": 2.5,
-    "website": "https://www.ok.gov/opprs",
-    "materials_url": "https://www.ok.gov/opprs/Board/Board_Meetings",
-    "materials_type": "playwright",
+    "website": "https://www.opprs.ok.gov",
+    "materials_url": "https://www.opprs.ok.gov/board-agenda-and-minutes/",
+    "materials_type": "html_links",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "notes": "Domain moved from ok.gov/opprs to opprs.ok.gov; direct PDF archive on /board-agenda-and-minutes/"
   },
   {
     "id": "metro_nashville_ers",
@@ -2205,7 +2210,9 @@
       "agenda",
       "minutes"
     ],
-    "notes": "Pension governed by Metro Investment Committee under Finance (Treasury dept no longer separate)"
+    "notes": "Meetings page lists date links matching /investment-committee-meeting-[month]-[day]-[year]; PDFs on individual meeting sub-pages",
+    "sub_page_pattern": "investment-committee-meeting-[a-z]+-\\d+-\\d+",
+    "max_sub_pages": 8
   },
   {
     "id": "bcers_city",
@@ -2302,22 +2309,6 @@
       "minutes"
     ],
     "notes": "Administered by PSPRS (psprs.com); agendas hosted on corrections.az.gov"
-  },
-  {
-    "id": "ncers_ny",
-    "name": "Nassau County Employees' Retirement System",
-    "abbreviation": "NCERS Nassau",
-    "state": "NY",
-    "aum_billions": 2.0,
-    "website": "https://www.osc.ny.gov/retirement/members",
-    "materials_url": "https://www.osc.ny.gov/retirement/members",
-    "materials_type": "playwright",
-    "investment_only": false,
-    "doc_types": [
-      "agenda",
-      "minutes"
-    ],
-    "notes": "Nassau County employees participate in NYS & Local Retirement System (NYSLRS) via NYS Comptroller; no standalone county pension board"
   },
   {
     "id": "crs_oh",
