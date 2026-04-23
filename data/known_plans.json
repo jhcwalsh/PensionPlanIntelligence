@@ -1558,15 +1558,16 @@
     "abbreviation": "NYCPPF",
     "state": "NY",
     "aum_billions": 31.0,
-    "website": "https://www.nycppf.org",
-    "materials_url": "https://www.nycppf.org/about/board-meetings",
+    "website": "https://www.nyc.gov/content/nycppf/",
+    "materials_url": "https://www.nyc.gov/content/nycppf/pages/monthly-meeting-information",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "notes": "Hosted under nyc.gov/content/nycppf/; nycppf.org does not exist"
   },
   {
     "id": "lafpp",
@@ -1575,7 +1576,7 @@
     "state": "CA",
     "aum_billions": 29.0,
     "website": "https://www.lafpp.com",
-    "materials_url": "https://www.lafpp.com/about/board-of-fire-and-police-pension-commissioners/commission-meetings",
+    "materials_url": "https://www.lafpp.com/board-of-commissioners/meetings",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
@@ -1622,7 +1623,7 @@
     "state": "OH",
     "aum_billions": 18.0,
     "website": "https://www.ohsers.org",
-    "materials_url": "https://www.ohsers.org/about-sers/board-of-trustees/board-meeting-information",
+    "materials_url": "https://www.ohsers.org/about-sers/board-of-trustees/",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
@@ -1638,7 +1639,7 @@
     "state": "OH",
     "aum_billions": 17.0,
     "website": "https://www.op-f.org",
-    "materials_url": "https://www.op-f.org/about-op-f/board-of-trustees/board-meeting-information",
+    "materials_url": "https://www.op-f.org/boardoftrustees/boardmeetings",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
@@ -1669,14 +1670,15 @@
     "abbreviation": "FDNY Pension",
     "state": "NY",
     "aum_billions": 12.0,
-    "website": "https://www.nyc.gov/site/olr/fdny/fdny-pension-fund.page",
-    "materials_url": "https://www.nyc.gov/site/olr/fdny/fdny-pension-fund.page",
+    "website": "https://nycfirepension.org",
+    "materials_url": "https://www.nyc.gov/site/fdny/about/resources/reports-and-publications/get-public-meetings.page",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "notes": "No dedicated fund website for board materials; public meetings hosted on nyc.gov/site/fdny"
   },
   {
     "id": "psprs_az",
@@ -1684,15 +1686,16 @@
     "abbreviation": "PSPRS",
     "state": "AZ",
     "aum_billions": 12.0,
-    "website": "https://www.psprs.az.gov",
-    "materials_url": "https://www.psprs.az.gov/board/board-meeting-information",
+    "website": "https://www.psprs.com",
+    "materials_url": "https://www.psprs.com/about/board-of-trustees-meetings/",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "notes": "Correct domain is psprs.com not psprs.az.gov"
   },
   {
     "id": "bers_nyc",
@@ -1701,7 +1704,7 @@
     "state": "NY",
     "aum_billions": 7.0,
     "website": "https://www.bers.nyc.gov",
-    "materials_url": "https://www.bers.nyc.gov/site/bers/about/board-meetings.page",
+    "materials_url": "https://www.bers.nyc.gov/site/bers/notices/meetings.page",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
@@ -1715,14 +1718,15 @@
     "abbreviation": "BRS",
     "state": "MA",
     "aum_billions": 7.0,
-    "website": "https://www.cityofboston.gov/retirement",
-    "materials_url": "https://www.cityofboston.gov/retirement/boardmeetings/",
+    "website": "https://www.boston.gov/departments/retirement",
+    "materials_url": "https://www.boston.gov/departments/retirement",
     "materials_type": "html_links",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "notes": "cityofboston.gov is dead; moved to boston.gov. No separate meetings sub-page; content on main dept page"
   },
   {
     "id": "fppa_co",
@@ -1730,15 +1734,16 @@
     "abbreviation": "FPPA",
     "state": "CO",
     "aum_billions": 6.5,
-    "website": "https://www.cofppa.org",
-    "materials_url": "https://www.cofppa.org/board-of-directors/board-meeting-materials",
+    "website": "https://www.fppaco.org",
+    "materials_url": "https://www.fppaco.org/board-of-directors",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "notes": "Correct domain is fppaco.org not cofppa.org"
   },
   {
     "id": "fcrs_va",
@@ -1747,7 +1752,7 @@
     "state": "VA",
     "aum_billions": 6.0,
     "website": "https://www.fairfaxcounty.gov/retirement",
-    "materials_url": "https://www.fairfaxcounty.gov/retirement/board-of-trustees-meetings",
+    "materials_url": "https://www.fairfaxcounty.gov/retirement/retirement-systems-board-trustees-meetings",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
@@ -1762,8 +1767,8 @@
     "abbreviation": "PBPR",
     "state": "PA",
     "aum_billions": 6.0,
-    "website": "https://www.phila.gov/departments/board-of-pensions-and-retirement",
-    "materials_url": "https://www.phila.gov/departments/board-of-pensions-and-retirement/board-meetings",
+    "website": "https://www.phila.gov/departments/board-of-pensions-and-retirement/",
+    "materials_url": "https://www.phila.gov/departments/board-of-pensions-and-retirement/meeting-minutes/",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
@@ -1823,14 +1828,15 @@
     "abbreviation": "PERS Phoenix",
     "state": "AZ",
     "aum_billions": 3.5,
-    "website": "https://www.phoenix.gov/retirement",
-    "materials_url": "https://www.phoenix.gov/retirement/board",
+    "website": "https://www.phoenix.gov/copers",
+    "materials_url": "https://www.phoenix.gov/copers/retirement-board",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "notes": "Section moved from /retirement to /copers"
   },
   {
     "id": "scers_wa",
@@ -1839,7 +1845,7 @@
     "state": "WA",
     "aum_billions": 3.5,
     "website": "https://www.seattle.gov/retirement",
-    "materials_url": "https://www.seattle.gov/retirement/about-scers/board-meetings",
+    "materials_url": "https://www.seattle.gov/retirement/about-us/board-of-administration",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
@@ -1854,15 +1860,16 @@
     "abbreviation": "KCERS",
     "state": "WA",
     "aum_billions": 3.5,
-    "website": "https://www.kingcounty.gov/en/dept/retirement",
-    "materials_url": "https://www.kingcounty.gov/en/dept/retirement/governance/board",
+    "website": "https://kingcounty.gov/en/dept/bhr/employee-resources/benefits/retirement",
+    "materials_url": "https://kingcounty.gov/en/dept/bhr/employee-resources/benefits/retirement",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "notes": "King County employees participate in Washington State PERS via DRS; no standalone county pension board found"
   },
   {
     "id": "derp_co",
@@ -1871,7 +1878,7 @@
     "state": "CO",
     "aum_billions": 3.5,
     "website": "https://www.derp.org",
-    "materials_url": "https://www.derp.org/board-of-directors/board-meetings",
+    "materials_url": "https://derp.org/about/leadership/retirement-board/meeting-schedules-agendas-minutes/",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
@@ -1902,14 +1909,15 @@
     "abbreviation": "GMEBS",
     "state": "GA",
     "aum_billions": 3.0,
-    "website": "https://www.gmebs.org",
-    "materials_url": "https://www.gmebs.org/board-of-trustees/board-meetings",
+    "website": "https://www.gacities.com/retirement-and-insurance/defined-benefits-program",
+    "materials_url": "https://www.gacities.com/retirement-and-insurance/defined-benefits-program",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "notes": "Administered by Georgia Municipal Association (GMA); no public board meeting page found — materials may be member-only"
   },
   {
     "id": "mpers_la",
@@ -1917,14 +1925,15 @@
     "abbreviation": "MPERS",
     "state": "LA",
     "aum_billions": 3.0,
-    "website": "https://www.mpers.org",
-    "materials_url": "https://www.mpers.org/board-of-trustees/meetings",
+    "website": "https://www.lampers.org",
+    "materials_url": "https://www.lampers.org/board-meetings/",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "notes": "Correct domain is lampers.org not mpers.org (mpers.org is Missouri plan)"
   },
   {
     "id": "dgrs_mi",
@@ -1932,14 +1941,15 @@
     "abbreviation": "DGRS",
     "state": "MI",
     "aum_billions": 3.0,
-    "website": "https://www.detroitgrs.com",
-    "materials_url": "https://www.detroitgrs.com/board-of-trustees/board-meetings",
+    "website": "https://www.rscd.org",
+    "materials_url": "https://www.rscd.org/member_resources_/board_of_trustees/past_meeting_agendas___minutes.php",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "notes": "detroitgrs.com defunct; consolidated under rscd.org (Retirement Systems of the City of Detroit). Note trailing underscore in path."
   },
   {
     "id": "fpdr_or",
@@ -1947,15 +1957,16 @@
     "abbreviation": "FPDR",
     "state": "OR",
     "aum_billions": 3.0,
-    "website": "https://www.portlandfpdr.com",
-    "materials_url": "https://www.portlandfpdr.com/board/board-meetings",
+    "website": "https://www.portland.gov/fpdr",
+    "materials_url": "https://www.portland.gov/fpdr/trustees/fpdr-agendas-materials-results",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "notes": "portlandfpdr.com defunct; moved to portland.gov/fpdr"
   },
   {
     "id": "fpif_il",
@@ -1963,14 +1974,15 @@
     "abbreviation": "FPIF",
     "state": "IL",
     "aum_billions": 3.0,
-    "website": "https://fpif.org",
-    "materials_url": "https://fpif.org/board-of-directors/board-meetings",
+    "website": "https://ifpif.org",
+    "materials_url": "https://ifpif.org/meetings/",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "notes": "CRITICAL: correct domain is ifpif.org not fpif.org (fpif.org = unrelated Foreign Policy in Focus publication)"
   },
   {
     "id": "sonoma_era",
@@ -1978,8 +1990,8 @@
     "abbreviation": "Sonoma ERA",
     "state": "CA",
     "aum_billions": 2.8,
-    "website": "https://www.scretire.org",
-    "materials_url": "https://www.scretire.org/retirement-board/agenda-and-minutes",
+    "website": "https://scretire.org",
+    "materials_url": "https://scretire.org/administration/meeting-calendar",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
@@ -1994,14 +2006,15 @@
     "abbreviation": "DPFRS",
     "state": "MI",
     "aum_billions": 2.8,
-    "website": "https://www.dpfrs.com",
-    "materials_url": "https://www.dpfrs.com/board-of-trustees/board-meeting-information",
+    "website": "https://www.rscd.org",
+    "materials_url": "https://www.rscd.org/member_resources/board_of_trustees/past_meeting_agendas___minutes.php",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "notes": "dpfrs.com defunct; consolidated under rscd.org. Path does NOT have trailing underscore (differs from DGRS)."
   },
   {
     "id": "mfprsi_ia",
@@ -2010,7 +2023,7 @@
     "state": "IA",
     "aum_billions": 2.8,
     "website": "https://www.mfprsi.org",
-    "materials_url": "https://www.mfprsi.org/board/board-meetings",
+    "materials_url": "https://www.mfprsi.org/about-mfprsi/board-info/minutes/",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
@@ -2040,14 +2053,15 @@
     "abbreviation": "FWERF",
     "state": "TX",
     "aum_billions": 2.5,
-    "website": "https://www.fortworthtexas.gov/departments/retirement",
-    "materials_url": "https://www.fortworthtexas.gov/departments/retirement",
+    "website": "https://www.fwretirement.org",
+    "materials_url": "https://www.fwretirement.org/board/",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "notes": "Fund has own domain fwretirement.org; fortworthtexas.gov/retirement is bot-blocked"
   },
   {
     "id": "mers_wi",
@@ -2055,14 +2069,15 @@
     "abbreviation": "ERS Milwaukee",
     "state": "WI",
     "aum_billions": 2.5,
-    "website": "https://city.milwaukee.gov/Retirement",
-    "materials_url": "https://city.milwaukee.gov/Retirement/board",
+    "website": "https://www.cmers.com",
+    "materials_url": "https://www.cmers.com/CMERS_RD/News--Information/Library/Board-Meeting-Agendas.htm",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "notes": "Correct domain is cmers.com (City of Milwaukee Employes' Retirement System)"
   },
   {
     "id": "jaxpf_fl",
@@ -2070,14 +2085,15 @@
     "abbreviation": "JPFPF",
     "state": "FL",
     "aum_billions": 2.5,
-    "website": "https://www.jpfpension.com",
-    "materials_url": "https://www.jpfpension.com/board/board-meetings",
+    "website": "https://www.jacksonville.gov/departments/police-fire-pension-fund",
+    "materials_url": "https://www.jacksonville.gov/departments/police-fire-pension-fund/board-of-trustees-meetings",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "notes": "jpfpension.com defunct; moved to jacksonville.gov"
   },
   {
     "id": "sjcera_ca",
@@ -2086,7 +2102,7 @@
     "state": "CA",
     "aum_billions": 2.5,
     "website": "https://www.sjcera.org",
-    "materials_url": "https://www.sjcera.org/governance/board-of-retirement",
+    "materials_url": "https://sjcera.org/board-retirement/board-members/board-agendas-minutes",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
@@ -2101,15 +2117,16 @@
     "abbreviation": "FCERA",
     "state": "CA",
     "aum_billions": 2.5,
-    "website": "https://www.fcera.org",
-    "materials_url": "https://www.fcera.org/board-of-retirement/agendas-minutes",
+    "website": "https://fcera.gov",
+    "materials_url": "https://fcera.gov/board-of-retirement/board-agenda-and-audio",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "notes": "Domain changed from fcera.org to fcera.gov"
   },
   {
     "id": "stancera_ca",
@@ -2133,14 +2150,15 @@
     "abbreviation": "ACRS",
     "state": "PA",
     "aum_billions": 2.5,
-    "website": "https://www.alleghenycounty.us/human-resources/retirement",
-    "materials_url": "https://www.alleghenycounty.us/human-resources/retirement",
+    "website": "https://www.alleghenycounty.us/Government/Employment/Retirement-Office",
+    "materials_url": "https://www.alleghenycounty.us/Government/Employment/Retirement-Office/Retirement-Board/Meeting-Minutes",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "notes": "403 is bot-blocker; correct path confirmed via search results"
   },
   {
     "id": "bcers_md",
@@ -2148,14 +2166,15 @@
     "abbreviation": "BCERS",
     "state": "MD",
     "aum_billions": 2.5,
-    "website": "https://www.baltimorecountymd.gov/departments/humanresources/retirement",
-    "materials_url": "https://www.baltimorecountymd.gov/departments/humanresources/retirement",
+    "website": "https://www.baltimorecountymd.gov/departments/budfin/retirement",
+    "materials_url": "https://www.baltimorecountymd.gov/boards-commissions/retirement-board",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "notes": "Dept is budfin (Budget & Finance), not humanresources. 403 is bot-blocker."
   },
   {
     "id": "mcers_md",
@@ -2163,15 +2182,16 @@
     "abbreviation": "MCERS MD",
     "state": "MD",
     "aum_billions": 2.5,
-    "website": "https://www.montgomerycountymd.gov/mcers",
-    "materials_url": "https://www.montgomerycountymd.gov/mcers",
+    "website": "https://www.montgomerycountymd.gov/mcerp/",
+    "materials_url": "https://www.montgomerycountymd.gov/mcerp/bit/meetings.html",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "notes": "Section is /mcerp/ not /mcers"
   },
   {
     "id": "opprs_ok",
@@ -2194,14 +2214,15 @@
     "abbreviation": "Metro Nashville ERS",
     "state": "TN",
     "aum_billions": 2.3,
-    "website": "https://www.nashville.gov/departments/treasury/pension-administration",
-    "materials_url": "https://www.nashville.gov/departments/treasury/pension-administration",
+    "website": "https://www.nashville.gov/departments/finance/boards/metro-investment-committee",
+    "materials_url": "https://www.nashville.gov/departments/finance/boards/metro-investment-committee/meetings",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "notes": "Pension governed by Metro Investment Committee under Finance (Treasury dept no longer separate)"
   },
   {
     "id": "bcers_city",
@@ -2210,7 +2231,7 @@
     "state": "MD",
     "aum_billions": 2.3,
     "website": "https://www.bcers.org",
-    "materials_url": "https://www.bcers.org/board-trustees/board-meetings",
+    "materials_url": "https://www.bcers.org/about-bcers/board-of-trustees/",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
@@ -2232,7 +2253,8 @@
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "notes": "pbcpf.com is down; no county-wide Palm Beach County police/fire pension fund confirmed — may be municipal-level funds"
   },
   {
     "id": "ocers_fl",
@@ -2240,14 +2262,15 @@
     "abbreviation": "OCERS FL",
     "state": "FL",
     "aum_billions": 2.0,
-    "website": "https://www.ocfl.net/Retirement",
-    "materials_url": "https://www.ocfl.net/Retirement/BoardMeetings",
+    "website": "https://www.ocers.org",
+    "materials_url": "https://www.ocers.org/board-committee-meetings",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "notes": "Own domain ocers.org (not ocfl.net). Confirmed different from OCERS California (already tracked separately)."
   },
   {
     "id": "atlanta_ers",
@@ -2255,14 +2278,15 @@
     "abbreviation": "Atlanta ERS",
     "state": "GA",
     "aum_billions": 2.0,
-    "website": "https://www.atlantaga.gov/government/departments/finance/pension",
-    "materials_url": "https://www.atlantaga.gov/government/departments/finance/pension",
+    "website": "https://www.atlantaga.gov/government/boards-and-commissions/general-fund-pension",
+    "materials_url": "https://coa.sba-inc.com/general-employees-pension-fund/",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "notes": "Board meeting dates at atlantaga.gov; full archive of materials at coa.sba-inc.com (Strategic Benefits Advisors)"
   },
   {
     "id": "lfrs_la",
@@ -2270,14 +2294,15 @@
     "abbreviation": "LFRS",
     "state": "LA",
     "aum_billions": 2.0,
-    "website": "https://www.lfrs.org",
-    "materials_url": "https://www.lfrs.org/board-of-trustees/meetings",
+    "website": "https://lafrs.org",
+    "materials_url": "https://lafrs.org/board-meetings/",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "notes": "Correct domain is lafrs.org not lfrs.org"
   },
   {
     "id": "ofprs_ok",
@@ -2285,14 +2310,15 @@
     "abbreviation": "OFPRS",
     "state": "OK",
     "aum_billions": 2.0,
-    "website": "https://firefighterspension.com",
-    "materials_url": "https://firefighterspension.com/board/board-meetings",
+    "website": "https://ofprs.ok.gov",
+    "materials_url": "https://ofprs.ok.gov/board-minutes/",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "notes": "Moved to ofprs.ok.gov; firefighterspension.com is defunct"
   },
   {
     "id": "corp_az",
@@ -2300,14 +2326,15 @@
     "abbreviation": "CORP AZ",
     "state": "AZ",
     "aum_billions": 2.0,
-    "website": "https://www.psprs.az.gov/corp",
-    "materials_url": "https://www.psprs.az.gov/corp/board-meeting-information",
+    "website": "https://www.psprs.com/corrections-officer/",
+    "materials_url": "https://corrections.az.gov/correctional-officer-retirement-plan-corp/corp-meeting-agenda",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "notes": "Administered by PSPRS (psprs.com); agendas hosted on corrections.az.gov"
   },
   {
     "id": "ncers_ny",
@@ -2315,14 +2342,15 @@
     "abbreviation": "NCERS Nassau",
     "state": "NY",
     "aum_billions": 2.0,
-    "website": "https://www.nassaucountyny.gov/retirement",
-    "materials_url": "https://www.nassaucountyny.gov/retirement",
+    "website": "https://www.osc.ny.gov/retirement/members",
+    "materials_url": "https://www.osc.ny.gov/retirement/members",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "notes": "Nassau County employees participate in NYS & Local Retirement System (NYSLRS) via NYS Comptroller; no standalone county pension board"
   },
   {
     "id": "crs_oh",
@@ -2330,8 +2358,8 @@
     "abbreviation": "CRS Cincinnati",
     "state": "OH",
     "aum_billions": 2.0,
-    "website": "https://www.cincinnati-oh.gov/finance/retirement-system",
-    "materials_url": "https://www.cincinnati-oh.gov/finance/retirement-system/board-meetings",
+    "website": "https://www.cincinnati-oh.gov/retirement/",
+    "materials_url": "https://www.cincinnati-oh.gov/retirement/crs-board-of-trustees/board-meetings-minutes/",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
@@ -2345,14 +2373,15 @@
     "abbreviation": "EPCP",
     "state": "TX",
     "aum_billions": 2.0,
-    "website": "https://www.elpasotexas.gov/pension",
-    "materials_url": "https://www.elpasotexas.gov/pension",
+    "website": "https://www.eppension.org",
+    "materials_url": "https://www.eppension.org/meetings.php",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "notes": "Fund is City of El Paso Employees Retirement Trust (CERT); domain is eppension.org"
   },
   {
     "id": "pmpf_pa",
@@ -2360,14 +2389,15 @@
     "abbreviation": "PMPF",
     "state": "PA",
     "aum_billions": 2.0,
-    "website": "https://pittsburghpa.gov/bureau-of-pensions",
-    "materials_url": "https://pittsburghpa.gov/bureau-of-pensions/board-meetings",
+    "website": "https://www.pittsburghpa.gov/City-Government/Boards-Authorities-Commissions/List-of-Boards-Authorities-Commissions/Comprehensive-Municipal-Pension-Trust-Fund",
+    "materials_url": "https://www.pittsburghpa.gov/City-Government/Boards-Authorities-Commissions/List-of-Boards-Authorities-Commissions/Comprehensive-Municipal-Pension-Trust-Fund/Board-Meeting-Materials",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "notes": "403 is bot-blocker; confirmed active via search. Fund is Comprehensive Municipal Pension Trust Fund (CMPTF)."
   },
   {
     "id": "pgcers_md",
@@ -2375,13 +2405,14 @@
     "abbreviation": "PGCERS",
     "state": "MD",
     "aum_billions": 1.8,
-    "website": "https://www.princegeorgescountymd.gov/retirement",
-    "materials_url": "https://www.princegeorgescountymd.gov/retirement",
+    "website": "https://www.princegeorgescountymd.gov/departments-offices/human-resources-management/pensions-retirement/retirement",
+    "materials_url": "https://www.princegeorgescountymd.gov/boards-commissions/pension-trust-fund-board-trustees",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "notes": "403 is bot-blocker; correct board page confirmed via search"
   }
 ]
