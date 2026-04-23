@@ -1855,23 +1855,6 @@
     ]
   },
   {
-    "id": "kcers_wa",
-    "name": "King County Employees' Retirement System",
-    "abbreviation": "KCERS",
-    "state": "WA",
-    "aum_billions": 3.5,
-    "website": "https://kingcounty.gov/en/dept/bhr/employee-resources/benefits/retirement",
-    "materials_url": "https://kingcounty.gov/en/dept/bhr/employee-resources/benefits/retirement",
-    "materials_type": "playwright",
-    "investment_only": false,
-    "doc_types": [
-      "agenda",
-      "board_pack",
-      "minutes"
-    ],
-    "notes": "King County employees participate in Washington State PERS via DRS; no standalone county pension board found"
-  },
-  {
     "id": "derp_co",
     "name": "Denver Employees Retirement Plan",
     "abbreviation": "DERP",
@@ -2241,22 +2224,6 @@
     ]
   },
   {
-    "id": "pbcpf_fl",
-    "name": "Palm Beach County Police and Firefighters' Retirement System",
-    "abbreviation": "PBCPF",
-    "state": "FL",
-    "aum_billions": 2.0,
-    "website": "https://www.pbcpf.com",
-    "materials_url": "https://www.pbcpf.com/boardmeetings",
-    "materials_type": "playwright",
-    "investment_only": false,
-    "doc_types": [
-      "agenda",
-      "minutes"
-    ],
-    "notes": "pbcpf.com is down; no county-wide Palm Beach County police/fire pension fund confirmed — may be municipal-level funds"
-  },
-  {
     "id": "ocers_fl",
     "name": "Orange County Employees Retirement System (Florida)",
     "abbreviation": "OCERS FL",
@@ -2414,5 +2381,39 @@
       "minutes"
     ],
     "notes": "403 is bot-blocker; correct board page confirmed via search"
+  },
+  {
+    "id": "sbcers",
+    "name": "Santa Barbara County Employees' Retirement System",
+    "abbreviation": "SBCERS",
+    "state": "CA",
+    "aum_billions": 4.8,
+    "website": "https://www.sbcers.org",
+    "materials_url": "https://www.sbcers.org/board-of-retirement/meetings-agendas-minutes/",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ],
+    "notes": "California 1937 Act county fund. AUM ~$4.8B as of FY2023. Board meeting agendas on OnBoard platform; archive in Dropbox. ACFR PDFs directly on sbcers.org/wp-content/uploads/."
+  },
+  {
+    "id": "mcera",
+    "name": "Marin County Employees' Retirement Association",
+    "abbreviation": "MCERA",
+    "state": "CA",
+    "aum_billions": 2.5,
+    "website": "https://www.mcera.org",
+    "materials_url": "https://www.mcera.org/sponsors/board-retirement/meetings",
+    "materials_type": "playwright",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ],
+    "notes": "California 1937 Act county fund. AUM ~$2.5B. Homepage returns 403 to bots; board packets publicly hosted at assets.marincounty.gov/mcera-prod/public/. Standalone Board of Retirement, meets 2nd Wednesday monthly."
   }
 ]
