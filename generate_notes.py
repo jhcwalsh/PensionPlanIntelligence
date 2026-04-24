@@ -113,12 +113,12 @@ def generate_note(prompt: str, max_tokens: int, model: str = MODEL_SONNET) -> st
         rate = 15 if model == MODEL_OPUS else 3
         saved = cache_read * rate * 0.9 / 1_000_000
         console.print(
-            f"  [dim green]↩ cache hit: {cache_read:,} tokens read "
+            f"  [dim green][cache hit] {cache_read:,} tokens read "
             f"(~${saved:.3f} saved)[/dim green]"
         )
     elif cache_write:
         console.print(
-            f"  [dim]↪ cache write: {cache_write:,} tokens stored[/dim]"
+            f"  [dim][cache write] {cache_write:,} tokens stored[/dim]"
         )
 
     return message.content[0].text
