@@ -65,14 +65,62 @@ Output clean markdown only — no code fences, no JSON, no commentary."""
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=2, min=4, max=30))
 def generate_note(prompt: str, max_tokens: int, model: str = MODEL_SONNET) -> str:
-    """Call Claude to generate an analytical markdown note."""
+    """Call Claude to generate an analytical markdown note.
+
+    The system prompt and MEETING DATA corpus are sent as prompt-cached content
+    blocks.  Cache hits occur on retries and same-session re-runs where the
+    corpus is unchanged, cutting input-token costs ~90% on those calls.
+
+    Note: meetings are sorted most-recent-first so cross-day cache hits on the
+    data block are unlikely (new meetings prepend to the text).  The system
+    prompt cache always hits after the first call.
+    """
+    # Split at the MEETING DATA boundary so the large corpus lives in its own
+    # content block and can be cached independently of the variable header.
+    split_marker = "\nMEETING DATA:\n"
+    if split_marker in prompt:
+        instructions, meeting_data = prompt.split(split_marker, 1)
+        content = [
+            {"type": "text", "text": instructions + "\nMEETING DATA:\n"},
+            {
+                "type": "text",
+                "text": meeting_data,
+                "cache_control": {"type": "ephemeral"},
+            },
+        ]
+    else:
+        content = [{"type": "text", "text": prompt}]
+
     message = _get_client().messages.create(
         model=model,
         max_tokens=max_tokens,
         temperature=0.2,
-        system=NOTES_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": prompt}],
+        system=[
+            {
+                "type": "text",
+                "text": NOTES_SYSTEM_PROMPT,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ],
+        messages=[{"role": "user", "content": content}],
     )
+
+    # Surface cache activity so we can confirm hits.
+    usage = message.usage
+    cache_read = getattr(usage, "cache_read_input_tokens", 0) or 0
+    cache_write = getattr(usage, "cache_creation_input_tokens", 0) or 0
+    if cache_read:
+        rate = 15 if model == MODEL_OPUS else 3
+        saved = cache_read * rate * 0.9 / 1_000_000
+        console.print(
+            f"  [dim green]↩ cache hit: {cache_read:,} tokens read "
+            f"(~${saved:.3f} saved)[/dim green]"
+        )
+    elif cache_write:
+        console.print(
+            f"  [dim]↪ cache write: {cache_write:,} tokens stored[/dim]"
+        )
+
     return message.content[0].text
 
 
