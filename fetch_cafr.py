@@ -5,15 +5,16 @@ For each pension plan, find the URL of its Comprehensive Annual Financial
 Report (CAFR) — renamed to Annual Comprehensive Financial Report (ACFR) by
 GFOA in 2021 — and download it.
 
-Discovery uses three strategies in order, reusing what we already know
+Discovery uses four strategies in order, reusing what we already know
 about each plan from prior pipeline runs:
 
-  1. Mine extracted text from documents already in the DB (agendas,
+  1. Per-plan `cafr_url` / `cafr_urls` override from known_plans.json.
+  2. Mine extracted text from documents already in the DB (agendas,
      board packs often link directly to the plan's CAFR).
-  2. Crawl the plan's `website` — probe common paths (/cafr, /acfr,
+  3. Crawl the plan's `website` — probe common paths (/cafr, /acfr,
      /publications, /financial-reports, ...) and follow CAFR-named
-     links one level deep.
-  3. DuckDuckGo HTML search scoped to the plan's domain (no API key).
+     links one level deep. Uses Playwright for JS-rendered sites.
+  4. DuckDuckGo HTML search scoped to the plan's domain (no API key).
 
 Usage:
     python fetch_cafr.py                       # all plans
@@ -38,6 +39,7 @@ from fetcher import (
     DOWNLOADS_DIR,
     HEADERS,
     download_document,
+    fetch_page_playwright,
     fetch_page_requests,
     load_plans,
 )
@@ -149,6 +151,86 @@ def extract_cafr_links_from_page(soup: BeautifulSoup,
 # Discovery strategies
 # ---------------------------------------------------------------------------
 
+def strategy_override(plan: dict) -> list[str]:
+    """Return URLs from per-plan override fields, in priority order.
+
+    Supported fields on the plan dict:
+      - `cafr_url` / `cafr_urls`: explicit URL(s) — used as-is.
+      - `cafr_url_template`: URL with a `{year}` placeholder. Rendered with
+        the current and prior calendar year (refresh script may pass a
+        specific target year via `resolve_cafr_url_for_year`).
+      - `cafr_landing`: a landing page to scrape for the newest CAFR PDF
+        link. Page is fetched with requests+BS4; CAFR-named PDFs are returned.
+    """
+    urls: list[str] = []
+    seen: set[str] = set()
+
+    def add(u):
+        if u and u not in seen:
+            seen.add(u)
+            urls.append(u)
+
+    # Static
+    val = plan.get("cafr_url") or plan.get("cafr_urls")
+    if val:
+        if isinstance(val, str):
+            add(val)
+        else:
+            for u in val:
+                add(u)
+
+    # Template — render with current and prior calendar year
+    template = plan.get("cafr_url_template")
+    if template and "{year}" in template:
+        from datetime import datetime
+        this_year = datetime.utcnow().year
+        for yr in (this_year, this_year - 1):
+            add(template.format(year=yr))
+
+    # Landing — scrape page for CAFR-named PDF links, return newest first
+    landing = plan.get("cafr_landing")
+    if landing:
+        soup = fetch_page_requests(landing)
+        if soup is not None:
+            scraped = []
+            for link in extract_cafr_links_from_page(soup, landing):
+                if link["is_pdf"]:
+                    scraped.append(link["url"])
+            scraped.sort(key=lambda u: (year_from_url(u) or 0), reverse=True)
+            for u in scraped:
+                add(u)
+
+    return urls
+
+
+def resolve_cafr_url_for_year(plan: dict, target_year: int) -> str | None:
+    """Refresh-script helper: produce the best URL guess for a specific FY.
+
+    Priority:
+      1. `cafr_url_template` rendered with target_year.
+      2. `cafr_landing` scraped; pick the link whose year_from_url == target_year.
+      3. `cafr_url` (only if target_year matches its embedded year).
+    Returns None when no candidate matches the requested year.
+    """
+    template = plan.get("cafr_url_template")
+    if template and "{year}" in template:
+        return template.format(year=target_year)
+
+    landing = plan.get("cafr_landing")
+    if landing:
+        soup = fetch_page_requests(landing)
+        if soup is not None:
+            for link in extract_cafr_links_from_page(soup, landing):
+                if link["is_pdf"] and year_from_url(link["url"]) == target_year:
+                    return link["url"]
+
+    static = plan.get("cafr_url")
+    if static and year_from_url(static) == target_year:
+        return static
+
+    return None
+
+
 def strategy_mine_existing(plan_id: str, session) -> list[str]:
     """Scan this plan's already-extracted documents for CAFR PDF URLs."""
     docs = (
@@ -184,8 +266,20 @@ def strategy_site_crawl(plan: dict) -> list[str]:
 
     root = website.rstrip("/")
     candidates = [root] + [root + p for p in CAFR_SEED_PATHS]
+    is_playwright = plan.get("materials_type") == "playwright"
 
     landing_pages: list[str] = []
+
+    def harvest(soup: BeautifulSoup, base_url: str):
+        """Add PDFs to pdf_urls, non-PDF CAFR links to landing_pages."""
+        for link in extract_cafr_links_from_page(soup, base_url):
+            if link["is_pdf"]:
+                add_pdf(link["url"])
+            else:
+                landing_pages.append(link["url"])
+
+    # Phase 1: cheap requests probe across all seeds (fast 404 short-circuit).
+    seeds_ok: list[str] = []
     for url in candidates:
         if url in visited:
             continue
@@ -193,22 +287,35 @@ def strategy_site_crawl(plan: dict) -> list[str]:
         soup = fetch_page_requests(url)
         if soup is None:
             continue
-        for link in extract_cafr_links_from_page(soup, url):
-            if link["is_pdf"]:
-                add_pdf(link["url"])
-            else:
-                landing_pages.append(link["url"])
+        seeds_ok.append(url)
+        harvest(soup, url)
         time.sleep(0.2)
 
-    # Follow CAFR-named non-PDF links one level deeper.
+    # Phase 2: for Playwright plans, render the homepage + materials_url once
+    # to catch JS-only navigation links the requests pass missed.
+    if is_playwright:
+        playwright_seeds = [root]
+        materials_url = plan.get("materials_url")
+        if materials_url and materials_url.rstrip("/") != root:
+            playwright_seeds.append(materials_url)
+        for url in playwright_seeds:
+            wait_sel = plan.get("playwright_wait_selector")
+            soup = fetch_page_playwright(url, wait_selector=wait_sel)
+            if soup is not None:
+                harvest(soup, url)
+
+    # Follow CAFR-named non-PDF links one level deeper (requests only;
+    # cheap and most landing pages are static once you're past nav).
     for page_url in landing_pages[:10]:
-        if page_url in visited:
+        # Strip URL fragment so #anchors on the same page don't re-fetch.
+        clean_url = page_url.split("#")[0]
+        if clean_url in visited:
             continue
-        visited.add(page_url)
-        soup = fetch_page_requests(page_url)
+        visited.add(clean_url)
+        soup = fetch_page_requests(clean_url)
         if soup is None:
             continue
-        for link in extract_cafr_links_from_page(soup, page_url):
+        for link in extract_cafr_links_from_page(soup, clean_url):
             if link["is_pdf"]:
                 add_pdf(link["url"])
         time.sleep(0.3)
@@ -273,6 +380,7 @@ def discover_cafr_urls(plan: dict, session) -> list[str]:
         console.print(f"    {label}: +{len(urls) - before}")
 
     console.print("  [dim]strategies:[/dim]")
+    extend(strategy_override(plan), "override")
     extend(strategy_mine_existing(plan["id"], session), "mine-existing")
     extend(strategy_site_crawl(plan), "site-crawl")
     if not urls:
@@ -320,7 +428,7 @@ def run_cafr_fetcher(plan_ids: list[str] = None,
                     continue
 
                 filename = make_cafr_filename(url, plan["abbreviation"])
-                console.print(f"  [cyan]→ {url}[/cyan]")
+                console.print(f"  [cyan]-> {url}[/cyan]")
                 local_path, size = download_document(url, plan_dir, filename)
                 if not local_path:
                     continue

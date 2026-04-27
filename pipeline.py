@@ -64,6 +64,7 @@ def run_pipeline(
     do_summarize: bool = True,
     max_docs_per_plan: int = 50,
     min_year: int = 2026,
+    retry_failed: bool = False,
 ):
     init_db()
     start = datetime.utcnow()
@@ -79,7 +80,7 @@ def run_pipeline(
     if do_extract:
         console.rule("[bold]Step 2: Extract Text[/bold]")
         from extractor import run_extractor
-        run_extractor()
+        run_extractor(retry_failed=retry_failed)
 
     if do_summarize:
         console.rule("[bold]Step 3: Summarize with Claude[/bold]")
@@ -106,6 +107,8 @@ def main():
                         help="Max documents to download per plan (default: 50)")
     parser.add_argument("--min-year", type=int, default=2026,
                         help="Only fetch documents from this year onward (default: 2025)")
+    parser.add_argument("--retry-failed", action="store_true",
+                        help="Re-attempt failed extractions (with OCR fallback)")
     parser.add_argument("--status", action="store_true",
                         help="Just print pipeline status and exit")
     parser.add_argument("--updates", action="store_true",
@@ -161,6 +164,8 @@ def main():
         do_fetch, do_extract, do_summarize = False, True, True  # extract + summarize
     elif args.summarize_only:
         do_fetch, do_extract, do_summarize = False, False, True
+    elif args.retry_failed:
+        do_fetch, do_extract, do_summarize = False, True, False
 
     run_pipeline(
         plan_ids=args.plan_ids if args.plan_ids else None,
@@ -169,6 +174,7 @@ def main():
         do_summarize=do_summarize,
         max_docs_per_plan=args.max_docs,
         min_year=args.min_year,
+        retry_failed=args.retry_failed,
     )
 
 

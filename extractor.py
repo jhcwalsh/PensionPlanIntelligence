@@ -65,10 +65,49 @@ def extract_pdf_pymupdf(path: str) -> tuple[str, int]:
         return "", 0
 
 
+def extract_pdf_ocr(path: str) -> tuple[str, int]:
+    """OCR fallback using pymupdf to render pages + pytesseract."""
+    try:
+        import pytesseract
+        from PIL import Image
+        import fitz
+    except ImportError as e:
+        console.print(f"  [yellow]OCR skipped: {e}[/yellow]")
+        return "", 0
+    # Set explicit path for Windows installs not on system PATH
+    import sys
+    if sys.platform == "win32":
+        pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    try:
+        pytesseract.get_tesseract_version()
+    except pytesseract.TesseractNotFoundError:
+        console.print("  [yellow]OCR skipped: Tesseract not installed (install from https://github.com/UB-Mannheim/tesseract/wiki)[/yellow]")
+        return "", 0
+    try:
+        doc = fitz.open(path)
+        page_count = len(doc)
+        pages_text = []
+        mat = fitz.Matrix(2, 2)  # 2x zoom improves OCR accuracy
+        for i, page in enumerate(doc):
+            pix = page.get_pixmap(matrix=mat)
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            text = pytesseract.image_to_string(img)
+            if text.strip():
+                pages_text.append(f"[Page {i + 1}]\n{text}")
+        full_text = "\n\n".join(pages_text)
+        return full_text[:MAX_TEXT_CHARS], page_count
+    except Exception as e:
+        console.print(f"  [red]OCR failed: {e}[/red]")
+        return "", 0
+
+
 def extract_pdf(path: str) -> tuple[str, int]:
     text, pages = extract_pdf_pdfplumber(path)
     if len(text.strip()) < 100:
         text, pages = extract_pdf_pymupdf(path)
+    if len(text.strip()) < 100:
+        console.print("  [dim]Trying OCR...[/dim]")
+        text, pages = extract_pdf_ocr(path)
     return text, pages
 
 
@@ -170,15 +209,24 @@ def extract_document(doc: Document) -> tuple[str, int, str]:
     return text, pages, "done"
 
 
-def run_extractor(doc_ids: list[int] = None):
+def run_extractor(doc_ids: list[int] = None, retry_failed: bool = False):
     """
     Extract text for all pending documents (or specific doc_ids).
     Updates extraction_status, extracted_text, page_count in DB.
+    Pass retry_failed=True to re-attempt previously failed documents.
     """
     session = get_session()
     try:
         if doc_ids:
             docs = session.query(Document).filter(Document.id.in_(doc_ids)).all()
+        elif retry_failed:
+            docs = session.query(Document).filter(
+                Document.extraction_status == "failed"
+            ).all()
+            # Reset to pending so the run loop can update them
+            for doc in docs:
+                doc.extraction_status = "pending"
+            session.commit()
         else:
             docs = get_unextracted_documents(session)
 

@@ -16,7 +16,9 @@
       "board_pack",
       "minutes"
     ],
-    "notes": "PCTM = Portfolio Construction and Trade Management Committee (investment)"
+    "notes": "PCTM = Portfolio Construction and Trade Management Committee (investment)",
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://www.calpers.ca.gov/sites/default/files/documents/2025/01/acfr-{year}.pdf"
   },
   {
     "id": "calstrs",
@@ -34,7 +36,8 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "nycers",
@@ -50,7 +53,8 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "nystrs",
@@ -66,7 +70,9 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "cafr_url": "https://www.nystrs.org/getmedia/7ea3b951-1fff-4bb3-97d7-f47331be08a0/2024AR.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "nycrs_comptroller",
@@ -82,7 +88,9 @@
       "agenda",
       "board_pack"
     ],
-    "notes": "This page IS the investment advisory committee â€” disable filter"
+    "notes": "This page IS the investment advisory committee â€” disable filter",
+    "fiscal_year_end": "06-30",
+    "cafr_format": "aggregator"
   },
   {
     "id": "trs_texas",
@@ -101,7 +109,9 @@
     ],
     "sub_page_pattern": "trs\\.texas\\.gov/about/trustees/board-meetings/board-meeting-",
     "max_sub_pages": 8,
-    "playwright_wait_selector": "a[href*=\"board-meetings/board-meeting-\"]"
+    "playwright_wait_selector": "a[href*=\"board-meetings/board-meeting-\"]",
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://www.trs.texas.gov/sites/default/files/migrated/trs-acfr-{year}.pdf"
   },
   {
     "id": "ers_texas",
@@ -117,7 +127,9 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "cafr_url": "https://www.ers.texas.gov/About-ERS/Reports-and-Studies/Reports-on-Overall-ERS-Operations-and-Financial-Management",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "frs",
@@ -135,7 +147,9 @@
       "minutes"
     ],
     "playwright_wait_selector": "a[href$=\".pdf\"]",
-    "notes": "IAC materials listing page returns 403 even with Playwright; PDFs use random slugs at sbafla.com/media/ — not indexable via standard scraping"
+    "notes": "IAC materials listing page returns 403 even with Playwright; PDFs use random slugs at sbafla.com/media/ — not indexable via standard scraping",
+    "cafr_url": "https://frs.fl.gov/forms/2023-24_ACFR.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "opers",
@@ -151,7 +165,9 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://www.opers.org/pubs-archive/financial/{year}-OPERS-Annual-Report.pdf"
   },
   {
     "id": "strs_ohio",
@@ -167,7 +183,9 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "cafr_url": "https://www.strsoh.org/_pdfs/2025-50-143.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "psers",
@@ -183,7 +201,9 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "cafr_url": "https://www.pa.gov/content/dam/copapwp-pagov/en/psers/documents/transparency/financial-reports/acfr/psers%20acfr%20fy2024.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "sers_pa",
@@ -199,7 +219,8 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "pera_colorado",
@@ -215,7 +236,9 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://secure.copera.org/staticcontent/digitalsnapshot/acfr-{year}/"
   },
   {
     "id": "lacera",
@@ -232,7 +255,9 @@
       "board_pack",
       "minutes"
     ],
-    "notes": "Pointing directly at Board of Investments â€” disable filter"
+    "notes": "Pointing directly at Board of Investments â€” disable filter",
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://www.lacera.gov/sites/default/files/assets/documents/annual_reports/ACFR-{year}.pdf"
   },
   {
     "id": "scers",
@@ -247,7 +272,9 @@
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "cafr_url": "https://www.scers.gov/wp-content/uploads/2026/04/FY23-24_ACFR.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "njdpb",
@@ -263,7 +290,9 @@
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://www.nj.gov/treasury/pensions/documents/financial/annrpt2024/{year}-ACFR-NJDPB.pdf"
   },
   {
     "id": "ilsrs",
@@ -279,7 +308,9 @@
       "agenda",
       "minutes"
     ],
-    "playwright_wait_selector": ".cmp-list__item-link"
+    "playwright_wait_selector": ".cmp-list__item-link",
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://ilsrs.illinois.gov/content/dam/soi/en/web/srs/sers/resources/financial-report/annual-sers-{year}.pdf"
   },
   {
     "id": "imrf",
@@ -295,7 +326,8 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "wperp",
@@ -310,7 +342,10 @@
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "cafr_url": "https://etf.wi.gov/files/2024wrsfinancialreport/download?inline=",
+    "fiscal_year_end": "12-31",
+    "cafr_format": "aggregator"
   },
   {
     "id": "ipers",
@@ -327,7 +362,9 @@
       "board_pack",
       "minutes"
     ],
-    "notes": "URL is already scoped to investment board â€” disable filter"
+    "notes": "URL is already scoped to investment board â€” disable filter",
+    "cafr_url": "https://publications.iowa.gov/52060/1/IPERS%20ACFR%202024-web_0_OCR_.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "nmpera",
@@ -344,7 +381,8 @@
       "board_pack",
       "minutes"
     ],
-    "playwright_wait_selector": "a[href$=\".pdf\"]"
+    "playwright_wait_selector": "a[href$=\".pdf\"]",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "nmerb",
@@ -363,7 +401,8 @@
     ],
     "extra_pages": [
       "https://www.erb.nm.gov/board/board-minutes/"
-    ]
+    ],
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "tmrs",
@@ -378,7 +417,8 @@
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "12-31"
   },
   {
     "id": "tcdrs",
@@ -393,7 +433,9 @@
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "12-31",
+    "cafr_url_template": "https://www.tcdrs.org/globalassets/library/reports/{year}-annual-report"
   },
   {
     "id": "hfrrf",
@@ -407,7 +449,9 @@
     "investment_only": false,
     "doc_types": [
       "minutes"
-    ]
+    ],
+    "cafr_url": "https://hfrrf.org/Resources/3e9dabcd-c207-479f-a23d-0183f8abe8c2/HFRRF-ACFR.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "hpops",
@@ -422,7 +466,8 @@
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "hmeps",
@@ -438,7 +483,8 @@
       "agenda",
       "minutes"
     ],
-    "playwright_wait_selector": "a[href$=\".pdf\"]"
+    "playwright_wait_selector": "a[href$=\".pdf\"]",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "dpfp",
@@ -456,7 +502,8 @@
     ],
     "extra_pages": [
       "https://www.dpfp.org/-board/board-meeting-minutes/"
-    ]
+    ],
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "safppf",
@@ -471,7 +518,8 @@
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "coaers",
@@ -488,7 +536,8 @@
       "minutes"
     ],
     "sub_page_pattern": "coaers\\.org/\\d{4}-\\d{2}-\\d{2}-coaers",
-    "max_sub_pages": 12
+    "max_sub_pages": 12,
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "kyret_ky",
@@ -503,7 +552,9 @@
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://www.kyret.ky.gov/Publications/Books/{year}%20KRS%20Annual%20Report.pdf"
   },
   {
     "id": "tcrs_tn",
@@ -520,7 +571,9 @@
       "minutes"
     ],
     "playwright_wait_selector": "a[href*=\"DocumentDownload.ashx\"]",
-    "sub_page_pattern": "treasury\\.tn\\.gov/Retirement/Boards-and-Governance/Board-Meetings/"
+    "sub_page_pattern": "treasury\\.tn\\.gov/Retirement/Boards-and-Governance/Board-Meetings/",
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://treasury.tn.gov/Portals/0/Documents/Retirement/CAFR%20Reports/{year}/2024TCRSReport_Full%20Report.pdf"
   },
   {
     "id": "rsa_al",
@@ -536,7 +589,9 @@
       "agenda",
       "minutes"
     ],
-    "notes": "Posts Vimeo recordings; PDF materials availability varies by meeting"
+    "notes": "Posts Vimeo recordings; PDF materials availability varies by meeting",
+    "cafr_url": "https://www.rsa-al.gov/uploads/files/2025_RSA_ACFR.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "peba_sc",
@@ -551,7 +606,8 @@
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "trsl_la",
@@ -567,7 +623,9 @@
       "agenda",
       "minutes"
     ],
-    "playwright_wait_selector": "a[href$=\".pdf\"]"
+    "playwright_wait_selector": "a[href$=\".pdf\"]",
+    "cafr_url": "https://app.lla.la.gov/publicreports.nsf/0/af614566d86545e286258bb1004b65e5/$file/00006140a.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "lasers_la",
@@ -584,7 +642,9 @@
       "minutes"
     ],
     "playwright_wait_selector": "div.entry-content",
-    "notes": "Site returns 403 on all pages including homepage; PDFs at /wp-content/uploads/ are individually accessible but listing page is blocked"
+    "notes": "Site returns 403 on all pages including homepage; PDFs at /wp-content/uploads/ are individually accessible but listing page is blocked",
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://lasersonline.org/wp-content/uploads/{year}/10/LASERS_2025ACFR-web.pdf"
   },
   {
     "id": "pers_ms",
@@ -599,7 +659,9 @@
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "cafr_url": "https://www.pers.ms.gov/sites/default/files/Content/CAFR/PERS%20of%20MS%202024%20ACFR.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "atrs_ar",
@@ -614,7 +676,9 @@
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "cafr_url": "https://www.artrs.gov/Publications/ATRS_2024_Annual_Report.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "trs_ok",
@@ -629,7 +693,9 @@
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "cafr_url": "https://oklahoma.gov/content/dam/ok/en/trs/documents/2024_ACFR_final_version.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "ers_hi",
@@ -644,7 +710,9 @@
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://ers.ehawaii.gov/wp-content/uploads/2025/04/ACFR-{year}-Web-final-r1.pdf"
   },
   {
     "id": "armb_ak",
@@ -659,7 +727,10 @@
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "cafr_url": "https://drb.alaska.gov/docs/reports/PERSacfr_2025.pdf",
+    "fiscal_year_end": "06-30",
+    "cafr_format": "aggregator"
   },
   {
     "id": "mboi_mt",
@@ -674,7 +745,9 @@
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "cafr_url": "https://www.investmentmt.com/_shared/docs/Annual-Reports/ANNUAL-REPORT-FY24.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "persi_id",
@@ -689,7 +762,8 @@
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "urs_ut",
@@ -704,7 +778,9 @@
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "cafr_url": "https://www.urs.org/documents/byfilename/@Public%20Web%20Documents@URS@Reports@ACFR@2024_ACFR@@application@pdf/",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "wrs_wy",
@@ -719,7 +795,8 @@
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "sdrs_sd",
@@ -735,7 +812,9 @@
       "agenda",
       "minutes"
     ],
-    "playwright_wait_selector": "a[href*=\"/bcuploads/\"]"
+    "playwright_wait_selector": "a[href*=\"/bcuploads/\"]",
+    "cafr_url": "https://bfm.sd.gov/acfr/SD_ACFR_2024.PDF",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "sib_nd",
@@ -750,7 +829,9 @@
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "cafr_url": "https://www.rio.nd.gov/sites/www/files/documents/PDFs/RIO/Reports/annualreport2025.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "nic_ne",
@@ -765,7 +846,9 @@
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "cafr_url": "https://nic.nebraska.gov/sites/default/files/doc/Annual%20Report%202024.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "kpers_ks",
@@ -781,7 +864,9 @@
       "agenda",
       "minutes"
     ],
-    "playwright_wait_selector": "a[href*=\"/bot/\"]"
+    "playwright_wait_selector": "a[href*=\"/bot/\"]",
+    "cafr_url": "https://www.kspers.gov/annualreport2024.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "nyscrf",
@@ -799,7 +884,8 @@
       "minutes"
     ],
     "playwright_wait_selector": "a[href$=\".pdf\"]",
-    "notes": "NY Comptroller is sole trustee; IAC is advisory only — meeting materials not publicly posted"
+    "notes": "NY Comptroller is sole trustee; IAC is advisory only — meeting materials not publicly posted",
+    "fiscal_year_end": "03-31"
   },
   {
     "id": "wsib",
@@ -815,7 +901,9 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "cafr_url": "https://www.sib.wa.gov/docs/reports/annual/ar24.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "trsnyc",
@@ -833,7 +921,9 @@
       "minutes"
     ],
     "sub_page_pattern": "trsnyc\\.org/memberportal/About-Us/MeetingSum\\d{4}",
-    "max_sub_pages": 3
+    "max_sub_pages": 3,
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://comptroller.nyc.gov/wp-content/uploads/documents/{year}-TRS-FS-1.pdf"
   },
   {
     "id": "ga_trs",
@@ -849,7 +939,9 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "cafr_url": "https://www.trsga.com/library/files/publications/TRS_ACFR2025_Protected.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "mn_sbi",
@@ -865,7 +957,10 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://msbi.us/sites/default/files/2025-02/{year}%20MSBI%20Annual%20Report.pdf",
+    "cafr_format": "aggregator"
   },
   {
     "id": "vrs",
@@ -881,7 +976,9 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://www.varetire.org/media/shared/pdf/publications/{year}-annual-report.pdf"
   },
   {
     "id": "ncrs",
@@ -900,7 +997,8 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "or_pers",
@@ -916,7 +1014,9 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://www.oregon.gov/pers/Documents/Financials/ACFR/{year}-ACFR.pdf"
   },
   {
     "id": "ma_prim",
@@ -932,7 +1032,8 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "mi_ors",
@@ -949,7 +1050,8 @@
       "board_pack",
       "minutes"
     ],
-    "notes": "SMIB = State of Michigan Investment Board, manages ORS pension assets"
+    "notes": "SMIB = State of Michigan Investment Board, manages ORS pension assets",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "md_sra",
@@ -965,7 +1067,8 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "il_trs",
@@ -981,7 +1084,9 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "cafr_url": "https://www.trsil.org/sites/default/files/documents/ACFR-FY24-web_0.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "mo_psrs",
@@ -997,7 +1102,9 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://www.psrs-peers.org/docs/default-source/investments-documents/2024-annual-financial-report/{year}-annual-comprehensive-financial-report.pdf"
   },
   {
     "id": "asrs",
@@ -1013,7 +1120,9 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "cafr_url": "https://www.azasrs.gov/sites/default/files/pdf/FY23_ACFR_FINAL_Web.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "nv_pers",
@@ -1030,7 +1139,9 @@
       "board_pack",
       "minutes"
     ],
-    "playwright_wait_selector": "a[href*=\"/sites/default/files/meetings/\"]"
+    "playwright_wait_selector": "a[href*=\"/sites/default/files/meetings/\"]",
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://www.nvpers.org/sites/default/files/{year}-12/FY24ACFRFINAL.pdf"
   },
   {
     "id": "inprs",
@@ -1046,7 +1157,9 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "cafr_url": "https://www.in.gov/inprs/files/INPRSAnnualReportBook_FY24.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "sf_sfers",
@@ -1063,7 +1176,9 @@
       "board_pack",
       "minutes"
     ],
-    "playwright_wait_selector": "a[href*=\"/uploads/\"]"
+    "playwright_wait_selector": "a[href*=\"/uploads/\"]",
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://cdn.mysfers.org/uploads/2025/02/SFERS-Annual-Report-Year-End-June-30-{year}.pdf"
   },
   {
     "id": "ct_sers",
@@ -1078,7 +1193,10 @@
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "cafr_url": "https://osc.ct.gov/wp-content/uploads/2026/03/State-of-Connecticut-ACFR-2-27-26_Final.pdf",
+    "fiscal_year_end": "06-30",
+    "cafr_format": "aggregator"
   },
   {
     "id": "mn_pera",
@@ -1093,7 +1211,9 @@
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://mnpera.org/sites/default/files/{year}-annual-comprehensive-financial-report.pdf"
   },
   {
     "id": "mn_tra",
@@ -1109,7 +1229,9 @@
       "agenda",
       "minutes"
     ],
-    "playwright_wait_selector": "a[href*=\"/wp-content/uploads/\"]"
+    "playwright_wait_selector": "a[href*=\"/wp-content/uploads/\"]",
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://www.lcpr.mn.gov/documents/actuarial-financial/2024/{year}.tra.acfr.pdf"
   },
   {
     "id": "mn_msrs",
@@ -1125,7 +1247,9 @@
       "agenda",
       "minutes"
     ],
-    "playwright_wait_selector": "a[href*=\"/sites/default/files/\"]"
+    "playwright_wait_selector": "a[href*=\"/sites/default/files/\"]",
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://www.mnretire.gov/sites/default/files/{year}-12/FINAL%202025%20digital%20compressed.pdf"
   },
   {
     "id": "lacers",
@@ -1141,7 +1265,8 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "ocers",
@@ -1157,7 +1282,8 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "ktrs",
@@ -1173,7 +1299,8 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "ga_ers",
@@ -1189,7 +1316,9 @@
       "agenda",
       "minutes"
     ],
-    "playwright_wait_selector": "a[href*=\"/sites/main/files/file-attachments/\"]"
+    "playwright_wait_selector": "a[href*=\"/sites/main/files/file-attachments/\"]",
+    "cafr_url": "https://www.ers.ga.gov/sites/main/files/file-attachments/acfr_2024.pdf?1729192434=",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "wv_imb",
@@ -1207,7 +1336,9 @@
       "minutes"
     ],
     "notes": "Only financial statements posted publicly; board meeting minutes not available online",
-    "playwright_wait_selector": "a[href$=\".pdf\"]"
+    "playwright_wait_selector": "a[href$=\".pdf\"]",
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://wvimb.org/wp-content/uploads/2024/10/FY-{year}-Annual-Report.pdf"
   },
   {
     "id": "me_pers",
@@ -1223,7 +1354,8 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "wv_cprb",
@@ -1238,7 +1370,9 @@
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://www.wvretirement.com/forms/{year}-ACFR.pdf"
   },
   {
     "id": "ctpf",
@@ -1256,7 +1390,8 @@
       "minutes"
     ],
     "playwright_wait_selector": "a[href$=\".pdf\"]",
-    "notes": "Board materials hosted on Diligent Community platform; direct PDFs may not be accessible"
+    "notes": "Board materials hosted on Diligent Community platform; direct PDFs may not be accessible",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "sbcera",
@@ -1273,7 +1408,8 @@
       "board_pack",
       "minutes"
     ],
-    "playwright_wait_selector": ".rgRow"
+    "playwright_wait_selector": ".rgRow",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "sdcera",
@@ -1289,7 +1425,9 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://content.sdcera.org/wp-content/uploads/2024/11/{year}-ACFR-FINAL.pdf"
   },
   {
     "id": "dcrb",
@@ -1306,7 +1444,9 @@
       "board_pack",
       "minutes"
     ],
-    "playwright_wait_selector": "a[href*=\"sites/default/files\"]"
+    "playwright_wait_selector": "a[href*=\"sites/default/files\"]",
+    "cafr_url": "https://dcrb.dc.gov/sites/default/files/dc/sites/dcrb/(DCRB)%202024%20ACFR_Web.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "mi_mers",
@@ -1322,7 +1462,9 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "cafr_url": "https://assets.mersofmich.com/forms/AnnualFinancialReport_2024.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "cook_county",
@@ -1337,7 +1479,9 @@
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "cafr_url": "https://www.cookcountypension.com/assets/1/6/County_12312024_Combined_FINAL_05302025.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "de_pers",
@@ -1353,7 +1497,9 @@
       "agenda",
       "minutes"
     ],
-    "sub_page_pattern": "botMinutes\\.shtml"
+    "sub_page_pattern": "botMinutes\\.shtml",
+    "cafr_url": "https://open.omb.delaware.gov/FinancialReports/financials/FY24AnnualReport.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "mo_mosers",
@@ -1369,7 +1515,9 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://mosers.org/docs/default-source/funding/annual-reports/2025-acfr/{year}-annual-comprehensive-financial-report.pdf"
   },
   {
     "id": "ok_pers",
@@ -1385,7 +1533,8 @@
       "agenda",
       "minutes"
     ],
-    "notes": "Board roster page exists but meeting agendas/minutes not publicly posted on website"
+    "notes": "Board roster page exists but meeting agendas/minutes not publicly posted on website",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "ri_ers",
@@ -1403,7 +1552,9 @@
       "minutes"
     ],
     "sub_page_pattern": "data\\.treasury\\.ri\\.gov/en/dataset/\\d{4}-\\d+-\\d+-ersri",
-    "max_sub_pages": 6
+    "max_sub_pages": 6,
+    "cafr_url": "https://www.ersri.org/sites/default/files/2025-01/ACFR_FY24_final.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "acera",
@@ -1419,7 +1570,8 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "cccera",
@@ -1435,7 +1587,9 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "cafr_url": "https://www.cccera.gov/2024-annual-comprehensive-financial-report",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "nhrs",
@@ -1450,7 +1604,8 @@
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "vcera",
@@ -1468,7 +1623,9 @@
       "minutes"
     ],
     "playwright_wait_selector": ".meeting-list",
-    "sub_page_pattern": "vcera\\.org/board-retirement-administration/\\d{4}"
+    "sub_page_pattern": "vcera\\.org/board-retirement-administration/\\d{4}",
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://content.vcera.org/wp-content/uploads/2025/01/VCERA-ACFR-{year}.pdf"
   },
   {
     "id": "mo_lagers",
@@ -1483,7 +1640,8 @@
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "vt_pension",
@@ -1500,7 +1658,9 @@
       "board_pack",
       "minutes"
     ],
-    "playwright_wait_selector": "a[href*=\"vermont.gov\"]"
+    "playwright_wait_selector": "a[href*=\"vermont.gov\"]",
+    "cafr_url": "https://outside.vermont.gov/dept/VPIC/Shared%20Documents/VPIC%20Website/Legislative%20Reports/VPIC%202025%20Annual%20Report.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "smcera",
@@ -1518,7 +1678,9 @@
       "minutes"
     ],
     "playwright_wait_selector": "a[href$=\".pdf\"]",
-    "notes": "Organization is SamCERA (San Mateo County ERA); migrated from smcera.org to samcera.gov"
+    "notes": "Organization is SamCERA (San Mateo County ERA); migrated from smcera.org to samcera.gov",
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://content.samcera.gov/wp-content/uploads/2025/11/{year}-SamCERA-ACFR.pdf"
   },
   {
     "id": "kcera",
@@ -1535,7 +1697,8 @@
       "board_pack",
       "minutes"
     ],
-    "playwright_wait_selector": "a[href*=\"kcera-board\"]"
+    "playwright_wait_selector": "a[href*=\"kcera-board\"]",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "sj_federated",
@@ -1550,7 +1713,9 @@
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://www.sjretirement.com/Resources/85e959e2-b891-4c56-829c-c920e4a1d81b/2023-{year}.pdf"
   },
   {
     "id": "nycppf",
@@ -1567,7 +1732,9 @@
       "board_pack",
       "minutes"
     ],
-    "notes": "Hosted under nyc.gov/content/nycppf/; nycppf.org does not exist"
+    "notes": "Hosted under nyc.gov/content/nycppf/; nycppf.org does not exist",
+    "cafr_url": "https://comptroller.nyc.gov/reports/annual-comprehensive-financial-reports/",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "lafpp",
@@ -1583,7 +1750,9 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://content.lafpp.lacity.gov/wp-content/uploads/{year}/12/FY2024-LAFPP-Audit-Report-FINAL.pdf"
   },
   {
     "id": "surs_il",
@@ -1600,7 +1769,9 @@
       "board_pack",
       "minutes"
     ],
-    "notes": "Board-of-trustees index page has 0 links; meeting minutes are on the /meeting-minutes/ sub-page"
+    "notes": "Board-of-trustees index page has 0 links; meeting minutes are on the /meeting-minutes/ sub-page",
+    "cafr_url": "https://surs.org/wp-content/uploads/COMP-FY2025.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "ct_trs",
@@ -1619,7 +1790,10 @@
     "extra_pages": [
       "https://portal.ct.gov/trb/content/other-resources/board-information-and-meeting-schedules/board-meetings/2025"
     ],
-    "notes": "Correct URL path is /trb/content/other-resources/.../board-meetings/[YEAR]; original /TRB/Content/ path 404s"
+    "notes": "Correct URL path is /trb/content/other-resources/.../board-meetings/[YEAR]; original /TRB/Content/ path 404s",
+    "cafr_url": "https://portal.ct.gov/-/media/trb/content/statisticsresearch/sr_actval25.pdf",
+    "fiscal_year_end": "06-30",
+    "cafr_format": "aggregator"
   },
   {
     "id": "sers_oh",
@@ -1635,7 +1809,8 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "opf_oh",
@@ -1651,7 +1826,9 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "cafr_url": "https://ohioauditor.gov/auditsearch/Reports/2025/Ohio_Police_&_Fire_Pension_Fund_24_Franklin_FINAL.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "sdcers_ca",
@@ -1671,7 +1848,9 @@
     "extra_pages": [
       "https://www.sdcers.org/board-meeting-agendas/board-agenda"
     ],
-    "notes": "Main board-meeting-agendas-minutes page has no direct links; board agendas are on /board-meeting-agendas/board-agenda"
+    "notes": "Main board-meeting-agendas-minutes page has no direct links; board agendas are on /board-meeting-agendas/board-agenda",
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://content.sdcers.org/wp-content/uploads/2024/12/fy-{year}-sdcers-acfr.pdf"
   },
   {
     "id": "fdny_pension",
@@ -1687,7 +1866,9 @@
       "agenda",
       "minutes"
     ],
-    "notes": "No dedicated fund website for board materials; public meetings hosted on nyc.gov/site/fdny"
+    "notes": "No dedicated fund website for board materials; public meetings hosted on nyc.gov/site/fdny",
+    "cafr_url": "https://www.nyc.gov/assets/actuary/downloads/pdf/FIRE_FY2023_ACFR.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "psprs_az",
@@ -1705,7 +1886,8 @@
       "minutes"
     ],
     "notes": "PDFs loaded via JS dropdown <select> menus on single page; Playwright needed to render them",
-    "playwright_wait_selector": ".psprs-accordion, .accordion-content, select"
+    "playwright_wait_selector": ".psprs-accordion, .accordion-content, select",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "bers_nyc",
@@ -1720,7 +1902,9 @@
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "cafr_url": "https://www.bers.nyc.gov/assets/bers/downloads/pdf/publications/bers_acfr_fy2024.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "brs_ma",
@@ -1736,7 +1920,9 @@
       "agenda",
       "minutes"
     ],
-    "notes": "cityofboston.gov is dead; moved to boston.gov. No separate meetings sub-page; content on main dept page"
+    "notes": "cityofboston.gov is dead; moved to boston.gov. No separate meetings sub-page; content on main dept page",
+    "cafr_url": "https://www.boston.gov/sites/default/files/file/2025/07/Boston_Retirement_System_2024_FS_December%2031%202024.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "fppa_co",
@@ -1753,7 +1939,8 @@
       "board_pack",
       "minutes"
     ],
-    "notes": "Correct domain is fppaco.org not cofppa.org"
+    "notes": "Correct domain is fppaco.org not cofppa.org",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "fcrs_va",
@@ -1769,7 +1956,9 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "cafr_url": "https://www.fairfaxcounty.gov/retirement/sites/retirement/files/Assets/ERS%20ACFR%20-%202025.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "pbpr_pa",
@@ -1785,7 +1974,9 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://www.phila.gov/media/20251016115951/pensions-municipal-pension-fund-financial-statements-supplementary-info-{year}.pdf"
   },
   {
     "id": "ipopif_il",
@@ -1800,7 +1991,9 @@
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://www.ipopif.org/Resources/4a4cf8de-755f-40a3-8c6b-751ee4db8c69/Annual%20Report%202024-{year}/"
   },
   {
     "id": "sjpf_ca",
@@ -1816,7 +2009,9 @@
       "agenda",
       "minutes"
     ],
-    "notes": "Original URL 404s; correct path is /boards/police-and-fire/boards-policeandfire-agendas-minutes-and-audio"
+    "notes": "Original URL 404s; correct path is /boards/police-and-fire/boards-policeandfire-agendas-minutes-and-audio",
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://www.sjretirement.com/Resources/a954a959-e207-4b3e-993e-69d9e61ac74a/2023-{year}.pdf"
   },
   {
     "id": "pers_phoenix",
@@ -1832,7 +2027,9 @@
       "agenda",
       "minutes"
     ],
-    "notes": "Section moved from /retirement to /copers"
+    "notes": "Section moved from /retirement to /copers",
+    "cafr_url": "https://www.phoenix.gov/content/dam/phoenix/coperssite/documents/COPERS%20ACFR%20FINAL%2012032025.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "scers_wa",
@@ -1848,7 +2045,9 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "cafr_url": "https://www.seattle.gov/documents/departments/retirement/publications/auditors%20reports/2024auditorsreport.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "derp_co",
@@ -1867,7 +2066,8 @@
     ],
     "sub_page_pattern": "derp-retirement-board-meeting-[\\d]+-[\\d]+-[\\d]+",
     "max_sub_pages": 12,
-    "notes": "Main schedules-agendas-minutes page links to individual meeting sub-pages; PDFs in /wp-content/uploads/"
+    "notes": "Main schedules-agendas-minutes page links to individual meeting sub-pages; PDFs in /wp-content/uploads/",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "rcera_ca",
@@ -1884,7 +2084,8 @@
       "board_pack",
       "minutes"
     ],
-    "notes": "Original domain rcera.org fails DNS; correct domain is rcers.org but site may be offline intermittently"
+    "notes": "Original domain rcera.org fails DNS; correct domain is rcers.org but site may be offline intermittently",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "gmebs_ga",
@@ -1900,7 +2101,8 @@
       "agenda",
       "minutes"
     ],
-    "notes": "Administered by Georgia Municipal Association (GMA); no public board meeting page found — materials may be member-only"
+    "notes": "Administered by Georgia Municipal Association (GMA); no public board meeting page found — materials may be member-only",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "mpers_la",
@@ -1916,7 +2118,9 @@
       "agenda",
       "minutes"
     ],
-    "notes": "Correct domain is lampers.org not mpers.org (mpers.org is Missouri plan)"
+    "notes": "Correct domain is lampers.org not mpers.org (mpers.org is Missouri plan)",
+    "cafr_url": "https://lampers.org/wp-content/uploads/2024/08/municipal_police_employees_retirement_system_6-30-2021_acfr_annual_report-1.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "dgrs_mi",
@@ -1932,7 +2136,9 @@
       "agenda",
       "minutes"
     ],
-    "notes": "detroitgrs.com defunct; consolidated under rscd.org (Retirement Systems of the City of Detroit). Note trailing underscore in path."
+    "notes": "detroitgrs.com defunct; consolidated under rscd.org (Retirement Systems of the City of Detroit). Note trailing underscore in path.",
+    "cafr_url": "https://cms2.revize.com/revize/rscdmi/General%20Employees%20Retirement%20System%20of%20the%20City%20of%20Detroit%20-%20June%2030%202024%20-%20Financial%20Statements.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "fpdr_or",
@@ -1949,7 +2155,9 @@
       "board_pack",
       "minutes"
     ],
-    "notes": "portlandfpdr.com defunct; moved to portland.gov/fpdr"
+    "notes": "portlandfpdr.com defunct; moved to portland.gov/fpdr",
+    "cafr_url": "https://efiles.portlandoregon.gov/record/17529594/file/document",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "fpif_il",
@@ -1969,7 +2177,8 @@
     "extra_pages": [
       "https://ifpif.org/meetings/board-meetings/",
       "https://ifpif.org/meetings/investments-operations-committee/"
-    ]
+    ],
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "sonoma_era",
@@ -1985,7 +2194,9 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://scretire.org/Microsites/SCERA/Documents/Financial/{year}%20ACFR.pdf"
   },
   {
     "id": "dpfrs_mi",
@@ -2001,7 +2212,9 @@
       "agenda",
       "minutes"
     ],
-    "notes": "dpfrs.com defunct; consolidated under rscd.org. Path does NOT have trailing underscore (differs from DGRS)."
+    "notes": "dpfrs.com defunct; consolidated under rscd.org. Path does NOT have trailing underscore (differs from DGRS).",
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://www.rscd.org/Police%20%20Fire%20Annual%20Report%20FY%202023-{year}%20Final.pdf"
   },
   {
     "id": "mfprsi_ia",
@@ -2017,7 +2230,9 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "cafr_url": "http://www.mfprsi.org/media/publications/2023_MFPRSI_Annual_Report_final_web.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "scers_suffolk",
@@ -2032,7 +2247,9 @@
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://www.osc.ny.gov/files/retirement/resources/pdf/annual-comprehensive-financial-report-{year}.pdf"
   },
   {
     "id": "fwerf_tx",
@@ -2048,7 +2265,9 @@
       "agenda",
       "minutes"
     ],
-    "notes": "Fund has own domain fwretirement.org; fortworthtexas.gov/retirement is bot-blocked"
+    "notes": "Fund has own domain fwretirement.org; fortworthtexas.gov/retirement is bot-blocked",
+    "cafr_url": "https://www.fortworthtexas.gov/files/assets/public/v/1/finance/transparency-information/public-pension-transparency/actuarial-valuation-2023.12.31.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "mers_wi",
@@ -2064,7 +2283,9 @@
       "agenda",
       "minutes"
     ],
-    "notes": "Correct domain is cmers.com (City of Milwaukee Employes' Retirement System)"
+    "notes": "Correct domain is cmers.com (City of Milwaukee Employes' Retirement System)",
+    "cafr_url": "https://www.cmers.com/CMERS/Financial-Statements/CMERS-12-31-24-ACFR.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "jaxpf_fl",
@@ -2080,7 +2301,9 @@
       "agenda",
       "minutes"
     ],
-    "notes": "jpfpension.com defunct; moved to jacksonville.gov"
+    "notes": "jpfpension.com defunct; moved to jacksonville.gov",
+    "cafr_url": "https://www.jacksonville.gov/getattachment/Departments/Police-Fire-Pension-Fund/Annual-Report/Jacksonville-PFPF-10-1-2024-Actuarial-Valuation-Report-FINAL-4-14-2025.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "sjcera_ca",
@@ -2096,7 +2319,9 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "cafr_url": "https://sjcera.org/sites/default/files/2025-06/SJCERA_2024_ACFR-WEB.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "fcera_ca",
@@ -2113,7 +2338,9 @@
       "board_pack",
       "minutes"
     ],
-    "notes": "Domain changed from fcera.org to fcera.gov"
+    "notes": "Domain changed from fcera.org to fcera.gov",
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://www2.co.fresno.ca.us/9200/Attachments/Agendas/{year}/20231220/20231220-6A-FinancialStatementAuditResultsACFR-2Attachment.pdf"
   },
   {
     "id": "stancera_ca",
@@ -2129,7 +2356,8 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "acrs_pa",
@@ -2145,7 +2373,9 @@
       "agenda",
       "minutes"
     ],
-    "notes": "403 is bot-blocker; correct path confirmed via search results"
+    "notes": "403 is bot-blocker; correct path confirmed via search results",
+    "cafr_url": "https://www.alleghenycounty.us/files/assets/county/v/1/government/retirement/pension-fund/annual-reports/2022-2023-annual-report.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "bcers_md",
@@ -2161,7 +2391,8 @@
       "agenda",
       "minutes"
     ],
-    "notes": "Dept is budfin (Budget & Finance), not humanresources. 403 is bot-blocker."
+    "notes": "Dept is budfin (Budget & Finance), not humanresources. 403 is bot-blocker.",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "mcers_md",
@@ -2178,7 +2409,9 @@
       "board_pack",
       "minutes"
     ],
-    "notes": "Section is /mcerp/ not /mcers"
+    "notes": "Section is /mcerp/ not /mcers",
+    "cafr_url": "https://www.montgomerycountymd.gov/mcerp/Resources/Files/FY25%20ACFR%20-%20Final.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "opprs_ok",
@@ -2194,7 +2427,8 @@
       "agenda",
       "minutes"
     ],
-    "notes": "Domain moved from ok.gov/opprs to opprs.ok.gov; direct PDF archive on /board-agenda-and-minutes/"
+    "notes": "Domain moved from ok.gov/opprs to opprs.ok.gov; direct PDF archive on /board-agenda-and-minutes/",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "metro_nashville_ers",
@@ -2212,7 +2446,9 @@
     ],
     "notes": "Meetings page lists date links matching /investment-committee-meeting-[month]-[day]-[year]; PDFs on individual meeting sub-pages",
     "sub_page_pattern": "investment-committee-meeting-[a-z]+-\\d+-\\d+",
-    "max_sub_pages": 8
+    "max_sub_pages": 8,
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://nashville.gov/sites/default/files/{year}-12/2025_Annual_Comprehensive_Financial_Report.pdf"
   },
   {
     "id": "bcers_city",
@@ -2228,7 +2464,8 @@
       "agenda",
       "board_pack",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "ocers_fl",
@@ -2244,7 +2481,8 @@
       "agenda",
       "minutes"
     ],
-    "notes": "Own domain ocers.org (not ocfl.net). Confirmed different from OCERS California (already tracked separately)."
+    "notes": "Own domain ocers.org (not ocfl.net). Confirmed different from OCERS California (already tracked separately).",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "atlanta_ers",
@@ -2260,7 +2498,8 @@
       "agenda",
       "minutes"
     ],
-    "notes": "Board meeting dates at atlantaga.gov; full archive of materials at coa.sba-inc.com (Strategic Benefits Advisors)"
+    "notes": "Board meeting dates at atlantaga.gov; full archive of materials at coa.sba-inc.com (Strategic Benefits Advisors)",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "lfrs_la",
@@ -2276,7 +2515,9 @@
       "agenda",
       "minutes"
     ],
-    "notes": "Correct domain is lafrs.org not lfrs.org"
+    "notes": "Correct domain is lafrs.org not lfrs.org",
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://lafrs.org/wp-content/uploads/2026/01/FRS-2025-Financial-Statement-Report-Signed-{year}.pdf"
   },
   {
     "id": "ofprs_ok",
@@ -2292,7 +2533,8 @@
       "agenda",
       "minutes"
     ],
-    "notes": "Moved to ofprs.ok.gov; firefighterspension.com is defunct"
+    "notes": "Moved to ofprs.ok.gov; firefighterspension.com is defunct",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "corp_az",
@@ -2308,7 +2550,8 @@
       "agenda",
       "minutes"
     ],
-    "notes": "Administered by PSPRS (psprs.com); agendas hosted on corrections.az.gov"
+    "notes": "Administered by PSPRS (psprs.com); agendas hosted on corrections.az.gov",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "crs_oh",
@@ -2323,7 +2566,8 @@
     "doc_types": [
       "agenda",
       "minutes"
-    ]
+    ],
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "epcp_tx",
@@ -2339,7 +2583,9 @@
       "agenda",
       "minutes"
     ],
-    "notes": "Fund is City of El Paso Employees Retirement Trust (CERT); domain is eppension.org"
+    "notes": "Fund is City of El Paso Employees Retirement Trust (CERT); domain is eppension.org",
+    "fiscal_year_end": "06-30",
+    "cafr_url_template": "https://www.eppension.org/documents/fund-overview/{year}-Annual-Comprehensive-Financial-Report.pdf"
   },
   {
     "id": "pmpf_pa",
@@ -2355,7 +2601,9 @@
       "agenda",
       "minutes"
     ],
-    "notes": "403 is bot-blocker; confirmed active via search. Fund is Comprehensive Municipal Pension Trust Fund (CMPTF)."
+    "notes": "403 is bot-blocker; confirmed active via search. Fund is Comprehensive Municipal Pension Trust Fund (CMPTF).",
+    "cafr_url": "https://paauditor.b-cdn.net/wp-content/uploads/munCityofPittsburghCMPTF052025.pdf",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "pgcers_md",
@@ -2371,7 +2619,8 @@
       "agenda",
       "minutes"
     ],
-    "notes": "403 is bot-blocker; correct board page confirmed via search"
+    "notes": "403 is bot-blocker; correct board page confirmed via search",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "sbcers",
@@ -2388,7 +2637,8 @@
       "board_pack",
       "minutes"
     ],
-    "notes": "California 1937 Act county fund. AUM ~$4.8B as of FY2023. Board meeting agendas on OnBoard platform; archive in Dropbox. ACFR PDFs directly on sbcers.org/wp-content/uploads/."
+    "notes": "California 1937 Act county fund. AUM ~$4.8B as of FY2023. Board meeting agendas on OnBoard platform; archive in Dropbox. ACFR PDFs directly on sbcers.org/wp-content/uploads/.",
+    "fiscal_year_end": "06-30"
   },
   {
     "id": "mcera",
@@ -2405,6 +2655,7 @@
       "board_pack",
       "minutes"
     ],
-    "notes": "California 1937 Act county fund. AUM ~$2.5B. Homepage returns 403 to bots; board packets publicly hosted at assets.marincounty.gov/mcera-prod/public/. Standalone Board of Retirement, meets 2nd Wednesday monthly."
+    "notes": "California 1937 Act county fund. AUM ~$2.5B. Homepage returns 403 to bots; board packets publicly hosted at assets.marincounty.gov/mcera-prod/public/. Standalone Board of Retirement, meets 2nd Wednesday monthly.",
+    "fiscal_year_end": "06-30"
   }
 ]

@@ -40,6 +40,7 @@ class Plan(Base):
     aum_billions = Column(Float)
     website = Column(String)
     materials_url = Column(String)
+    fiscal_year_end = Column(String(5))             # MM-DD, e.g. "06-30"
 
     meetings = relationship("Meeting", back_populates="plan", cascade="all, delete-orphan")
     documents = relationship("Document", back_populates="plan", cascade="all, delete-orphan")
@@ -79,6 +80,7 @@ class Document(Base):
     extraction_status = Column(String, default="pending")   # pending, done, failed
     page_count = Column(Integer)
     meeting_date = Column(DateTime)     # parsed from document or filename
+    fiscal_year = Column(Integer)       # CAFR/ACFR fiscal year (e.g. 2024); null for non-CAFR docs
 
     plan = relationship("Plan", back_populates="documents")
     meeting = relationship("Meeting", back_populates="documents")
@@ -88,6 +90,95 @@ class Document(Base):
     __table_args__ = (
         Index("ix_documents_plan_id", "plan_id"),
         Index("ix_documents_meeting_date", "meeting_date"),
+        Index("ix_documents_plan_fy", "plan_id", "doc_type", "fiscal_year"),
+    )
+
+
+class CafrRefreshLog(Base):
+    """Per-plan outcome from each monthly CAFR refresh run."""
+    __tablename__ = "cafr_refresh_log"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    plan_id = Column(String, ForeignKey("plans.id"), nullable=False)
+    run_at = Column(DateTime, nullable=False)
+    expected_year = Column(Integer)            # the FY we were checking for
+    status = Column(String, nullable=False)
+    # status values: "saved" | "already_have" | "not_yet_published" | "url_failed"
+    #              | "validation_failed" | "no_strategy" | "error"
+    url_tried = Column(String)
+    document_id = Column(Integer, ForeignKey("documents.id"))  # set when saved
+    notes = Column(Text)
+
+    __table_args__ = (
+        Index("ix_refresh_plan_run", "plan_id", "run_at"),
+    )
+
+
+class CafrExtract(Base):
+    """One row per CAFR document we've extracted Investment Section data from."""
+    __tablename__ = "cafr_extract"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    plan_id = Column(String, ForeignKey("plans.id"), nullable=False)
+    document_id = Column(Integer, ForeignKey("documents.id"), nullable=False, unique=True)
+    fiscal_year = Column(Integer)
+    investment_policy_text = Column(Text)
+    extracted_at = Column(DateTime)
+    model_used = Column(String)
+    pages_used = Column(String)        # e.g. "45-78" — which PDF pages fed the extraction
+    text_hash = Column(String)         # MD5 of the section text — skip re-extraction
+    notes = Column(Text)
+
+    plan = relationship("Plan")
+    document = relationship("Document")
+    allocations = relationship("CafrAllocation", back_populates="extract",
+                               cascade="all, delete-orphan")
+    performance = relationship("CafrPerformance", back_populates="extract",
+                               cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index("ix_cafr_extract_plan_fy", "plan_id", "fiscal_year"),
+    )
+
+
+class CafrAllocation(Base):
+    """Long-form asset-allocation row: one per (CAFR, asset class)."""
+    __tablename__ = "cafr_allocation"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    cafr_extract_id = Column(Integer, ForeignKey("cafr_extract.id"), nullable=False)
+    asset_class = Column(String, nullable=False)
+    target_pct = Column(Float)
+    actual_pct = Column(Float)
+    target_range_low = Column(Float)
+    target_range_high = Column(Float)
+    notes = Column(String)
+
+    extract = relationship("CafrExtract", back_populates="allocations")
+
+    __table_args__ = (
+        Index("ix_cafr_alloc_extract", "cafr_extract_id"),
+    )
+
+
+class CafrPerformance(Base):
+    """Long-form performance row: one per (CAFR, scope, period)."""
+    __tablename__ = "cafr_performance"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    cafr_extract_id = Column(Integer, ForeignKey("cafr_extract.id"), nullable=False)
+    scope = Column(String, nullable=False)         # "total_fund" or asset class name
+    period = Column(String, nullable=False)        # "fy" | "1y" | "3y" | "5y" | "10y" | "since_inception"
+    return_pct = Column(Float)
+    benchmark_return_pct = Column(Float)
+    benchmark_name = Column(String)
+    notes = Column(String)
+
+    extract = relationship("CafrExtract", back_populates="performance")
+
+    __table_args__ = (
+        Index("ix_cafr_perf_extract", "cafr_extract_id"),
+        Index("ix_cafr_perf_lookup", "cafr_extract_id", "scope", "period"),
     )
 
 
