@@ -1263,6 +1263,154 @@ def page_cafr_plan_detail(plan_id: str) -> None:
             st.markdown(_safe_md(extract["investment_policy_text"]))
 
 
+@st.cache_data(ttl=300)
+def _pe_allocation_df():
+    """Plans with both PE target and actual weights, latest CAFR extract per plan.
+
+    Matches asset classes whose name contains "private equity" (case
+    insensitive), excluding composite buckets like "Total Other (Private
+    Equity + …)". When a plan has more than one matching row, prefer the
+    one labeled exactly "Private Equity".
+    """
+    import pandas as pd
+    from sqlalchemy import func
+
+    session = get_db_session()
+
+    latest_extract_id = (
+        session.query(func.max(CafrExtract.id))
+        .filter(CafrExtract.plan_id == Plan.id)
+        .correlate(Plan)
+        .scalar_subquery()
+    )
+
+    rows = (
+        session.query(
+            Plan.id,
+            Plan.name,
+            Plan.abbreviation,
+            Plan.state,
+            CafrExtract.fiscal_year,
+            CafrAllocation.asset_class,
+            CafrAllocation.target_pct,
+            CafrAllocation.actual_pct,
+        )
+        .join(CafrExtract, CafrExtract.id == latest_extract_id)
+        .join(CafrAllocation, CafrAllocation.cafr_extract_id == CafrExtract.id)
+        .filter(func.lower(CafrAllocation.asset_class).like("%private equit%"))
+        .filter(~func.lower(CafrAllocation.asset_class).like("%total other%"))
+        .filter(CafrAllocation.target_pct.isnot(None))
+        .filter(CafrAllocation.actual_pct.isnot(None))
+        .all()
+    )
+
+    df = pd.DataFrame(rows, columns=[
+        "plan_id", "plan_name", "abbreviation", "state",
+        "fiscal_year", "asset_class", "target_pct", "actual_pct",
+    ])
+    if df.empty:
+        return df
+
+    df["label"] = df["abbreviation"].fillna("").where(
+        df["abbreviation"].astype(bool), df["plan_id"]
+    )
+    df["_priority"] = df["asset_class"].str.lower().eq("private equity").astype(int)
+    df = (
+        df.sort_values(["plan_id", "_priority"], ascending=[True, False])
+          .drop_duplicates(subset=["plan_id"], keep="first")
+          .drop(columns="_priority")
+          .reset_index(drop=True)
+    )
+    return df
+
+
+def page_asset_allocation():
+    """Asset allocation tab — target vs actual weights from latest CAFR extracts."""
+    import altair as alt
+    import pandas as pd
+
+    st.title("Asset Allocation")
+    st.caption(
+        "Each point is one plan's policy target weight versus its actual "
+        "weight, taken from the latest CAFR extract. The dashed 45° line is "
+        "target = actual; points above are overweight, points below "
+        "underweight."
+    )
+
+    df = _pe_allocation_df()
+    if df.empty:
+        st.info("No plans have both target and actual private equity weights.")
+        return
+
+    st.subheader(f"Private Equity — target vs actual weight ({len(df)} plans)")
+
+    max_val = float(max(df["target_pct"].max(), df["actual_pct"].max()))
+    domain_max = max(5.0, max_val * 1.10)
+    domain = [0.0, domain_max]
+
+    line_df = pd.DataFrame({"x": domain, "y": domain})
+
+    base = alt.Chart(df).encode(
+        x=alt.X(
+            "target_pct:Q",
+            title="Target weight (%)",
+            scale=alt.Scale(domain=domain, nice=False),
+        ),
+        y=alt.Y(
+            "actual_pct:Q",
+            title="Actual weight (%)",
+            scale=alt.Scale(domain=domain, nice=False),
+        ),
+    )
+
+    points = base.mark_circle(size=120, opacity=0.75, color="#0066cc").encode(
+        tooltip=[
+            alt.Tooltip("plan_name:N", title="Plan"),
+            alt.Tooltip("state:N", title="State"),
+            alt.Tooltip("fiscal_year:Q", title="FY"),
+            alt.Tooltip("asset_class:N", title="Asset class"),
+            alt.Tooltip("target_pct:Q", title="Target %", format=".2f"),
+            alt.Tooltip("actual_pct:Q", title="Actual %", format=".2f"),
+        ],
+    )
+
+    labels = base.mark_text(
+        align="left",
+        baseline="middle",
+        dx=7,
+        fontSize=10,
+    ).encode(text="label:N")
+
+    diagonal = alt.Chart(line_df).mark_line(
+        color="grey", strokeDash=[4, 4], strokeWidth=1,
+    ).encode(x="x:Q", y="y:Q")
+
+    chart = (diagonal + points + labels).properties(height=600)
+
+    st.altair_chart(chart, use_container_width=True)
+
+    table = df[[
+        "plan_id", "plan_name", "state", "fiscal_year", "asset_class",
+        "target_pct", "actual_pct",
+    ]].copy()
+    table["over_under_pct"] = (table["actual_pct"] - table["target_pct"]).round(2)
+    table = table.rename(columns={
+        "plan_id": "Plan ID",
+        "plan_name": "Plan",
+        "state": "State",
+        "fiscal_year": "FY",
+        "asset_class": "Asset Class",
+        "target_pct": "Target %",
+        "actual_pct": "Actual %",
+        "over_under_pct": "Actual − Target",
+    })
+    st.dataframe(
+        table.sort_values("Actual − Target", ascending=False),
+        use_container_width=True,
+        hide_index=True,
+    )
+
+
 def page_cafr():
     """CAFR coverage tab: per-plan view of CAFR + extraction status."""
     st.title("CAFR Coverage")
@@ -1457,9 +1605,9 @@ def main():
         page_cafr_plan_detail(cafr_plan_param)
         return
 
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
         "Notes", "Summary", "Updates", "Search", "Browse Recent",
-        "Investment Actions", "CAFR", "Plans", "Admin",
+        "Investment Actions", "CAFR", "Asset Allocation", "Plans", "Admin",
     ])
 
     with tab1:
@@ -1477,8 +1625,10 @@ def main():
     with tab7:
         page_cafr()
     with tab8:
-        page_plans()
+        page_asset_allocation()
     with tab9:
+        page_plans()
+    with tab10:
         page_admin()
 
 
