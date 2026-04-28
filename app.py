@@ -15,7 +15,18 @@ from pathlib import Path
 import streamlit as st
 from dotenv import load_dotenv
 
-from database import Document, Plan, Summary, get_session, init_db, search_summaries, get_new_meetings
+from database import (
+    CafrAllocation,
+    CafrExtract,
+    CafrPerformance,
+    Document,
+    Plan,
+    Summary,
+    get_new_meetings,
+    get_session,
+    init_db,
+    search_summaries,
+)
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
@@ -932,6 +943,412 @@ def _admin_plan_coverage_df():
     return df
 
 
+@st.cache_data(ttl=300)
+def _cafr_coverage_df():
+    """Per-plan CAFR + extraction coverage table.
+
+    For each tracked plan, picks the most recent CAFR document (by
+    fiscal_year, then downloaded_at) and joins to its CafrExtract row if
+    one exists, plus counts of allocation and performance rows.
+
+    Cached for 5 minutes — the underlying tables are write-rare (CAFR
+    refresh is monthly; extraction is one-shot per plan).
+    """
+    import pandas as pd
+    from sqlalchemy import func
+
+    session = get_db_session()
+
+    cafr_rows = (
+        session.query(Document)
+        .filter(Document.doc_type == "cafr")
+        .order_by(Document.plan_id)
+        .all()
+    )
+    # Reduce to the most recent CAFR per plan (highest fiscal_year, then
+    # most recent downloaded_at). Done in Python to avoid SQL nullslast
+    # portability concerns.
+    latest_cafr: dict[str, Document] = {}
+    cafr_count: dict[str, int] = {}
+    for d in cafr_rows:
+        cafr_count[d.plan_id] = cafr_count.get(d.plan_id, 0) + 1
+        prev = latest_cafr.get(d.plan_id)
+        if prev is None:
+            latest_cafr[d.plan_id] = d
+            continue
+        prev_key = (prev.fiscal_year or 0, prev.downloaded_at or datetime.min)
+        d_key = (d.fiscal_year or 0, d.downloaded_at or datetime.min)
+        if d_key > prev_key:
+            latest_cafr[d.plan_id] = d
+
+    extracts: dict[int, CafrExtract] = {
+        e.document_id: e for e in session.query(CafrExtract).all()
+    }
+    alloc_counts = dict(
+        session.query(
+            CafrAllocation.cafr_extract_id,
+            func.count(CafrAllocation.id),
+        ).group_by(CafrAllocation.cafr_extract_id).all()
+    )
+    perf_counts = dict(
+        session.query(
+            CafrPerformance.cafr_extract_id,
+            func.count(CafrPerformance.id),
+        ).group_by(CafrPerformance.cafr_extract_id).all()
+    )
+
+    plans = session.query(Plan).order_by(Plan.name).all()
+    rows = []
+    for p in plans:
+        doc = latest_cafr.get(p.id)
+        if doc is None:
+            status = "Missing CAFR"
+            cafr_fy = ""
+            downloaded = ""
+            url = ""
+            extracted = "No"
+            extract_fy = ""
+            alloc = 0
+            perf = 0
+        else:
+            cafr_fy = str(doc.fiscal_year) if doc.fiscal_year else ""
+            downloaded = doc.downloaded_at.strftime("%Y-%m-%d") if doc.downloaded_at else ""
+            url = doc.url or ""
+            ext = extracts.get(doc.id)
+            if ext is None:
+                status = "Pending extract"
+                extracted = "No"
+                extract_fy = ""
+                alloc = 0
+                perf = 0
+            else:
+                status = "Extracted"
+                extracted = "Yes"
+                extract_fy = str(ext.fiscal_year) if ext.fiscal_year else ""
+                alloc = int(alloc_counts.get(ext.id, 0))
+                perf = int(perf_counts.get(ext.id, 0))
+
+        rows.append({
+            "plan_id": p.id,
+            "Plan": p.abbreviation or p.name,
+            "Name": p.name,
+            "State": p.state or "",
+            "FYE": p.fiscal_year_end or "",
+            "Status": status,
+            "CAFR FY": cafr_fy,
+            "Source": url or None,
+            "Extract FY": extract_fy,
+            "# Asset classes": alloc,
+            "# Perf rows": perf,
+            "Downloaded": downloaded,
+        })
+
+    return pd.DataFrame(rows)
+
+
+@st.cache_data(ttl=300)
+def _cafr_plan_detail_data(plan_id: str) -> dict:
+    """Fetch the latest CAFR extract for a plan, with allocations + performance."""
+    session = get_db_session()
+    plan = session.query(Plan).filter_by(id=plan_id).first()
+    if plan is None:
+        return {}
+
+    extract = (
+        session.query(CafrExtract)
+        .filter(CafrExtract.plan_id == plan_id)
+        .order_by(CafrExtract.fiscal_year.desc(), CafrExtract.id.desc())
+        .first()
+    )
+    if extract is None:
+        return {"plan": {
+            "name": plan.name,
+            "abbreviation": plan.abbreviation,
+            "state": plan.state,
+        }}
+
+    allocations = (
+        session.query(CafrAllocation)
+        .filter(CafrAllocation.cafr_extract_id == extract.id)
+        .order_by(CafrAllocation.id)
+        .all()
+    )
+    performance = (
+        session.query(CafrPerformance)
+        .filter(CafrPerformance.cafr_extract_id == extract.id)
+        .order_by(CafrPerformance.scope, CafrPerformance.period)
+        .all()
+    )
+    document = session.query(Document).filter_by(id=extract.document_id).first()
+
+    return {
+        "plan": {
+            "name": plan.name,
+            "abbreviation": plan.abbreviation,
+            "state": plan.state,
+        },
+        "extract": {
+            "id": extract.id,
+            "fiscal_year": extract.fiscal_year,
+            "extracted_at": extract.extracted_at,
+            "model_used": extract.model_used,
+            "pages_used": extract.pages_used,
+            "investment_policy_text": extract.investment_policy_text,
+            "notes": extract.notes,
+        },
+        "document": {
+            "id": document.id if document else None,
+            "url": document.url if document else None,
+            "filename": document.filename if document else None,
+        } if document else None,
+        "allocations": [
+            {
+                "Asset class": a.asset_class,
+                "Target %": a.target_pct,
+                "Actual %": a.actual_pct,
+                "Range low %": a.target_range_low,
+                "Range high %": a.target_range_high,
+                "Notes": a.notes or "",
+            }
+            for a in allocations
+        ],
+        "performance": [
+            {
+                "Scope": p.scope,
+                "Period": p.period,
+                "Return %": p.return_pct,
+                "Benchmark %": p.benchmark_return_pct,
+                "Benchmark": p.benchmark_name or "",
+                "Notes": p.notes or "",
+            }
+            for p in performance
+        ],
+    }
+
+
+def page_cafr_plan_detail(plan_id: str) -> None:
+    """Standalone detail page for one plan's CAFR extraction.
+
+    Reached via ``?cafr_plan=<plan_id>``. Lives outside the tab system,
+    which sidesteps the React reconciler issues the in-tab variant hit.
+    """
+    import pandas as pd
+
+    data = _cafr_plan_detail_data(plan_id)
+    if not data or not data.get("plan"):
+        st.error(f"Plan '{plan_id}' not found.")
+        if st.button("Back to dashboard"):
+            st.query_params.clear()
+            st.rerun()
+        return
+
+    plan = data["plan"]
+    extract = data.get("extract") or {}
+    doc = data.get("document") or {}
+    allocations = data.get("allocations") or []
+    performance = data.get("performance") or []
+
+    plan_label = plan.get("abbreviation") or plan.get("name") or plan_id
+    st.title(f"{plan_label} — CAFR detail")
+    st.caption(plan["name"])
+
+    if st.button("← Back to CAFR coverage"):
+        st.query_params.clear()
+        st.rerun()
+
+    if not extract:
+        st.info(
+            "No CAFR extraction yet for this plan. "
+            f"Run `python extract_cafr_investments.py {plan_id}` to populate."
+        )
+        return
+
+    extracted_at = extract.get("extracted_at")
+    fy = extract.get("fiscal_year")
+    cols = st.columns(4)
+    cols[0].metric("Fiscal Year", str(fy) if fy else "—")
+    cols[1].metric("# Asset classes", len(allocations))
+    cols[2].metric("# Performance rows", len(performance))
+    cols[3].metric(
+        "Extracted",
+        extracted_at.strftime("%Y-%m-%d") if extracted_at else "—",
+    )
+
+    if doc.get("url"):
+        st.markdown(
+            f"**Source:** [{doc.get('filename') or doc['url']}]({doc['url']})"
+        )
+    pages_used = extract.get("pages_used")
+    model_used = extract.get("model_used")
+    if pages_used or model_used:
+        st.caption(
+            f"Pages used: {pages_used or '—'} · "
+            f"Model: {model_used or '—'}"
+        )
+
+    # ---- Asset Allocation ----
+    st.markdown("## Asset Allocation")
+    if allocations:
+        df_alloc = pd.DataFrame(allocations)
+        df_alloc["Drift %"] = df_alloc.apply(
+            lambda r: (r["Actual %"] - r["Target %"])
+            if pd.notna(r["Actual %"]) and pd.notna(r["Target %"]) else None,
+            axis=1,
+        )
+        st.dataframe(
+            df_alloc,
+            use_container_width=True,
+            hide_index=True,
+            height=min(60 + 35 * len(df_alloc), 700),
+            column_config={
+                "Target %": st.column_config.NumberColumn(format="%.2f"),
+                "Actual %": st.column_config.NumberColumn(format="%.2f"),
+                "Range low %": st.column_config.NumberColumn(format="%.2f"),
+                "Range high %": st.column_config.NumberColumn(format="%.2f"),
+                "Drift %": st.column_config.NumberColumn(
+                    format="%+.2f",
+                    help="Actual − Target (positive = overweight).",
+                ),
+            },
+        )
+
+        targets = df_alloc["Target %"].dropna()
+        if len(targets) > 0:
+            total = float(targets.sum())
+            if abs(total - 100.0) > 1.0:
+                st.warning(
+                    f"Targets sum to {total:.2f}% — extraction may be "
+                    "missing or duplicating an asset class."
+                )
+    else:
+        st.info("No asset-allocation rows extracted.")
+
+    # ---- Performance ----
+    st.markdown("## Performance")
+    if performance:
+        df_perf = pd.DataFrame(performance)
+        df_perf["vs Benchmark"] = df_perf.apply(
+            lambda r: (r["Return %"] - r["Benchmark %"])
+            if pd.notna(r["Return %"]) and pd.notna(r["Benchmark %"]) else None,
+            axis=1,
+        )
+        st.dataframe(
+            df_perf,
+            use_container_width=True,
+            hide_index=True,
+            height=min(60 + 35 * len(df_perf), 700),
+            column_config={
+                "Return %": st.column_config.NumberColumn(format="%.2f"),
+                "Benchmark %": st.column_config.NumberColumn(format="%.2f"),
+                "vs Benchmark": st.column_config.NumberColumn(
+                    format="%+.2f",
+                    help="Return − Benchmark (positive = outperform).",
+                ),
+            },
+        )
+
+        # Pivot view: scope × period for total-fund-style overview
+        pivot = df_perf.pivot_table(
+            index="Scope", columns="Period",
+            values="Return %", aggfunc="first",
+        )
+        if not pivot.empty and pivot.shape[0] > 1:
+            with st.expander("Pivot: scope × period", expanded=False):
+                st.dataframe(pivot, use_container_width=True)
+    else:
+        st.info("No performance rows extracted.")
+
+    if extract.get("investment_policy_text"):
+        with st.expander("Investment policy text", expanded=False):
+            st.markdown(_safe_md(extract["investment_policy_text"]))
+
+
+def page_cafr():
+    """CAFR coverage tab: per-plan view of CAFR + extraction status."""
+    st.title("CAFR Coverage")
+    st.caption(
+        "One row per tracked plan — does it have a CAFR/ACFR in the DB, "
+        "what fiscal year does the latest one cover, and have we extracted "
+        "the Investment Section into structured asset-allocation and "
+        "performance rows."
+    )
+
+    df = _cafr_coverage_df()
+    if df.empty:
+        st.warning("No plans in the database yet.")
+        return
+
+    total = len(df)
+    extracted = int((df["Status"] == "Extracted").sum())
+    pending = int((df["Status"] == "Pending extract").sum())
+    missing = int((df["Status"] == "Missing CAFR").sum())
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Plans tracked", total)
+    c2.metric("Extracted", extracted)
+    c3.metric("Pending extract", pending)
+    c4.metric("Missing CAFR", missing)
+
+    status_filter = st.multiselect(
+        "Filter by status",
+        ["Extracted", "Pending extract", "Missing CAFR"],
+        default=[],
+        key="cafr_status_filter",
+    )
+    view = df[df["Status"].isin(status_filter)] if status_filter else df
+
+    st.dataframe(
+        view.drop(columns=["plan_id"]),
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Source": st.column_config.LinkColumn(
+                "Source",
+                display_text="open PDF",
+                help="Direct link to the latest CAFR PDF for this plan.",
+            ),
+        },
+    )
+
+    st.caption(
+        "Click any plan's row in the table to view its CAFR detail. Or use "
+        "the deep-link below."
+    )
+
+    # A small selectbox→link affordance to drill into the detail page,
+    # since stDataFrame's native row selection is fiddly.
+    extracted_view = df[df["Status"] == "Extracted"].copy()
+    if not extracted_view.empty:
+        labels = ["—"] + [
+            f"{r['Plan']} — {r['Name']} (FY{r['Extract FY']})"
+            for _, r in extracted_view.iterrows()
+        ]
+        ids_by_label = {
+            "—": None,
+            **{
+                f"{r['Plan']} — {r['Name']} (FY{r['Extract FY']})": r["plan_id"]
+                for _, r in extracted_view.iterrows()
+            },
+        }
+        choice = st.selectbox(
+            "Open detail page for plan",
+            labels,
+            key="cafr_plan_detail_choice",
+        )
+        plan_id = ids_by_label.get(choice)
+        if plan_id:
+            st.markdown(
+                f"[Open detail for {choice} →](?cafr_plan={plan_id})"
+            )
+
+    st.download_button(
+        "Download CSV",
+        df.drop(columns=["plan_id"]).to_csv(index=False),
+        "cafr_coverage.csv",
+        "text/csv",
+    )
+
+
 def page_admin():
     """Admin views: pipeline / data-quality diagnostics for the site owner."""
     st.title("Admin")
@@ -1035,9 +1452,14 @@ def main():
             st.error(f"Invalid document ID: {doc_param}")
         return
 
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+    cafr_plan_param = st.query_params.get("cafr_plan")
+    if cafr_plan_param:
+        page_cafr_plan_detail(cafr_plan_param)
+        return
+
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
         "Notes", "Summary", "Updates", "Search", "Browse Recent",
-        "Investment Actions", "Plans", "Admin",
+        "Investment Actions", "CAFR", "Plans", "Admin",
     ])
 
     with tab1:
@@ -1053,8 +1475,10 @@ def main():
     with tab6:
         page_investment_actions(plan_id, plan_label)
     with tab7:
-        page_plans()
+        page_cafr()
     with tab8:
+        page_plans()
+    with tab9:
         page_admin()
 
 
