@@ -64,6 +64,126 @@ on Render).
 
 ---
 
+## How the pipeline works
+
+`python pipeline.py` is a thin orchestrator ([pipeline.py](pipeline.py)
+→ `run_pipeline`) that drives three independent stages against the
+same SQLite DB. Each stage reads what it needs and writes back into
+DB rows; if any stage fails, the next run picks up exactly where
+the last one left off — there's no in-memory state that has to
+survive between stages.
+
+### Stage 1 — Fetch ([fetcher.py](fetcher.py) → `run_fetcher`)
+
+For every plan in [data/known_plans.json](data/known_plans.json):
+
+1. **Load the materials page.** Plans flagged `materials_type:
+   "playwright"` are rendered in headless Chromium so JavaScript
+   fires before link extraction; everything else is plain `requests`
+   + `BeautifulSoup`. The plan's `materials_url` is the entry point.
+2. **Discover candidate documents.** All `<a>` links on the page
+   are collected, plus any nested pages that match
+   `RELEVANT_KEYWORDS` (`agenda`, `minutes`, `board`, `investment`,
+   …). URLs that look like document downloads but lack a file
+   extension (e.g. CalPERS' `/documents/<id>/download`) are
+   recognised via `DOC_URL_PATTERNS`.
+3. **Filter to the investment focus.** `INVESTMENT_FOCUS` keeps
+   only investment / portfolio committee material; `EXCLUDE_COMMITTEES`
+   drops audit, finance, benefits, governance, real-estate, etc.
+   This is what keeps the corpus signal-rich rather than every
+   board document the plan publishes.
+4. **Skip already-known URLs.** `document_exists(session, url)` short-
+   circuits — every URL we've ever downloaded is already a row in
+   the `documents` table.
+5. **Download new docs** to `downloads/<plan_id>/` (or
+   `/data/downloads/<plan_id>/` on Render's persistent disk) and
+   insert one row in `documents` per file: URL, filename, plan,
+   doc_type (`agenda` / `board_pack` / `minutes` / `performance` /
+   …), parsed meeting date, file size, `extraction_status="pending"`.
+
+Pipeline-wide, only docs newer than `--min-year` (default 2026)
+are fetched. There's no global rate limit; the fetcher just walks
+plans sequentially.
+
+### Stage 2 — Extract ([extractor.py](extractor.py) → `run_extractor`)
+
+Walks every `documents` row whose `extraction_status="pending"`:
+
+1. **PDF: pdfplumber first** — preserves layout and pulls tables as
+   pipe-delimited rows alongside body text. Most board packs come
+   out clean.
+2. **PDF: PyMuPDF (`fitz`) fallback** — plain text only, used when
+   pdfplumber raises (encrypted PDFs, malformed layouts, etc.).
+3. **PDF: OCR fallback** — only triggered when both above produce
+   no text and `--retry-failed` is passed. Renders each page with
+   PyMuPDF and runs `pytesseract`. Slow, so off by default.
+4. **DOCX:** `python-docx` paragraph + table walk.
+5. **Cap.** Whatever the extractor produces is truncated to
+   `MAX_TEXT_CHARS=150_000` before persisting.
+
+Each row's `extracted_text` and `page_count` are filled in;
+`extraction_status` flips to `done` (or `failed` if every
+extractor returned empty).
+
+### Stage 3 — Summarize ([summarizer.py](summarizer.py) → `run_summarizer`)
+
+Walks every `documents` row that is `extracted_text` ready but
+has no `summaries` row yet:
+
+1. **Skip non-substantive docs.** Filenames matching
+   `attendance | building map | calendar | bio | parking | …`
+   are dropped — pure logistics, no investment signal.
+2. **Hash dedup.** MD5 the extracted text. If another summary in
+   the DB has the same hash, copy it into a thin pointer row
+   (with `model_used="dedup:..."`) instead of paying for the
+   API call. This catches identical board packs republished
+   verbatim and the same agenda being posted twice.
+3. **Smart truncate.** `smart_truncate()` builds a ~50 k character
+   excerpt: first 20 k chars (agenda, exec summary), keyword-
+   selected windows from the middle (manager hires, allocation
+   changes, performance), last 10 k chars (decisions, votes).
+   A 200-page board pack fits comfortably in one Claude call
+   without losing the parts we care about.
+4. **Model routing** (`choose_model`): Haiku for short docs and
+   simple agendas; Sonnet only when the doc is large *and* its
+   first 5 k chars contain investment keywords. Sonnet is ~4×
+   the cost — reserved for documents that earn it.
+5. **Structured JSON output.** The Claude prompt asks for a
+   strict JSON schema: `summary`, `key_topics`, `decisions`
+   (with vote tallies), `investment_actions` (hires / fires /
+   commitments with dollar amounts), `performance_data`
+   (returns vs benchmarks), `notable_items`. The response is
+   parsed and persisted as a `summaries` row alongside
+   `text_hash`, `model_used`, `generated_at`.
+
+Per-document cost typically lands at \$0.001 (Haiku) – \$0.05
+(Sonnet on a 200-page board pack). A weekly run across all
+plans usually costs \$1–\$5.
+
+### What ends up in the DB
+
+```
+plans         148 rows  (fixed registry from data/known_plans.json)
+documents   3,000+ rows (one per downloaded file, growing weekly)
+summaries   2,500+ rows (one per substantive document)
+cafr_*      separate cadence — see refresh_cafrs.py
+```
+
+Everything downstream (the Streamlit app, the insights cron,
+the analyst notes generator) reads only from `documents` and
+`summaries`. The pipeline never reads back from anything it
+wrote — each stage is one-way.
+
+### Resumability
+
+Because every stage is keyed by a status column (`extraction_status`
+on documents, presence/absence of a `summaries` row), interrupted
+runs are safe to retry. If `pipeline.py` dies during summarization,
+re-running it skips the already-done docs and resumes on the
+unsummarized ones automatically.
+
+---
+
 ## Running the pipeline (local, weekly)
 
 The pipeline is what produces the data the website and CIO Insights
@@ -76,18 +196,9 @@ fresh content.
 python pipeline.py
 ```
 
-That runs all three steps end-to-end:
-
-1. **Fetch** — for each plan in [data/known_plans.json](data/known_plans.json),
-   visit its materials URL and download new agendas, board packs, and
-   minutes (with Playwright for JS-rendered sites).
-2. **Extract** — pull text out of every newly downloaded PDF/DOCX
-   (pdfplumber → PyMuPDF fallback).
-3. **Summarize** — ask Claude (Haiku for short docs, Sonnet for
-   investment-heavy packs) to produce a structured summary per document.
-
-A typical run takes 15–60 minutes depending on how many new documents
-were posted that week. Cost is usually \$1–\$5 per run.
+End-to-end fetch → extract → summarize, as described in *How the
+pipeline works* above. Typical run: 15–60 minutes depending on how
+many new documents were posted that week. Cost: \$1–\$5.
 
 ### Useful flags
 
