@@ -6,3 +6,12 @@ __pycache__/
 venv/
 .idea/
 *.iml
+
+# CIO Insights automation: scratch state. _cafr_overrides.json is
+# intentional config (committed) and intentionally NOT matched here.
+_extract_todo.txt
+_missing_cafr_ids.txt
+_cafr_run_*.json
+_cafr_state_*.json
+tmp/
+notes/pdfs/

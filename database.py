@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from sqlalchemy import (
-    Column, Integer, String, Text, Float, DateTime, Boolean,
+    Column, Integer, String, Text, Float, DateTime, Boolean, Date, JSON,
     ForeignKey, create_engine, UniqueConstraint, Index
 )
 from sqlalchemy.orm import DeclarativeBase, Session, relationship, sessionmaker
@@ -179,6 +179,121 @@ class CafrPerformance(Base):
     __table_args__ = (
         Index("ix_cafr_perf_extract", "cafr_extract_id"),
         Index("ix_cafr_perf_lookup", "cafr_extract_id", "scope", "period"),
+    )
+
+
+class Publication(Base):
+    """One row per scheduled CIO Insights publication, regardless of status.
+
+    Lifecycle: generating → awaiting_approval → (approved | rejected | expired)
+                                              ↓ approved
+                                          published
+
+    `(cadence, period_start)` is unique — re-running a cycle for the same
+    period reuses the existing row rather than creating a duplicate.
+    """
+    __tablename__ = "publications"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    cadence = Column(String, nullable=False)        # 'weekly' | 'monthly' | 'annual'
+    period_start = Column(Date, nullable=False)
+    period_end = Column(Date, nullable=False)
+    status = Column(String, nullable=False, default="generating")
+    # status values: generating, awaiting_approval, approved, rejected,
+    #                published, expired, failed
+
+    draft_markdown = Column(Text)               # populated after compose
+    pdf_path = Column(String)                   # populated after render
+    composed_at = Column(DateTime)
+    approved_at = Column(DateTime)
+    rejected_at = Column(DateTime)
+    published_at = Column(DateTime)
+    expires_at = Column(DateTime)               # 7 days after composed_at
+    error_message = Column(Text)                # if status='failed'
+    reminder_sent_at = Column(DateTime)         # 72-hour nudge
+
+    # For monthly/annual: the publication ids of the lower-cadence inputs
+    source_publication_ids = Column(JSON)       # list[int] or null
+
+    tokens = relationship("ApprovalToken", back_populates="publication",
+                          cascade="all, delete-orphan")
+
+    __table_args__ = (
+        UniqueConstraint("cadence", "period_start", name="uq_publication_cadence_period"),
+        Index("ix_publication_status", "status"),
+    )
+
+
+class ApprovalToken(Base):
+    """Magic-link tokens for one-click approval/rejection.
+
+    Two tokens are issued per publication — one for approve, one for reject.
+    Tokens expire after `APPROVAL_TOKEN_TTL_DAYS` (default 7) and are
+    single-use (consumed_at is set atomically with the action).
+    """
+    __tablename__ = "approval_tokens"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    publication_id = Column(Integer, ForeignKey("publications.id"), nullable=False)
+    token_hash = Column(String, nullable=False, unique=True)  # sha256 of raw token
+    action = Column(String, nullable=False)     # 'approve' | 'reject'
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    consumed_at = Column(DateTime)
+
+    publication = relationship("Publication", back_populates="tokens")
+
+    __table_args__ = (
+        Index("ix_approval_token_pub", "publication_id"),
+    )
+
+
+class WeeklyRun(Base):
+    """One row per weekly scrape/extract run, for resumability and audit."""
+    __tablename__ = "weekly_runs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    period_start = Column(Date, nullable=False)
+    period_end = Column(Date, nullable=False)
+    started_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    completed_at = Column(DateTime)
+    status = Column(String, nullable=False, default="running")
+    # status: running, succeeded, failed, partial
+
+    plans_total = Column(Integer)
+    plans_completed = Column(Integer, default=0)
+    documents_fetched = Column(Integer, default=0)
+    records_extracted = Column(Integer, default=0)
+    error_message = Column(Text)
+
+    plan_runs = relationship("WeeklyRunPlan", back_populates="run",
+                             cascade="all, delete-orphan")
+
+    __table_args__ = (
+        UniqueConstraint("period_start", name="uq_weekly_run_period"),
+        Index("ix_weekly_run_status", "status"),
+    )
+
+
+class WeeklyRunPlan(Base):
+    """One row per (run, plan) — supports per-plan resumability."""
+    __tablename__ = "weekly_run_plans"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    run_id = Column(Integer, ForeignKey("weekly_runs.id"), nullable=False)
+    plan_id = Column(String, ForeignKey("plans.id"), nullable=False)
+    status = Column(String, nullable=False, default="pending")
+    # status: pending, fetching, extracting, succeeded, failed, skipped
+    error_message = Column(Text)
+    started_at = Column(DateTime)
+    completed_at = Column(DateTime)
+    documents_fetched = Column(Integer, default=0)
+
+    run = relationship("WeeklyRun", back_populates="plan_runs")
+
+    __table_args__ = (
+        UniqueConstraint("run_id", "plan_id", name="uq_weekly_run_plan"),
+        Index("ix_weekly_run_plan_status", "run_id", "status"),
     )
 
 

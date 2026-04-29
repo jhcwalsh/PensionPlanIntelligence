@@ -15,7 +15,10 @@ from pathlib import Path
 import streamlit as st
 from dotenv import load_dotenv
 
-from database import Document, Plan, Summary, get_session, init_db, search_summaries, get_new_meetings
+from database import (
+    ApprovalToken, Document, Plan, Publication, Summary,
+    get_session, init_db, search_summaries, get_new_meetings,
+)
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
@@ -497,106 +500,7 @@ def _find_latest_insights_recent() -> tuple[Path, str, str] | None:
 
 
 
-DEFAULT_APP_BASE_URL = "https://pensionplanintelligence.onrender.com"
-
-
-def _absolute_url(href: str) -> str:
-    """Prepend APP_BASE_URL to relative links so they work in exported PDFs.
-
-    Falls back to the default Render service URL so PDFs generated locally
-    (e.g. during dev or via a CLI) still link back to the deployed app
-    rather than the user's local filesystem.
-    """
-    if href.startswith(("http://", "https://", "mailto:")):
-        return href
-    base = (os.environ.get("APP_BASE_URL") or DEFAULT_APP_BASE_URL).rstrip("/")
-    if href.startswith("?"):
-        return f"{base}/{href}"
-    if href.startswith("/"):
-        return f"{base}{href}"
-    return f"{base}/{href}"
-
-
-def _markdown_to_pdf_bytes(title: str, date_str: str, markdown_text: str) -> bytes:
-    """Convert a markdown note to a PDF using reportlab.
-
-    Relative links (e.g. ?doc=42) are rewritten to absolute URLs using
-    APP_BASE_URL so they resolve correctly when the PDF is opened
-    outside the app.
-    """
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.units import mm
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable
-    from reportlab.lib import colors
-
-    buf = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buf, pagesize=A4,
-        leftMargin=20 * mm, rightMargin=20 * mm,
-        topMargin=20 * mm, bottomMargin=20 * mm,
-    )
-
-    styles = getSampleStyleSheet()
-    title_style = ParagraphStyle(
-        "NoteTitle", parent=styles["Heading1"],
-        fontSize=16, spaceAfter=4, textColor=colors.HexColor("#003366"),
-    )
-    date_style = ParagraphStyle(
-        "NoteDate", parent=styles["Normal"],
-        fontSize=9, textColor=colors.grey, spaceAfter=10,
-    )
-    h2_style = ParagraphStyle(
-        "NoteH2", parent=styles["Heading2"],
-        fontSize=12, spaceBefore=10, spaceAfter=4,
-        textColor=colors.HexColor("#003366"),
-    )
-    body_style = ParagraphStyle(
-        "NoteBody", parent=styles["Normal"],
-        fontSize=10, leading=14, spaceAfter=6,
-    )
-    bullet_style = ParagraphStyle(
-        "NoteBullet", parent=body_style,
-        leftIndent=12, bulletIndent=0,
-    )
-
-    story = [
-        Paragraph(title, title_style),
-        Paragraph(date_str, date_style),
-        HRFlowable(width="100%", thickness=1, color=colors.HexColor("#003366"), spaceAfter=8),
-    ]
-
-    for line in markdown_text.splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("---") or stripped.startswith("*Generated"):
-            continue
-        if stripped.startswith("## "):
-            story.append(Spacer(1, 4))
-            story.append(Paragraph(stripped[3:], h2_style))
-        elif stripped.startswith("# "):
-            pass  # already in title
-        elif stripped.startswith("- ") or stripped.startswith("* "):
-            text = stripped[2:]
-            text = re.sub(
-                r"\[([^\]]+)\]\(([^)]+)\)",
-                lambda m: f'<a href="{_absolute_url(m.group(2))}" color="blue">{m.group(1)}</a>',
-                text,
-            )
-            text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
-            text = re.sub(r"\*(.+?)\*", r"<i>\1</i>", text)
-            story.append(Paragraph(f"• {text}", bullet_style))
-        else:
-            text = re.sub(
-                r"\[([^\]]+)\]\(([^)]+)\)",
-                lambda m: f'<a href="{_absolute_url(m.group(2))}" color="blue">{m.group(1)}</a>',
-                stripped,
-            )
-            text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
-            text = re.sub(r"\*(.+?)\*", r"<i>\1</i>", text)
-            story.append(Paragraph(text, body_style))
-
-    doc.build(story)
-    return buf.getvalue()
+from insights.render import markdown_to_pdf_bytes as _markdown_to_pdf_bytes
 
 
 def _notes_md_to_html(content: str) -> str:
@@ -1023,8 +927,168 @@ def page_admin():
                 )
 
 
+def page_approval_action(raw_token: str, action: str):
+    """Handle ?approve=<token> / ?reject=<token>.
+
+    Looks up the token, applies the action atomically, and renders a
+    confirmation page. On approve, also triggers the publish step.
+    """
+    from insights import approval as _approval, publish as _publish
+
+    if action not in ("approve", "reject"):
+        st.error(f"Invalid action: {action}")
+        return
+
+    try:
+        publication = _approval.consume_token(raw_token, expected_action=action)
+    except _approval.TokenError as exc:
+        st.title("Token error")
+        st.error(str(exc))
+        st.caption(
+            "If you believe this is a mistake, the publication may already "
+            "have been actioned. Check the Drafts tab."
+        )
+        if st.button("Go to dashboard"):
+            st.query_params.clear()
+            st.rerun()
+        return
+
+    if action == "approve":
+        try:
+            _publish.publish(publication)
+            session = get_session()
+            try:
+                pub = session.get(Publication, publication.id)
+                pub.status = "published"
+                pub.published_at = datetime.utcnow()
+                session.commit()
+                publication = pub
+            finally:
+                session.close()
+        except Exception as exc:
+            st.title("Approve succeeded — publish failed")
+            st.error(f"The draft was approved but publishing failed: {exc}")
+            st.caption(
+                "The publication is in 'approved' status. You can retry "
+                "the publish step manually."
+            )
+            return
+
+    st.title(f"{action.title()}d")
+    st.success(
+        f"Publication #{publication.id} ({publication.cadence}, "
+        f"{publication.period_start.isoformat()}) is now "
+        f"**{publication.status}**."
+    )
+    if action == "approve":
+        st.caption("Render auto-deploy will pick up the push within a few minutes.")
+    if st.button("Back to dashboard"):
+        st.query_params.clear()
+        st.rerun()
+
+
+def page_drafts():
+    """List publications awaiting founder approval."""
+    st.title("Drafts awaiting approval")
+    st.caption(
+        "CIO Insights publications generated by the scheduler that haven't "
+        "yet been approved or rejected. The approval link in the email is "
+        "the canonical way to act on these — this view is for visibility."
+    )
+
+    session = get_db_session()
+    rows = (
+        session.query(Publication)
+        .filter(Publication.status == "awaiting_approval")
+        .order_by(Publication.composed_at.desc())
+        .all()
+    )
+
+    if not rows:
+        st.info("No drafts awaiting approval right now.")
+        return
+
+    for pub in rows:
+        composed = pub.composed_at.strftime("%Y-%m-%d %H:%M") if pub.composed_at else "—"
+        expires = pub.expires_at.strftime("%Y-%m-%d %H:%M") if pub.expires_at else "—"
+        period = f"{pub.period_start.isoformat()} – {pub.period_end.isoformat()}"
+        with st.expander(
+            f"**{pub.cadence.title()}** — {period} (composed {composed})",
+            expanded=False,
+        ):
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Composed", composed)
+            c2.metric("Expires", expires)
+            c3.metric("Sources",
+                      len(pub.source_publication_ids or [])
+                      if pub.source_publication_ids else "—")
+            if pub.draft_markdown:
+                st.markdown("**Preview**")
+                st.markdown(_safe_md(pub.draft_markdown[:2000]))
+                if len(pub.draft_markdown) > 2000:
+                    st.caption(f"… {len(pub.draft_markdown) - 2000:,} more chars in full draft")
+            if pub.pdf_path and Path(pub.pdf_path).exists():
+                st.download_button(
+                    "Download draft PDF",
+                    data=Path(pub.pdf_path).read_bytes(),
+                    file_name=Path(pub.pdf_path).name,
+                    mime="application/pdf",
+                )
+
+
+def page_insights():
+    """List approved/published CIO Insights publications with PDF downloads."""
+    st.title("Published CIO Insights")
+    st.caption(
+        "Every CIO Insights publication that has cleared the approval flow. "
+        "The 'Notes' tab still serves the live versions; this view is the "
+        "audit trail."
+    )
+
+    session = get_db_session()
+    rows = (
+        session.query(Publication)
+        .filter(Publication.status.in_(("approved", "published")))
+        .order_by(Publication.period_start.desc())
+        .all()
+    )
+    if not rows:
+        st.info("No approved publications yet.")
+        return
+
+    for pub in rows:
+        period = f"{pub.period_start.isoformat()} – {pub.period_end.isoformat()}"
+        when = pub.published_at or pub.approved_at
+        when_str = when.strftime("%Y-%m-%d %H:%M") if when else "—"
+        with st.expander(
+            f"**{pub.cadence.title()}** — {period} ({pub.status}, {when_str})",
+            expanded=False,
+        ):
+            if pub.draft_markdown:
+                st.markdown(_safe_md(pub.draft_markdown))
+            if pub.pdf_path and Path(pub.pdf_path).exists():
+                st.download_button(
+                    "Download PDF",
+                    data=Path(pub.pdf_path).read_bytes(),
+                    file_name=Path(pub.pdf_path).name,
+                    mime="application/pdf",
+                    key=f"insights_pdf_{pub.id}",
+                )
+
+
 def main():
     plan_id, plan_label = render_sidebar()
+
+    # Approval routing — handled before tabs so the magic-link click
+    # lands on the action page rather than the dashboard.
+    approve_param = st.query_params.get("approve")
+    reject_param = st.query_params.get("reject")
+    if approve_param:
+        page_approval_action(approve_param, "approve")
+        return
+    if reject_param:
+        page_approval_action(reject_param, "reject")
+        return
 
     # Handle deep-link to a specific document
     doc_param = st.query_params.get("doc")
@@ -1035,26 +1099,30 @@ def main():
             st.error(f"Invalid document ID: {doc_param}")
         return
 
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+    tabs = st.tabs([
         "Notes", "Summary", "Updates", "Search", "Browse Recent",
-        "Investment Actions", "Plans", "Admin",
+        "Investment Actions", "Plans", "Drafts", "Insights", "Admin",
     ])
 
-    with tab1:
+    with tabs[0]:
         page_notes()
-    with tab2:
+    with tabs[1]:
         page_summary_updates(plan_id, plan_label)
-    with tab3:
+    with tabs[2]:
         page_updates(plan_id, plan_label)
-    with tab4:
+    with tabs[3]:
         page_search(plan_id, plan_label)
-    with tab5:
+    with tabs[4]:
         page_browse(plan_id, plan_label)
-    with tab6:
+    with tabs[5]:
         page_investment_actions(plan_id, plan_label)
-    with tab7:
+    with tabs[6]:
         page_plans()
-    with tab8:
+    with tabs[7]:
+        page_drafts()
+    with tabs[8]:
+        page_insights()
+    with tabs[9]:
         page_admin()
 
 

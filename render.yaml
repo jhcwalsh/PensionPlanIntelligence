@@ -15,3 +15,85 @@ services:
         value: /data/downloads
       - key: APP_BASE_URL
         value: https://pensionplanintelligence.onrender.com
+
+  # CIO Insights publishing automation (insights/ package).
+  # Each cron job shares the persistent disk so the SQLite DB seen by
+  # the web service is the same one the cycles update.
+  #
+  # Times below are UTC (Render cron is UTC); converted from
+  # 02:00 ET / 09:00 ET assuming EDT (UTC-4). Adjust by one hour
+  # during EST. See DECISIONS.md §2.
+
+  - type: cron
+    name: insights-weekly
+    runtime: python
+    buildCommand: pip install -r requirements-pipeline.txt
+    schedule: "0 6 * * 0"        # Sun 02:00 ET → 06:00 UTC (EDT)
+    command: python -m insights.scheduler weekly
+    disk:
+      name: pension-db
+      mountPath: /data
+      sizeGB: 5
+    envVars:
+      - key: DB_PATH
+        value: /data/pension.db
+      - key: DOWNLOADS_DIR
+        value: /data/downloads
+      - key: APPROVAL_BASE_URL
+        value: https://pensionplanintelligence.onrender.com
+      - key: INSIGHTS_MODE
+        value: live
+
+  - type: cron
+    name: insights-monthly
+    runtime: python
+    buildCommand: pip install -r requirements-pipeline.txt
+    schedule: "0 6 1 * *"        # 1st of month 02:00 ET
+    command: python -m insights.scheduler monthly
+    disk:
+      name: pension-db
+      mountPath: /data
+      sizeGB: 5
+    envVars:
+      - key: DB_PATH
+        value: /data/pension.db
+      - key: APPROVAL_BASE_URL
+        value: https://pensionplanintelligence.onrender.com
+      - key: INSIGHTS_MODE
+        value: live
+
+  - type: cron
+    name: insights-annual
+    runtime: python
+    buildCommand: pip install -r requirements-pipeline.txt
+    schedule: "0 6 5 1 *"        # Jan 5 02:00 ET
+    command: python -m insights.scheduler annual
+    disk:
+      name: pension-db
+      mountPath: /data
+      sizeGB: 5
+    envVars:
+      - key: DB_PATH
+        value: /data/pension.db
+      - key: APPROVAL_BASE_URL
+        value: https://pensionplanintelligence.onrender.com
+      - key: INSIGHTS_MODE
+        value: live
+
+  - type: cron
+    name: insights-reminders
+    runtime: python
+    buildCommand: pip install -r requirements-pipeline.txt
+    schedule: "0 13 * * *"       # Daily 09:00 ET → 13:00 UTC (EDT)
+    command: python -m insights.scheduler reminders
+    disk:
+      name: pension-db
+      mountPath: /data
+      sizeGB: 5
+    envVars:
+      - key: DB_PATH
+        value: /data/pension.db
+      - key: APPROVAL_BASE_URL
+        value: https://pensionplanintelligence.onrender.com
+      - key: INSIGHTS_MODE
+        value: live
