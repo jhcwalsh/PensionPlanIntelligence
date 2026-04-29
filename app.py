@@ -1431,16 +1431,20 @@ def _render_allocation_view(df, asset_label: str) -> None:
     })
     sorted_table = table.sort_values("Actual − Target", ascending=False)
     centered_cols = ["FY", "Target %", "Actual %", "Actual − Target"]
-    styled = sorted_table.style.set_properties(
-        subset=centered_cols, **{"text-align": "center"}
+    styled = (
+        sorted_table.style
+        .format({
+            "FY": "{:.0f}",
+            "Target %": "{:.2f}",
+            "Actual %": "{:.2f}",
+            "Actual − Target": "{:+.2f}",
+        }, na_rep="")
+        .set_properties(subset=centered_cols, **{"text-align": "center"})
     )
     st.dataframe(
         styled,
         use_container_width=True,
         hide_index=True,
-        column_config={
-            "FY": st.column_config.NumberColumn(format="%d"),
-        },
     )
 
 
