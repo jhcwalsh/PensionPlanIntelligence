@@ -1,0 +1,17 @@
+{
+  "overall_accuracy": 1.0,
+  "field_accuracy": {
+    "rfp_type": 1.0,
+    "title": 1.0,
+    "status": 1.0,
+    "release_date": 1.0,
+    "response_due_date": 1.0,
+    "award_date": 1.0,
+    "mandate_size_usd_millions": 1.0,
+    "asset_class": 1.0,
+    "incumbent_manager": 1.0,
+    "shortlisted_managers": 1.0,
+    "awarded_manager": 1.0
+  },
+  "computed_at": "2026-04-29T23:09:57.240537+00:00"
+}

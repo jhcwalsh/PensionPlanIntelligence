@@ -3,7 +3,8 @@ SQLite database schema and helper functions using SQLAlchemy.
 """
 
 import os
-from datetime import datetime, timedelta
+import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy import (
@@ -106,6 +107,87 @@ class Summary(Base):
     text_hash = Column(String)          # MD5 of extracted_text — skip re-summarizing duplicates
 
     document = relationship("Document", back_populates="summary")
+
+
+# ---------------------------------------------------------------------------
+# RFP pipeline tables (added without Alembic; init_db() creates if missing)
+# ---------------------------------------------------------------------------
+
+# Confidence threshold below which a record is held back from the default
+# API view and surfaces only via ?include_review=true.
+RFP_REVIEW_CONFIDENCE_THRESHOLD = 0.70
+
+# Bumped when the prompt, schema, or extraction logic changes in a way that
+# invalidates prior extractions. Old records remain in the table for
+# regression analysis; the orchestrator re-extracts when prompt_version
+# changes.
+RFP_PROMPT_VERSION = "rfp_v1"
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _new_run_id() -> str:
+    return uuid.uuid4().hex
+
+
+class DocumentHealth(Base):
+    """
+    Stage-1 PDF-quality diagnostic verdict for one document. One row per
+    (document, prompt_version) so a prompt bump triggers re-diagnosis +
+    re-extraction; the row also doubles as the "this doc has been processed"
+    marker used by get_documents_pending_rfp_extraction.
+    """
+
+    __tablename__ = "document_health"
+
+    document_id = Column(Integer, ForeignKey("documents.id"), primary_key=True)
+    prompt_version = Column(String, primary_key=True, default=RFP_PROMPT_VERSION)
+    stage1_verdict = Column(String, nullable=False)   # STAGE_1_HEALTHY | STAGE_1_SUSPECTED | NO_TASK_CONTENT
+    blank_pages = Column(Integer, default=0)
+    scanned_pages = Column(Integer, default=0)
+    garbled_pages = Column(Integer, default=0)
+    task_relevant_pages = Column(Integer, default=0)
+    structure_score = Column(Float)
+    rationale = Column(Text)                          # JSON list of strings
+    evaluated_at = Column(DateTime, default=_utcnow, nullable=False)
+
+
+class RFPRecord(Base):
+    """One structured RFP extracted from a document, validated against rfp_schema.json."""
+
+    __tablename__ = "rfp_records"
+
+    rfp_id = Column(String(16), primary_key=True)
+    document_id = Column(Integer, ForeignKey("documents.id"), nullable=False)
+    plan_id = Column(String, ForeignKey("plans.id"), nullable=False)
+    record = Column(Text, nullable=False)             # JSON-serialized full record
+    extraction_confidence = Column(Float, nullable=False)
+    needs_review = Column(Boolean, nullable=False, default=False)
+    prompt_version = Column(String, nullable=False, default=RFP_PROMPT_VERSION)
+    extracted_at = Column(DateTime, default=_utcnow, nullable=False)
+
+    __table_args__ = (
+        Index("ix_rfp_plan", "plan_id"),
+        Index("ix_rfp_extracted_at", "extracted_at"),
+        Index("ix_rfp_needs_review", "needs_review"),
+    )
+
+
+class PipelineRun(Base):
+    """One row per RFP-extraction run, for observability and the API health block."""
+
+    __tablename__ = "pipeline_runs"
+
+    run_id = Column(String(32), primary_key=True, default=_new_run_id)
+    started_at = Column(DateTime, default=_utcnow, nullable=False)
+    completed_at = Column(DateTime)
+    documents_discovered = Column(Integer, default=0)
+    documents_processed = Column(Integer, default=0)
+    records_extracted = Column(Integer, default=0)
+    errors = Column(Text, default="[]")               # JSON list of error strings
+    status = Column(String, nullable=False, default="running")  # running|succeeded|failed
 
 
 # ---------------------------------------------------------------------------
@@ -230,6 +312,98 @@ def search_summaries(session: Session, query: str, plan_id: str = None,
     if plan_id:
         q = q.filter(Document.plan_id == plan_id)
     return q.order_by(Document.meeting_date.desc()).limit(limit).all()
+
+
+def get_documents_pending_rfp_extraction(
+    session: Session,
+    prompt_version: str = RFP_PROMPT_VERSION,
+    plan_ids: list[str] | None = None,
+) -> list[Document]:
+    """
+    Documents that have been text-extracted but not yet processed by the RFP
+    pipeline at the current prompt version. Re-running the orchestrator after
+    a prompt bump picks up everything automatically.
+    """
+    from sqlalchemy import select
+    already_diagnosed = (
+        select(DocumentHealth.document_id)
+        .where(DocumentHealth.prompt_version == prompt_version)
+        .distinct()
+    )
+    q = (
+        session.query(Document)
+        .filter(Document.extraction_status == "done")
+        .filter(~Document.id.in_(already_diagnosed))
+    )
+    if plan_ids:
+        q = q.filter(Document.plan_id.in_(plan_ids))
+    return q.order_by(Document.meeting_date.desc().nullslast()).all()
+
+
+def upsert_rfp_record(
+    session: Session,
+    *,
+    rfp_id: str,
+    document_id: int,
+    plan_id: str,
+    record_json: str,
+    extraction_confidence: float,
+    prompt_version: str = RFP_PROMPT_VERSION,
+) -> RFPRecord:
+    """Insert or update an RFP record by deterministic rfp_id."""
+    existing = session.get(RFPRecord, rfp_id)
+    needs_review = extraction_confidence < RFP_REVIEW_CONFIDENCE_THRESHOLD
+    if existing is None:
+        existing = RFPRecord(
+            rfp_id=rfp_id,
+            document_id=document_id,
+            plan_id=plan_id,
+            record=record_json,
+            extraction_confidence=extraction_confidence,
+            needs_review=needs_review,
+            prompt_version=prompt_version,
+        )
+        session.add(existing)
+    else:
+        existing.document_id = document_id
+        existing.plan_id = plan_id
+        existing.record = record_json
+        existing.extraction_confidence = extraction_confidence
+        existing.needs_review = needs_review
+        existing.prompt_version = prompt_version
+        existing.extracted_at = _utcnow()
+    return existing
+
+
+def upsert_document_health(
+    session: Session,
+    *,
+    document_id: int,
+    verdict: str,
+    blank_pages: int,
+    scanned_pages: int,
+    garbled_pages: int,
+    task_relevant_pages: int,
+    structure_score: float,
+    rationale_json: str,
+    prompt_version: str = RFP_PROMPT_VERSION,
+) -> DocumentHealth:
+    existing = session.get(DocumentHealth, (document_id, prompt_version))
+    if existing is None:
+        existing = DocumentHealth(
+            document_id=document_id,
+            prompt_version=prompt_version,
+        )
+        session.add(existing)
+    existing.stage1_verdict = verdict
+    existing.blank_pages = blank_pages
+    existing.scanned_pages = scanned_pages
+    existing.garbled_pages = garbled_pages
+    existing.task_relevant_pages = task_relevant_pages
+    existing.structure_score = structure_score
+    existing.rationale = rationale_json
+    existing.evaluated_at = _utcnow()
+    return existing
 
 
 if __name__ == "__main__":
