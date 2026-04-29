@@ -1379,6 +1379,7 @@ def page_asset_allocation():
         baseline="middle",
         dx=7,
         fontSize=10,
+        color="white",
     ).encode(text="label:N")
 
     diagonal = alt.Chart(line_df).mark_line(
