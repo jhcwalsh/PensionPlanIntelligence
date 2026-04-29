@@ -1391,13 +1391,13 @@ def page_asset_allocation():
     st.altair_chart(chart, use_container_width=True)
 
     table = df[[
-        "plan_id", "plan_name", "state", "fiscal_year", "asset_class",
+        "plan_name", "plan_id", "state", "fiscal_year", "asset_class",
         "target_pct", "actual_pct",
     ]].copy()
     table["over_under_pct"] = (table["actual_pct"] - table["target_pct"]).round(2)
     table = table.rename(columns={
-        "plan_id": "Plan ID",
         "plan_name": "Plan",
+        "plan_id": "Plan ID",
         "state": "State",
         "fiscal_year": "FY",
         "asset_class": "Asset Class",
@@ -1405,10 +1405,18 @@ def page_asset_allocation():
         "actual_pct": "Actual %",
         "over_under_pct": "Actual − Target",
     })
+    sorted_table = table.sort_values("Actual − Target", ascending=False)
+    centered_cols = ["Target %", "Actual %", "Actual − Target"]
+    styled = sorted_table.style.set_properties(
+        subset=centered_cols, **{"text-align": "center"}
+    )
     st.dataframe(
-        table.sort_values("Actual − Target", ascending=False),
+        styled,
         use_container_width=True,
         hide_index=True,
+        column_config={
+            "FY": st.column_config.NumberColumn(format="%d"),
+        },
     )
 
 
