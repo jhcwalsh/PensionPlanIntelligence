@@ -101,3 +101,52 @@ services:
         value: https://pensionplanintelligence.onrender.com
       - key: INSIGHTS_MODE
         value: live
+
+  # ---------------------------------------------------------------------------
+  # RFP alerts pipeline (rfp/ package + api/ FastAPI service)
+  # ---------------------------------------------------------------------------
+
+  - type: web
+    name: pension-rfp-api
+    runtime: python
+    buildCommand: pip install -r requirements-pipeline.txt
+    startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT
+    disk:
+      name: pension-db
+      mountPath: /data
+      sizeGB: 5
+    envVars:
+      - key: DB_PATH
+        value: /data/pension.db
+      - key: DOWNLOADS_DIR
+        value: /data/downloads
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: CORS_ORIGIN
+        value: https://pensionplanintelligence.onrender.com
+      - key: SLACK_WEBHOOK_URL
+        sync: false
+      - key: LOG_LEVEL
+        value: INFO
+
+  - type: cron
+    name: pension-rfp-pipeline
+    runtime: python
+    schedule: "0 6,12,18,0 * * *"   # 6am, 12pm, 6pm, 12am UTC
+    buildCommand: pip install -r requirements-pipeline.txt
+    startCommand: python -m scripts.run_rfp_extraction
+    disk:
+      name: pension-db
+      mountPath: /data
+      sizeGB: 5
+    envVars:
+      - key: DB_PATH
+        value: /data/pension.db
+      - key: DOWNLOADS_DIR
+        value: /data/downloads
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: SLACK_WEBHOOK_URL
+        sync: false
+      - key: LOG_LEVEL
+        value: INFO

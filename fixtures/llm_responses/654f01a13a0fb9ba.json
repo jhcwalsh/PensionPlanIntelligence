@@ -1,0 +1,27 @@
+{
+  "rfps": [
+    {
+      "rfp_type": "Actuary",
+      "title": "Actuarial Services Contract",
+      "status": "Awarded",
+      "release_date": null,
+      "response_due_date": null,
+      "award_date": "2024-07-01",
+      "mandate_size_usd_millions": 2.5,
+      "asset_class": null,
+      "incumbent_manager": "Segal Consulting",
+      "incumbent_manager_id": null,
+      "shortlisted_managers": [],
+      "awarded_manager": "Cheiron",
+      "source_quote": "The Investment Committee voted 7-0 to award the five-year actuarial services contract to Cheiron, effective July 1, 2024. Cheiron replaces the incumbent Segal Consulting.",
+      "extraction_confidence": 0.95,
+      "plan_id": "calstrs",
+      "rfp_id": "9818f96a27dd9ce1",
+      "source_document": {
+        "url": "https://www.calstrs.com/board/2024-04/packet.pdf",
+        "page_number": 8,
+        "document_id": 2
+      }
+    }
+  ]
+}

@@ -1,0 +1,120 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://pensionplanintelligence.com/schemas/rfp_v1.json",
+  "title": "RFP Record",
+  "description": "A single Request for Proposal extracted from a pension plan document. Every record is provenance-linked to a source document, page number, and verbatim quote.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "rfp_id",
+    "plan_id",
+    "rfp_type",
+    "title",
+    "status",
+    "shortlisted_managers",
+    "source_document",
+    "source_quote",
+    "extraction_confidence"
+  ],
+  "properties": {
+    "rfp_id": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{16}$",
+      "description": "Deterministic 16-char hex hash of (plan_id, rfp_type, anchor_date, normalized_title). Recomputing this from any source document text produces the same id, so re-running the pipeline never duplicates."
+    },
+    "plan_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Pension plan identifier matching plans.id (e.g., 'calpers')."
+    },
+    "rfp_type": {
+      "type": "string",
+      "enum": ["Consultant", "Manager", "Custodian", "Actuary", "Audit", "Legal"]
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Short human-readable name of the RFP, e.g. 'General Investment Consultant Search'."
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "Planned",
+        "Issued",
+        "ResponsesReceived",
+        "FinalistsNamed",
+        "Awarded",
+        "Withdrawn"
+      ]
+    },
+    "release_date": {
+      "type": ["string", "null"],
+      "format": "date",
+      "description": "Date the RFP was issued (ISO 8601 yyyy-mm-dd) or null if unknown."
+    },
+    "response_due_date": {
+      "type": ["string", "null"],
+      "format": "date"
+    },
+    "award_date": {
+      "type": ["string", "null"],
+      "format": "date"
+    },
+    "mandate_size_usd_millions": {
+      "type": ["number", "null"],
+      "minimum": 0
+    },
+    "asset_class": {
+      "type": ["string", "null"],
+      "description": "Asset class for Manager RFPs (e.g. 'Global Equity', 'Private Equity'). Null for non-Manager types."
+    },
+    "incumbent_manager": {
+      "type": ["string", "null"],
+      "description": "Raw manager name as it appears in the source document. Entity resolution to a stable ID is deferred to a future task."
+    },
+    "incumbent_manager_id": {
+      "type": "null",
+      "description": "Always null in v1; placeholder for future entity resolution."
+    },
+    "shortlisted_managers": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Raw manager names of shortlisted/finalist firms. Empty array if not yet known."
+    },
+    "awarded_manager": {
+      "type": ["string", "null"],
+      "description": "Raw manager name of the awarded firm, or null if not yet awarded."
+    },
+    "source_document": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "page_number", "document_id"],
+      "properties": {
+        "url": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Public URL of the source document."
+        },
+        "page_number": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "1-indexed page number containing the source quote."
+        },
+        "document_id": {
+          "type": "integer",
+          "description": "documents.id in the application database."
+        }
+      }
+    },
+    "source_quote": {
+      "type": "string",
+      "minLength": 10,
+      "description": "Verbatim passage from the source document that grounds this extraction."
+    },
+    "extraction_confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    }
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "rfps": [
+    {
+      "rfp_type": "Consultant",
+      "title": "Investment Consulting Services",
+      "status": "Planned",
+      "release_date": "2024-03-15",
+      "response_due_date": "2024-05-01",
+      "award_date": null,
+      "mandate_size_usd_millions": 1.2,
+      "asset_class": null,
+      "incumbent_manager": "Wilshire Associates",
+      "incumbent_manager_id": null,
+      "shortlisted_managers": [],
+      "awarded_manager": null,
+      "source_quote": "Staff recommends issuing a Request for Proposal for general investment consulting services. The Board's contract with Wilshire Associates expires December 31, 2024. RFP would be released March 15, 2024 with responses due May 1, 2024.",
+      "extraction_confidence": 0.95,
+      "plan_id": "calpers",
+      "rfp_id": "c9844d99eb63ac10",
+      "source_document": {
+        "url": "https://www.calpers.ca.gov/board/2024-03/packet.pdf",
+        "page_number": 12,
+        "document_id": 1
+      }
+    },
+    {
+      "rfp_type": "Manager",
+      "title": "Global Equity Manager Search",
+      "status": "FinalistsNamed",
+      "release_date": null,
+      "response_due_date": null,
+      "award_date": null,
+      "mandate_size_usd_millions": 500.0,
+      "asset_class": "Global Equity",
+      "incumbent_manager": "Northern Trust",
+      "incumbent_manager_id": null,
+      "shortlisted_managers": [
+        "BlackRock",
+        "State Street Global Advisors",
+        "Vanguard"
+      ],
+      "awarded_manager": null,
+      "source_quote": "The search committee interviewed three finalists for the active global equity mandate: BlackRock, State Street Global Advisors, and Vanguard. Mandate size $500 million.",
+      "extraction_confidence": 0.85,
+      "plan_id": "calpers",
+      "rfp_id": "536788c6a72f8d8f",
+      "source_document": {
+        "url": "https://www.calpers.ca.gov/board/2024-03/packet.pdf",
+        "page_number": 28,
+        "document_id": 1
+      }
+    }
+  ]
+}
