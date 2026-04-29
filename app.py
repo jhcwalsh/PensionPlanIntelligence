@@ -1263,17 +1263,47 @@ def page_cafr_plan_detail(plan_id: str) -> None:
             st.markdown(_safe_md(extract["investment_policy_text"]))
 
 
-@st.cache_data(ttl=300)
-def _pe_allocation_df():
-    """Plans with both PE target and actual weights, latest CAFR extract per plan.
+ASSET_ALLOCATION_VIEWS = (
+    {
+        "tab_name": "Private Equity",
+        "match_patterns": ("%private equit%",),
+        "exclude_patterns": ("%total other%",),
+        "exact_label": "private equity",
+    },
+    {
+        "tab_name": "Private Credit",
+        "match_patterns": ("%private credit%", "%private debt%"),
+        "exclude_patterns": ("%total other%",),
+        "exact_label": "private credit",
+    },
+    {
+        "tab_name": "Real Estate",
+        "match_patterns": ("%real estate%",),
+        "exclude_patterns": (),
+        "exact_label": "real estate",
+    },
+    {
+        "tab_name": "Real Assets",
+        "match_patterns": ("%real asset%",),
+        "exclude_patterns": (),
+        "exact_label": "real assets",
+    },
+)
 
-    Matches asset classes whose name contains "private equity" (case
-    insensitive), excluding composite buckets like "Total Other (Private
-    Equity + …)". When a plan has more than one matching row, prefer the
-    one labeled exactly "Private Equity".
+
+@st.cache_data(ttl=300)
+def _allocation_df(match_patterns: tuple, exclude_patterns: tuple, exact_label: str):
+    """Plans with both target and actual weights for a given asset class.
+
+    Pulls the latest CAFR extract per plan, filters allocation rows whose
+    asset_class matches any of `match_patterns` (case-insensitive LIKE)
+    and matches none of `exclude_patterns`, and keeps only rows where both
+    target_pct and actual_pct are populated. When a plan has multiple
+    matching rows, the one whose asset_class equals `exact_label` is
+    preferred; otherwise the first row is kept.
     """
     import pandas as pd
-    from sqlalchemy import func
+    from sqlalchemy import func, or_
 
     session = get_db_session()
 
@@ -1284,7 +1314,10 @@ def _pe_allocation_df():
         .scalar_subquery()
     )
 
-    rows = (
+    asset_class_lower = func.lower(CafrAllocation.asset_class)
+    match_clause = or_(*[asset_class_lower.like(p) for p in match_patterns])
+
+    query = (
         session.query(
             Plan.id,
             Plan.name,
@@ -1297,12 +1330,13 @@ def _pe_allocation_df():
         )
         .join(CafrExtract, CafrExtract.id == latest_extract_id)
         .join(CafrAllocation, CafrAllocation.cafr_extract_id == CafrExtract.id)
-        .filter(func.lower(CafrAllocation.asset_class).like("%private equit%"))
-        .filter(~func.lower(CafrAllocation.asset_class).like("%total other%"))
+        .filter(match_clause)
         .filter(CafrAllocation.target_pct.isnot(None))
         .filter(CafrAllocation.actual_pct.isnot(None))
-        .all()
     )
+    for pat in exclude_patterns:
+        query = query.filter(~asset_class_lower.like(pat))
+    rows = query.all()
 
     df = pd.DataFrame(rows, columns=[
         "plan_id", "plan_name", "abbreviation", "state",
@@ -1314,7 +1348,7 @@ def _pe_allocation_df():
     df["label"] = df["abbreviation"].fillna("").where(
         df["abbreviation"].astype(bool), df["plan_id"]
     )
-    df["_priority"] = df["asset_class"].str.lower().eq("private equity").astype(int)
+    df["_priority"] = df["asset_class"].str.lower().eq(exact_label).astype(int)
     df = (
         df.sort_values(["plan_id", "_priority"], ascending=[True, False])
           .drop_duplicates(subset=["plan_id"], keep="first")
@@ -1324,25 +1358,16 @@ def _pe_allocation_df():
     return df
 
 
-def page_asset_allocation():
-    """Asset allocation tab — target vs actual weights from latest CAFR extracts."""
+def _render_allocation_view(df, asset_label: str) -> None:
+    """Render the scatter chart + table for one asset-class view."""
     import altair as alt
     import pandas as pd
 
-    st.title("Asset Allocation")
-    st.caption(
-        "Each point is one plan's policy target weight versus its actual "
-        "weight, taken from the latest CAFR extract. The dashed 45° line is "
-        "target = actual; points above are overweight, points below "
-        "underweight."
-    )
-
-    df = _pe_allocation_df()
     if df.empty:
-        st.info("No plans have both target and actual private equity weights.")
+        st.info(f"No plans have both target and actual {asset_label.lower()} weights.")
         return
 
-    st.subheader(f"Private Equity — target vs actual weight ({len(df)} plans)")
+    st.subheader(f"{asset_label} — target vs actual weight ({len(df)} plans)")
 
     max_val = float(max(df["target_pct"].max(), df["actual_pct"].max()))
     domain_max = max(5.0, max_val * 1.10)
@@ -1387,7 +1412,6 @@ def page_asset_allocation():
     ).encode(x="x:Q", y="y:Q")
 
     chart = (diagonal + points + labels).properties(height=600)
-
     st.altair_chart(chart, use_container_width=True)
 
     table = df[[
@@ -1406,7 +1430,7 @@ def page_asset_allocation():
         "over_under_pct": "Actual − Target",
     })
     sorted_table = table.sort_values("Actual − Target", ascending=False)
-    centered_cols = ["Target %", "Actual %", "Actual − Target"]
+    centered_cols = ["FY", "Target %", "Actual %", "Actual − Target"]
     styled = sorted_table.style.set_properties(
         subset=centered_cols, **{"text-align": "center"}
     )
@@ -1418,6 +1442,27 @@ def page_asset_allocation():
             "FY": st.column_config.NumberColumn(format="%d"),
         },
     )
+
+
+def page_asset_allocation():
+    """Asset allocation tab — target vs actual weights from latest CAFR extracts."""
+    st.title("Asset Allocation")
+    st.caption(
+        "Each point is one plan's policy target weight versus its actual "
+        "weight, taken from the latest CAFR extract. The dashed 45° line is "
+        "target = actual; points above are overweight, points below "
+        "underweight."
+    )
+
+    sub_tabs = st.tabs([v["tab_name"] for v in ASSET_ALLOCATION_VIEWS])
+    for tab, view in zip(sub_tabs, ASSET_ALLOCATION_VIEWS):
+        with tab:
+            df = _allocation_df(
+                view["match_patterns"],
+                view["exclude_patterns"],
+                view["exact_label"],
+            )
+            _render_allocation_view(df, view["tab_name"])
 
 
 def page_cafr():
