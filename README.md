@@ -182,6 +182,128 @@ runs are safe to retry. If `pipeline.py` dies during summarization,
 re-running it skips the already-done docs and resumes on the
 unsummarized ones automatically.
 
+### What it looks like in practice
+
+**`python pipeline.py --status`** prints a coverage table, one
+row per plan, showing how many documents the pipeline has
+downloaded / extracted / summarized:
+
+```
+                  Pipeline Status
+┏━━━━━━━━━━━━━━━━━━━━━┳━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━━┓
+┃ Plan                ┃ Docs ┃ Extracted ┃ Summarized ┃
+┡━━━━━━━━━━━━━━━━━━━━━╇━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━━┩
+│ CalPERS             │   52 │        51 │         51 │
+│ LACERA              │   23 │        22 │         22 │
+│ IPERS               │   38 │        37 │         37 │
+│ NYCERS              │   51 │        50 │         50 │
+│ TRS Texas           │   51 │        50 │         50 │
+│ PSERS               │   28 │        27 │         26 │
+│ SCERS               │   51 │        50 │         50 │
+│ ...                                                  │
+└─────────────────────┴──────┴───────────┴────────────┘
+```
+
+A row where Docs > Summarized means there's pipeline backlog —
+either a doc that failed extraction, or one whose extracted text
+was too short / non-substantive to summarize. The Streamlit
+**Admin → Pipeline Backlog** tab shows the same view filtered to
+just the rows that need attention.
+
+**`python pipeline.py --updates`** lists meetings detected in
+the last 14 days, with the agenda summary if it's been processed:
+
+```
+─────────────── New Meetings (last 7 days) ───────────────
+
+SERS Ohio — June 30, 2026
+  SERS' Executive Director Richard Stensrud announced his
+  retirement effective June 30, 2026, after nine years of service
+  that saw the fund improve from 70% funded to 79% funded with
+  assets growing from $14.4B to $21.0B. The Board received an
+  unmodified audit opinion for FY2025, approved two opportunistic
+  and tactical investment commitments totaling $150 million (AQR
+  Helix $100M and West Street Strategic Solutions Fund II $50M),
+  and reviewed the private credit portfolio which returned 7.7%
+  net of fees against a benchmark of 9.4% for the one-year period
+  ending September 30, 2025.
+
+  Materials:
+    Board Pack: https://www.ohsers.org/.../Board-Materials-Apr-2026.pdf
+    Minutes:    https://www.ohsers.org/.../February-2026-Minutes.pdf
+```
+
+**A typical row in the `summaries` table** — what Stage 3 writes
+per document. Renderable in Streamlit's *Browse Recent* tab; the
+JSON fields are what `generate_notes` later cites when composing
+the weekly digest:
+
+```json
+{
+  "summary_text": "The Board approved two new private equity commitments totaling $150M (AQR Helix Fund and West Street Strategic Solutions Fund II). Private credit returned 7.7% net vs. 9.4% benchmark for the trailing year. Total Fund stood at $21.74B as of October 31, 2025, with FYTD returns of 5.99%.",
+  "key_topics": ["private equity commitments", "private credit performance",
+                 "executive director retirement", "FY2025 audit"],
+  "investment_actions": [
+    {"action": "commitment", "manager": "AQR Helix",
+     "asset_class": "Private Equity", "amount_millions": 100,
+     "description": "Opportunistic and tactical commitment"},
+    {"action": "commitment", "manager": "West Street Strategic Solutions Fund II",
+     "asset_class": "Private Equity", "amount_millions": 50,
+     "description": "Opportunistic and tactical commitment"}
+  ],
+  "decisions": [
+    {"description": "Approved unmodified FY2025 audit opinion", "vote": "unanimous"},
+    {"description": "Approved AQR Helix Fund commitment ($100M)", "vote": null}
+  ],
+  "performance_data": [
+    {"period": "1y trailing", "asset_class": "Private Credit",
+     "return_pct": 7.7, "benchmark_pct": 9.4}
+  ],
+  "model_used": "claude-sonnet-4-6",
+  "text_hash": "a3f92b…"
+}
+```
+
+**The 7-day digest** ([generate_notes.py](generate_notes.py)
+composes this from many `summaries` rows; `python -m
+insights.scheduler weekly` is what runs it on Render):
+
+```markdown
+# 7-Day Highlights: April 17–24, 2026
+*Generated: April 24, 2026*
+
+---
+
+## Investment Consultant Transitions
+
+Two plans formalized consultant changes this period. **Oklahoma Public
+Employees Retirement System** (**OPERS-OK**, $10B) approved the transition
+of investment consulting services from **Verus Advisory, Inc.** to **Cerity
+Partners LLC** as part of a broader FY2027 contract renewal cycle…
+
+Separately, **Chicago Teachers Pension Fund** (**CTPF**, $18B) voted 6-4
+in March to hire **Verus** as its investment consultant for a five-year
+contract beginning FY2027, replacing **Callan LLC** after a 20-year
+relationship…
+
+*Sources: [OPERS-OK — Agenda — April 16, 2026](?doc=2067),
+[CTPF — Minutes — March 05, 2026](?doc=2047)*
+
+---
+
+## Manager Hires and Mandate Changes
+
+**LAFPP** ($29B) approved a three-year contract extension with
+**MacKay Shields LLC** for high yield fixed income management through
+June 30, 2029. MacKay Shields manages **$771.9 million** for the fund
+at approximately **33 basis points** — 23rd percentile on fees…
+```
+
+The full digest is ~800 words organized by theme rather than by
+plan, with bold plan names / dollar amounts / manager names and
+clickable `(?doc=N)` source links back into the Streamlit app.
+See [notes/](notes/) for every digest the pipeline has produced.
+
 ---
 
 ## Running the pipeline (local, weekly)
