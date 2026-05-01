@@ -21,8 +21,11 @@ from database import (
     CafrExtract,
     CafrPerformance,
     Document,
+    DocumentHealth,
+    PipelineRun,
     Plan,
     Publication,
+    RFPRecord,
     Summary,
     get_new_meetings,
     get_session,
@@ -1458,6 +1461,171 @@ def page_cafr():
     )
 
 
+@st.cache_data(ttl=300)
+def _rfp_records_df():
+    """Build a flat DataFrame from RFPRecord rows + their JSON payloads."""
+    import pandas as pd
+
+    session = get_db_session()
+    rows = (
+        session.query(RFPRecord, Document)
+        .join(Document, RFPRecord.document_id == Document.id)
+        .order_by(RFPRecord.extracted_at.desc())
+        .all()
+    )
+    out = []
+    for r, doc in rows:
+        try:
+            payload = json.loads(r.record)
+        except Exception:
+            payload = {}
+        src = payload.get("source_document") or {}
+        shortlist = payload.get("shortlisted_managers") or []
+        out.append({
+            "Plan": r.plan_id,
+            "Type": payload.get("rfp_type", ""),
+            "Title": payload.get("title", ""),
+            "Status": payload.get("status", ""),
+            "Asset class": payload.get("asset_class") or "",
+            "Mandate $M": payload.get("mandate_size_usd_millions"),
+            "Released": payload.get("release_date") or "",
+            "Due": payload.get("response_due_date") or "",
+            "Awarded": payload.get("award_date") or "",
+            "Incumbent": payload.get("incumbent_manager") or "",
+            "Shortlist": ", ".join(shortlist) if shortlist else "",
+            "Awarded mgr": payload.get("awarded_manager") or "",
+            "Confidence": r.extraction_confidence,
+            "Needs review": "Yes" if r.needs_review else "",
+            "Source": src.get("url") or doc.url or "",
+            "Source page": src.get("page_number"),
+            "Doc": f"?doc={r.document_id}",
+            "Extracted": r.extracted_at.strftime("%Y-%m-%d") if r.extracted_at else "",
+            "rfp_id": r.rfp_id,
+        })
+    return pd.DataFrame(out)
+
+
+@st.cache_data(ttl=300)
+def _rfp_health_summary():
+    """Aggregate counts from document_health + pipeline_runs for the header."""
+    session = get_db_session()
+    from sqlalchemy import func
+    verdict_counts = dict(
+        session.query(DocumentHealth.stage1_verdict,
+                      func.count(DocumentHealth.document_id))
+        .group_by(DocumentHealth.stage1_verdict).all()
+    )
+    last_run = (
+        session.query(PipelineRun)
+        .order_by(PipelineRun.started_at.desc())
+        .first()
+    )
+    return {
+        "verdicts": verdict_counts,
+        "last_run": last_run,
+    }
+
+
+def page_rfp(plan_id, plan_label):
+    """RFP records tab: extracted RFP/Manager/Consultant searches."""
+    st.title("RFPs and Manager Searches")
+    st.caption(
+        "Structured RFP records extracted from board materials by the "
+        "rfp/orchestrator pipeline. Each row links back to the source "
+        "document and page where the RFP was found."
+    )
+
+    df = _rfp_records_df()
+    health = _rfp_health_summary()
+
+    if plan_id and not df.empty:
+        df = df[df["Plan"] == plan_id]
+
+    total = len(df)
+    needs_review = int((df["Needs review"] == "Yes").sum()) if total else 0
+    distinct_plans = df["Plan"].nunique() if total else 0
+    last_run = health.get("last_run")
+    last_run_str = (
+        last_run.started_at.strftime("%Y-%m-%d %H:%M")
+        if last_run and last_run.started_at else "—"
+    )
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("RFP records", total)
+    c2.metric("Plans with RFPs", distinct_plans)
+    c3.metric("Needs review", needs_review)
+    c4.metric("Last extraction", last_run_str)
+
+    verdicts = health.get("verdicts") or {}
+    if verdicts:
+        st.caption(
+            "Document diagnostic verdicts across the corpus: "
+            + " · ".join(f"**{k}** {v}" for k, v in sorted(verdicts.items()))
+        )
+
+    if df.empty:
+        st.info(
+            "No RFP records yet. Run a backfill: "
+            "`python -m scripts.run_rfp_extraction --limit 100`."
+        )
+        return
+
+    # Filters
+    col_a, col_b, col_c = st.columns(3)
+    with col_a:
+        type_filter = st.multiselect(
+            "Type",
+            sorted([t for t in df["Type"].dropna().unique() if t]),
+            default=[],
+            key="rfp_type_filter",
+        )
+    with col_b:
+        status_filter = st.multiselect(
+            "Status",
+            sorted([s for s in df["Status"].dropna().unique() if s]),
+            default=[],
+            key="rfp_status_filter",
+        )
+    with col_c:
+        review_only = st.checkbox(
+            "Show only 'needs review'",
+            value=False, key="rfp_needs_review_only",
+        )
+
+    view = df.copy()
+    if type_filter:
+        view = view[view["Type"].isin(type_filter)]
+    if status_filter:
+        view = view[view["Status"].isin(status_filter)]
+    if review_only:
+        view = view[view["Needs review"] == "Yes"]
+
+    st.dataframe(
+        view.drop(columns=["rfp_id"]),
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Mandate $M": st.column_config.NumberColumn(format="%.1f"),
+            "Confidence": st.column_config.NumberColumn(format="%.2f"),
+            "Source": st.column_config.LinkColumn(
+                "Source", display_text="open PDF",
+                help="Direct link to the source document.",
+            ),
+            "Doc": st.column_config.LinkColumn(
+                "Doc", display_text="view summary",
+                help="Open this document's summary in the app.",
+            ),
+        },
+    )
+
+    st.download_button(
+        "Download CSV",
+        view.to_csv(index=False),
+        "rfp_records.csv",
+        "text/csv",
+    )
+
+
 def page_admin():
     """Admin views: pipeline / data-quality diagnostics for the site owner."""
     st.title("Admin")
@@ -1728,7 +1896,7 @@ def main():
 
     tabs = st.tabs([
         "Notes", "Summary", "Updates", "Search", "Browse Recent",
-        "Investment Actions", "CAFR", "Asset Allocation",
+        "Investment Actions", "RFPs", "CAFR", "Asset Allocation",
         "Plans", "Drafts", "Insights", "Admin",
     ])
 
@@ -1745,16 +1913,18 @@ def main():
     with tabs[5]:
         page_investment_actions(plan_id, plan_label)
     with tabs[6]:
-        page_cafr()
+        page_rfp(plan_id, plan_label)
     with tabs[7]:
-        page_asset_allocation()
+        page_cafr()
     with tabs[8]:
-        page_plans()
+        page_asset_allocation()
     with tabs[9]:
-        page_drafts()
+        page_plans()
     with tabs[10]:
-        page_insights()
+        page_drafts()
     with tabs[11]:
+        page_insights()
+    with tabs[12]:
         page_admin()
 
 
