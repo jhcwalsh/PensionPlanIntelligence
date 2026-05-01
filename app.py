@@ -616,12 +616,55 @@ def _render_note_page(md_path: Path, title: str, generated_date: str, pdf_filena
     )
 
 
+def _find_latest_consultant_rfps() -> tuple[Path, str, str] | None:
+    """Find the latest Monthly Consultant RFP brief.
+
+    Picks the newest ``monthly_consultant_rfps_<YYYY-MM-DD>.md`` by
+    filename (lexical sort = chronological since the date is embedded).
+    """
+    candidates = sorted(
+        NOTES_DIR.glob("monthly_consultant_rfps_*.md"),
+        reverse=True,
+    )
+    if not candidates:
+        return None
+    path = candidates[0]
+    content = path.read_text(encoding="utf-8")
+    gen_match = re.search(r"\*Generated:\s*(.+?)\*", content)
+    generated_date = gen_match.group(1).strip() if gen_match else "Unknown"
+    m = re.match(r"monthly_consultant_rfps_(\d{4}-\d{2})", path.name)
+    if m:
+        month = datetime.strptime(m.group(1) + "-01", "%Y-%m-%d").strftime("%B %Y")
+        title = f"Monthly Consultant RFP Brief: {month}"
+    else:
+        title = "Monthly Consultant RFP Brief"
+    return (path, title, generated_date)
+
+
 def page_notes():
-    tab_week, tab_insights_monthly, tab_insights_year = st.tabs([
+    tab_week, tab_insights_monthly, tab_rfps, tab_insights_year = st.tabs([
         "7-Day Highlights",
         "Monthly CIO Insights",
+        "Consultant RFPs",
         "2026 CIO Insights",
     ])
+
+    with tab_rfps:
+        st.title("Monthly Consultant RFP Brief")
+        result = _find_latest_consultant_rfps()
+        if result:
+            path, title, gen_date = result
+            _render_note_page(
+                md_path=path,
+                title=title,
+                generated_date=gen_date,
+                pdf_filename=path.stem + ".pdf",
+            )
+        else:
+            st.info(
+                "No consultant RFP brief found yet. "
+                "Run `python -m scripts.compose_rfp_monthly` to generate."
+            )
 
     with tab_insights_monthly:
         st.title("Monthly CIO Insights")
