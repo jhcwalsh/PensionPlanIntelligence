@@ -33,7 +33,7 @@ services:
     # painful on Render's Native Python runtime. The DB is refreshed
     # locally via `python pipeline.py`; the cron only composes from it.
     # See README.md → "Running the pipeline" for the local workflow.
-    command: python -m insights.scheduler weekly --skip-scrape
+    startCommand: python -m insights.scheduler weekly --skip-scrape
     disk:
       name: pension-db
       mountPath: /data
@@ -53,7 +53,7 @@ services:
     runtime: python
     buildCommand: pip install -r requirements.txt anthropic==0.42.0 tenacity==9.0.0
     schedule: "0 6 1 * *"        # 1st of month 02:00 ET
-    command: python -m insights.scheduler monthly
+    startCommand: python -m insights.scheduler monthly
     disk:
       name: pension-db
       mountPath: /data
@@ -71,7 +71,7 @@ services:
     runtime: python
     buildCommand: pip install -r requirements.txt anthropic==0.42.0 tenacity==9.0.0
     schedule: "0 6 5 1 *"        # Jan 5 02:00 ET
-    command: python -m insights.scheduler annual
+    startCommand: python -m insights.scheduler annual
     disk:
       name: pension-db
       mountPath: /data
@@ -89,7 +89,7 @@ services:
     runtime: python
     buildCommand: pip install -r requirements.txt anthropic==0.42.0 tenacity==9.0.0
     schedule: "0 13 * * *"       # Daily 09:00 ET → 13:00 UTC (EDT)
-    command: python -m insights.scheduler reminders
+    startCommand: python -m insights.scheduler reminders
     disk:
       name: pension-db
       mountPath: /data
