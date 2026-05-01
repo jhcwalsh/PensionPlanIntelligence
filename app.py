@@ -1468,21 +1468,26 @@ def _rfp_records_df():
 
     session = get_db_session()
     rows = (
-        session.query(RFPRecord, Document)
+        session.query(RFPRecord, Document, Plan)
         .join(Document, RFPRecord.document_id == Document.id)
+        .outerjoin(Plan, RFPRecord.plan_id == Plan.id)
         .order_by(RFPRecord.extracted_at.desc())
         .all()
     )
     out = []
-    for r, doc in rows:
+    for r, doc, plan in rows:
         try:
             payload = json.loads(r.record)
         except Exception:
             payload = {}
         src = payload.get("source_document") or {}
         shortlist = payload.get("shortlisted_managers") or []
+        plan_name = (plan.name if plan else "") or r.plan_id
+        plan_abbr = (plan.abbreviation if plan else "") or r.plan_id
         out.append({
-            "Plan": r.plan_id,
+            "plan_id": r.plan_id,
+            "Plan": plan_name,
+            "Abbrev": plan_abbr,
             "Type": payload.get("rfp_type", ""),
             "Title": payload.get("title", ""),
             "Status": payload.get("status", ""),
@@ -1539,11 +1544,11 @@ def page_rfp(plan_id, plan_label):
     health = _rfp_health_summary()
 
     if plan_id and not df.empty:
-        df = df[df["Plan"] == plan_id]
+        df = df[df["plan_id"] == plan_id]
 
     total = len(df)
     needs_review = int((df["Needs review"] == "Yes").sum()) if total else 0
-    distinct_plans = df["Plan"].nunique() if total else 0
+    distinct_plans = df["plan_id"].nunique() if total else 0
     last_run = health.get("last_run")
     last_run_str = (
         last_run.started_at.strftime("%Y-%m-%d %H:%M")
@@ -1601,7 +1606,7 @@ def page_rfp(plan_id, plan_label):
         view = view[view["Needs review"] == "Yes"]
 
     st.dataframe(
-        view.drop(columns=["rfp_id"]),
+        view.drop(columns=["rfp_id", "plan_id"]),
         use_container_width=True,
         hide_index=True,
         column_config={
