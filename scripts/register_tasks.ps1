@@ -12,6 +12,15 @@ $ErrorActionPreference = "Stop"
 $Repo = "C:\Users\james\PycharmProjects\PensionPlanIntelligence"
 $User = "$env:USERDOMAIN\$env:USERNAME"
 
+# Clean up any task names from previous registrations (so renames take
+# effect cleanly — Register-ScheduledTask -Force only overwrites by name).
+foreach ($legacy in @("PensionPipeline-Annual")) {
+    if (Get-ScheduledTask -TaskName $legacy -ErrorAction SilentlyContinue) {
+        Unregister-ScheduledTask -TaskName $legacy -Confirm:$false
+        Write-Host "Removed legacy task $legacy"
+    }
+}
+
 function Register-PipelineTask {
     param(
         [string]$Name,
@@ -83,25 +92,26 @@ $MonthlyFolder.RegisterTaskDefinition(
 ) | Out-Null
 Write-Host "Registered PensionPipeline-Monthly"
 
-# Annual — Jan 5 at 09:00.
-$AnnualDef = $MonthlyService.NewTask(0)
-$AnnualDef.RegistrationInfo.Description = "PensionPipeline annual cron-equivalent"
-$AnnualDef.Settings.StartWhenAvailable = $true
-$AnnualDef.Settings.DisallowStartIfOnBatteries = $false
-$AnnualDef.Settings.StopIfGoingOnBatteries = $false
-$AnnualDef.Settings.RunOnlyIfNetworkAvailable = $true
-$AnnualDef.Settings.ExecutionTimeLimit = "PT6H"
-$AnnualTrigger = $AnnualDef.Triggers.Create(4)
-$AnnualTrigger.StartBoundary = (Get-Date -Hour 9 -Minute 0 -Second 0).ToString("s")
-$AnnualTrigger.DaysOfMonth = 5
-$AnnualTrigger.MonthsOfYear = 1  # January only
-$AnnualAction = $AnnualDef.Actions.Create(0)
-$AnnualAction.Path = "$Repo\scripts\run_annual.bat"
-$AnnualAction.WorkingDirectory = $Repo
+# Quarterly — 1st of Jan/Apr/Jul/Oct at 09:00.
+# MonthsOfYear bitmask: Jan=1 + Apr=8 + Jul=64 + Oct=512 = 585.
+$QuarterlyDef = $MonthlyService.NewTask(0)
+$QuarterlyDef.RegistrationInfo.Description = "PensionPipeline quarterly cron-equivalent"
+$QuarterlyDef.Settings.StartWhenAvailable = $true
+$QuarterlyDef.Settings.DisallowStartIfOnBatteries = $false
+$QuarterlyDef.Settings.StopIfGoingOnBatteries = $false
+$QuarterlyDef.Settings.RunOnlyIfNetworkAvailable = $true
+$QuarterlyDef.Settings.ExecutionTimeLimit = "PT6H"
+$QuarterlyTrigger = $QuarterlyDef.Triggers.Create(4)
+$QuarterlyTrigger.StartBoundary = (Get-Date -Hour 9 -Minute 0 -Second 0).ToString("s")
+$QuarterlyTrigger.DaysOfMonth = 1
+$QuarterlyTrigger.MonthsOfYear = 585
+$QuarterlyAction = $QuarterlyDef.Actions.Create(0)
+$QuarterlyAction.Path = "$Repo\scripts\run_quarterly.bat"
+$QuarterlyAction.WorkingDirectory = $Repo
 $MonthlyFolder.RegisterTaskDefinition(
-    "PensionPipeline-Annual", $AnnualDef, 6, $User, $null, 3
+    "PensionPipeline-Quarterly", $QuarterlyDef, 6, $User, $null, 3
 ) | Out-Null
-Write-Host "Registered PensionPipeline-Annual"
+Write-Host "Registered PensionPipeline-Quarterly"
 
 Write-Host ""
 Write-Host "All 4 tasks registered. Verify with:"
