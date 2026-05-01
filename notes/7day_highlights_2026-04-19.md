@@ -1,4 +1,4 @@
-# 7-Day Highlights: April 24–1, 2026
+# 7-Day Highlights: April 24 – May 1, 2026
 *Generated: May 01, 2026*
 
 ---
