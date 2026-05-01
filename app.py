@@ -490,23 +490,41 @@ def _find_latest_insights() -> tuple[Path, str, str] | None:
 
 
 def _find_latest_insights_recent() -> tuple[Path, str, str] | None:
-    """Find the rolling-window (e.g. 30-day) CIO Insights note.
+    """Find the latest Monthly CIO Insights note for the Notes tab.
 
-    Picks the most recently modified ``cio_insights_*day.md`` file so the
-    window length is discovered automatically rather than hard-coded.
+    Prefers the new approval-flow output (``monthly_cio_insights_<date>.md``
+    written by ``insights.publish.publish``) sorted by period date.
+    Falls back to the legacy rolling-window file (``cio_insights_*day.md``)
+    if no approved monthly has been published yet.
     """
-    candidates = sorted(
+    monthly = sorted(
+        NOTES_DIR.glob("monthly_cio_insights_*.md"),
+        reverse=True,  # filenames embed YYYY-MM-DD; lexical sort = chronological
+    )
+    if monthly:
+        path = monthly[0]
+        content = path.read_text(encoding="utf-8")
+        gen_match = re.search(r"\*Generated:\s*(.+?)\*", content)
+        generated_date = gen_match.group(1).strip() if gen_match else "Unknown"
+        m = re.match(r"monthly_cio_insights_(\d{4}-\d{2})", path.name)
+        if m:
+            month = datetime.strptime(m.group(1) + "-01", "%Y-%m-%d").strftime("%B %Y")
+            title = f"Monthly CIO Insights: {month}"
+        else:
+            title = "Monthly CIO Insights"
+        return (path, title, generated_date)
+
+    legacy = sorted(
         NOTES_DIR.glob("cio_insights_*day.md"),
         key=lambda p: p.stat().st_mtime,
         reverse=True,
     )
-    if not candidates:
+    if not legacy:
         return None
-    path = candidates[0]
+    path = legacy[0]
     content = path.read_text(encoding="utf-8")
     gen_match = re.search(r"\*Generated:\s*(.+?)\*", content)
     generated_date = gen_match.group(1).strip() if gen_match else "Unknown"
-    # Derive the window length from the filename (e.g. cio_insights_30day.md)
     m = re.match(r"cio_insights_(\d+)day\.md", path.name)
     days = m.group(1) if m else "?"
     return (path, f"CIO Insights: Past {days} Days", generated_date)
