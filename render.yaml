@@ -1,4 +1,9 @@
 services:
+  # ---------------------------------------------------------------------------
+  # Streamlit web app — primary public surface.
+  # Owns the /data persistent disk (the SQLite DB lives there).
+  # ---------------------------------------------------------------------------
+
   - type: web
     name: pension-plan-intelligence
     runtime: python
@@ -16,94 +21,10 @@ services:
       - key: APP_BASE_URL
         value: https://pensionplanintelligence.onrender.com
 
-  # CIO Insights publishing automation (insights/ package).
-  # Each cron job shares the persistent disk so the SQLite DB seen by
-  # the web service is the same one the cycles update.
-  #
-  # Times below are UTC (Render cron is UTC); converted from
-  # 02:00 ET / 09:00 ET assuming EDT (UTC-4). Adjust by one hour
-  # during EST. See DECISIONS.md §2.
-
-  - type: cron
-    name: insights-weekly
-    runtime: python
-    buildCommand: pip install -r requirements.txt anthropic==0.42.0 tenacity==9.0.0
-    schedule: "0 6 * * 0"        # Sun 02:00 ET → 06:00 UTC (EDT)
-    # --skip-scrape: the fetch step uses Playwright + Chromium, which is
-    # painful on Render's Native Python runtime. The DB is refreshed
-    # locally via `python pipeline.py`; the cron only composes from it.
-    # See README.md → "Running the pipeline" for the local workflow.
-    startCommand: python -m insights.scheduler weekly --skip-scrape
-    disk:
-      name: pension-db
-      mountPath: /data
-      sizeGB: 5
-    envVars:
-      - key: DB_PATH
-        value: /data/pension.db
-      - key: DOWNLOADS_DIR
-        value: /data/downloads
-      - key: APPROVAL_BASE_URL
-        value: https://pensionplanintelligence.onrender.com
-      - key: INSIGHTS_MODE
-        value: live
-
-  - type: cron
-    name: insights-monthly
-    runtime: python
-    buildCommand: pip install -r requirements.txt anthropic==0.42.0 tenacity==9.0.0
-    schedule: "0 6 1 * *"        # 1st of month 02:00 ET
-    startCommand: python -m insights.scheduler monthly
-    disk:
-      name: pension-db
-      mountPath: /data
-      sizeGB: 5
-    envVars:
-      - key: DB_PATH
-        value: /data/pension.db
-      - key: APPROVAL_BASE_URL
-        value: https://pensionplanintelligence.onrender.com
-      - key: INSIGHTS_MODE
-        value: live
-
-  - type: cron
-    name: insights-annual
-    runtime: python
-    buildCommand: pip install -r requirements.txt anthropic==0.42.0 tenacity==9.0.0
-    schedule: "0 6 5 1 *"        # Jan 5 02:00 ET
-    startCommand: python -m insights.scheduler annual
-    disk:
-      name: pension-db
-      mountPath: /data
-      sizeGB: 5
-    envVars:
-      - key: DB_PATH
-        value: /data/pension.db
-      - key: APPROVAL_BASE_URL
-        value: https://pensionplanintelligence.onrender.com
-      - key: INSIGHTS_MODE
-        value: live
-
-  - type: cron
-    name: insights-reminders
-    runtime: python
-    buildCommand: pip install -r requirements.txt anthropic==0.42.0 tenacity==9.0.0
-    schedule: "0 13 * * *"       # Daily 09:00 ET → 13:00 UTC (EDT)
-    startCommand: python -m insights.scheduler reminders
-    disk:
-      name: pension-db
-      mountPath: /data
-      sizeGB: 5
-    envVars:
-      - key: DB_PATH
-        value: /data/pension.db
-      - key: APPROVAL_BASE_URL
-        value: https://pensionplanintelligence.onrender.com
-      - key: INSIGHTS_MODE
-        value: live
-
   # ---------------------------------------------------------------------------
-  # RFP alerts pipeline (rfp/ package + api/ FastAPI service)
+  # FastAPI read API for RFP records.
+  # Reads from the git-tracked db/pension.db (no persistent disk needed —
+  # the API is read-only; the pipeline that writes records runs locally).
   # ---------------------------------------------------------------------------
 
   - type: web
@@ -111,15 +32,7 @@ services:
     runtime: python
     buildCommand: pip install -r requirements-pipeline.txt
     startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT
-    disk:
-      name: pension-db
-      mountPath: /data
-      sizeGB: 5
     envVars:
-      - key: DB_PATH
-        value: /data/pension.db
-      - key: DOWNLOADS_DIR
-        value: /data/downloads
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: CORS_ORIGIN
@@ -129,24 +42,30 @@ services:
       - key: LOG_LEVEL
         value: INFO
 
-  - type: cron
-    name: pension-rfp-pipeline
-    runtime: python
-    schedule: "0 6,12,18,0 * * *"   # 6am, 12pm, 6pm, 12am UTC
-    buildCommand: pip install -r requirements-pipeline.txt
-    startCommand: python -m scripts.run_rfp_extraction
-    disk:
-      name: pension-db
-      mountPath: /data
-      sizeGB: 5
-    envVars:
-      - key: DB_PATH
-        value: /data/pension.db
-      - key: DOWNLOADS_DIR
-        value: /data/downloads
-      - key: ANTHROPIC_API_KEY
-        sync: false
-      - key: SLACK_WEBHOOK_URL
-        sync: false
-      - key: LOG_LEVEL
-        value: INFO
+# ---------------------------------------------------------------------------
+# Cron services intentionally NOT deployed on Render.
+#
+# Render cron jobs cannot mount persistent disks, which means cron writes
+# would be ephemeral and not visible to the web services. We run the
+# equivalent work locally instead:
+#
+#   python pipeline.py                          # daily/weekly fetch + summarize
+#   python refresh_cafrs.py                     # monthly CAFR refresh
+#   python extract_cafr_investments.py          # extract investment data
+#   python -m scripts.run_rfp_extraction        # RFP records
+#   python -m insights.scheduler weekly --skip-scrape   # CIO Insights weekly
+#   python -m insights.scheduler monthly                # CIO Insights monthly
+#   python -m insights.scheduler annual                 # CIO Insights annual
+#   python -m insights.scheduler reminders              # 72h reminders + 7d expiry
+#
+# After running, commit db/pension.db and push — Render redeploys
+# automatically and the web services pick up the new state.
+#
+# See README.md "Running the pipeline (local, weekly)" for the full
+# workflow, and the Windows Task Scheduler scripts in scripts/run_*.bat
+# for automating the local schedule.
+#
+# Long-term: migrate db/pension.db → Render Postgres. Then crons can run
+# on Render again because they'll connect via DATABASE_URL instead of
+# needing a shared disk.
+# ---------------------------------------------------------------------------
