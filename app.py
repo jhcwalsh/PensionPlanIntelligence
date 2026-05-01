@@ -1525,9 +1525,10 @@ def _rfp_health_summary():
         .order_by(PipelineRun.started_at.desc())
         .first()
     )
+    last_run_started_at = last_run.started_at if last_run else None
     return {
         "verdicts": verdict_counts,
-        "last_run": last_run,
+        "last_run_started_at": last_run_started_at,
     }
 
 
@@ -1549,10 +1550,10 @@ def page_rfp(plan_id, plan_label):
     total = len(df)
     needs_review = int((df["Needs review"] == "Yes").sum()) if total else 0
     distinct_plans = df["plan_id"].nunique() if total else 0
-    last_run = health.get("last_run")
+    last_run_started_at = health.get("last_run_started_at")
     last_run_str = (
-        last_run.started_at.strftime("%Y-%m-%d %H:%M")
-        if last_run and last_run.started_at else "—"
+        last_run_started_at.strftime("%Y-%m-%d %H:%M")
+        if last_run_started_at else "—"
     )
 
     c1, c2, c3, c4 = st.columns(4)
