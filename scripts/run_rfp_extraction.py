@@ -22,11 +22,17 @@ from rfp.orchestrator import run_rfp_extraction
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run RFP extraction pipeline")
     parser.add_argument("plan_ids", nargs="*", help="Optional list of plan ids")
+    parser.add_argument(
+        "--limit", type=int, default=None,
+        help="Cap on docs processed in this run (useful for bounded "
+        "daily backfill; idempotency makes subsequent runs pick up "
+        "where this one left off).",
+    )
     args = parser.parse_args()
 
     configure_logging()
     plan_ids = args.plan_ids or None
-    run_id = run_rfp_extraction(plan_ids=plan_ids)
+    run_id = run_rfp_extraction(plan_ids=plan_ids, limit=args.limit)
     print(f"run_id={run_id}")
     return 0
 

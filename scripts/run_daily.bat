@@ -28,12 +28,11 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [%TIME%] run_rfp_extraction >> "%LOG%"
-python -m scripts.run_rfp_extraction >> "%LOG%" 2>&1
-if errorlevel 1 (
-    python -m scripts.notify_failure %TASK% rfp_extraction "%LOG%" %ERRORLEVEL%
-    exit /b 1
-)
+REM RFP extraction intentionally not in the daily cron until you're ready
+REM to start the live LLM backfill. To kick it off:
+REM   python -m scripts.run_rfp_extraction --limit 50
+REM Then add this back into the daily once steady-state. Idempotent on
+REM (document_id, prompt_version) so daily runs do nothing once caught up.
 
 echo [%TIME%] insights.scheduler reminders >> "%LOG%"
 python -m insights.scheduler reminders >> "%LOG%" 2>&1

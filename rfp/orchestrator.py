@@ -169,10 +169,16 @@ def run_rfp_extraction(
     *,
     profile_name: str = "rfp",
     run_id: str | None = None,
+    limit: int | None = None,
 ) -> str:
     """
     Process all eligible documents and return the run_id of the new
     PipelineRun row.
+
+    ``limit`` caps how many pending docs are processed per call. Useful
+    for the daily cron when backfilling an empty document_health table —
+    set to e.g. 50 to bound LLM cost per run while idempotency lets the
+    backfill complete over many runs.
     """
     db.init_db()
     session = db.get_session()
@@ -186,9 +192,11 @@ def run_rfp_extraction(
     session.commit()
     log = log.bind(run_id=run.run_id)
     log.info("run_started", prompt_version=RFP_PROMPT_VERSION,
-             plan_filter=plan_ids)
+             plan_filter=plan_ids, limit=limit)
 
     docs = get_documents_pending_rfp_extraction(session, plan_ids=plan_ids)
+    if limit is not None and limit >= 0:
+        docs = docs[:limit]
     run.documents_discovered = len(docs)
     session.commit()
 
