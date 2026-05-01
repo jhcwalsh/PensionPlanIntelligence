@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-Three layered systems sharing one SQLite database (`db/pension.db`, ~90 MB, tracked in git):
+Three layered systems sharing one SQLite database (`db/pension.db`, ~42 MB, tracked in git):
 
 1. **Meeting-document pipeline** (`pipeline.py`, `fetcher.py`, `extractor.py`, `summarizer.py`) — fetches board materials and CAFRs from ~148 U.S. public pension plans, extracts text, summarizes with Claude per-document. Local-only.
 2. **CIO Insights automation** (`insights/` package) — composes weekly / monthly / annual editorial briefings from the existing summaries, gated on a magic-link approval email to the founder. Render cron-triggered.
@@ -52,6 +52,14 @@ uvicorn api.main:app --reload --port 8000
 ### The DB IS the deploy mechanism for data
 `db/pension.db` is committed. Pushing to `master` is how new data lands on Render. The Render cron services and Streamlit web service mount the same persistent disk at `/data`, but read from the deployed `db/pension.db` until something writes back. The pipeline only runs locally, so the data flow is: local pipeline → `db/pension.db` → `git push` → Render deploys → cron services consume. This is intentional — Playwright + Chromium doesn't work well on Render's Native Python runtime, hence `--skip-scrape` on every Render cron.
 
+GitHub's hard 100 MB single-file limit is the ceiling on this model. The DB started bumping into it once `documents.extracted_text` accumulated, which forced the gzip wrapper (next section). When the DB approaches ~80 MB again, plan a real fix (Git LFS, or moving the DB out of git onto Render's persistent disk via a separate sync) rather than another column-level workaround.
+
+### `documents.extracted_text` is gzipped on disk
+The full extracted PDF text is the bulk of the DB by 10× over everything else. To stay under GitHub's size limit, `Document.extracted_text` uses a `GzippedText` `TypeDecorator` (`database.py`): callers see plain `str` both ways, but on disk values are gzipped UTF-8 bytes (`impl=LargeBinary`). Legacy uncompressed `str` rows are returned as-is, so the model change was safe to land before the data migration. Implications:
+- Don't run raw SQL like `SELECT extracted_text FROM documents` — you'll get gzip bytes. Always go through the SQLAlchemy ORM, or `gzip.decompress(row[0])` yourself.
+- Aggregate queries like `LENGTH(extracted_text)` measure compressed bytes, not text length.
+- `scripts/migrate_compress_extracted_text.py` is the one-shot migration; idempotent on the gzip magic header. Re-running it is safe.
+
 ### Three layered packages, one DB, idempotent schema
 `database.py` defines all 15 tables for all three subsystems in one module. There is no migration framework. `init_db()` calls `Base.metadata.create_all(engine)` — adding a new model class and re-running `init_db()` on an existing DB just creates the missing tables. **Never write SQL ALTER TABLE migrations**; just add the SQLAlchemy class and call `init_db()`. Existing-row backfill is a one-off script.
 
@@ -78,7 +86,7 @@ Magic-link emails contain `?approve=<token>` and `?reject=<token>`. The Streamli
 - **Don't run `git add .`** — dozens of untracked scratch files at the repo root (`_cafr_*.json`, `*.log`, `data/known_plans.json.bak*`, screenshots, an empty stray `pension.db` at the repo root) are intentionally left out. Stage by name or path.
 - **CAFR overrides** live in `_cafr_overrides.json` (committed) — manual `{plan_id: pdf_url}` map for plans where URL templates fail. Treat as config, not run-state.
 - **Plan registry** is `data/known_plans.json` (committed). Optional fields: `cafr_url_template` (with `{year}`), `cafr_landing`, `cafr_url`, `playwright_wait_selector`, `sub_page_pattern`. The DB `plans` table doesn't store these CAFR fields; `refresh_cafrs.py` reads them from JSON at runtime.
-- **Two distinct DB files** look similar: `db/pension.db` (the real 90 MB DB, tracked) and an empty `pension.db` at the repo root (stray, untracked, ignore). `DB_PATH` env var defaults to the former.
+- **Two distinct DB files** look similar: `db/pension.db` (the real ~42 MB DB, tracked) and an empty `pension.db` at the repo root (stray, untracked, ignore). `DB_PATH` env var defaults to the former.
 - **Notes vs. publications**: `notes/` directory holds approved markdown briefings (committed, served by Streamlit); `tmp/sent_emails/` holds mock-mode email artifacts (gitignored).
 
 ## CI
