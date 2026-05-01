@@ -2,6 +2,7 @@
 SQLite database schema and helper functions using SQLAlchemy.
 """
 
+import gzip
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -9,9 +10,43 @@ from typing import Optional
 
 from sqlalchemy import (
     Column, Integer, String, Text, Float, DateTime, Boolean, Date, JSON,
-    ForeignKey, create_engine, UniqueConstraint, Index
+    LargeBinary, ForeignKey, create_engine, UniqueConstraint, Index
 )
 from sqlalchemy.orm import DeclarativeBase, Session, relationship, sessionmaker
+from sqlalchemy.types import TypeDecorator
+
+
+class GzippedText(TypeDecorator):
+    """Transparent gzip wrapper for large text columns.
+
+    Callers see str both ways; on disk values are gzipped UTF-8 bytes.
+    Legacy uncompressed str rows are returned as-is until rewritten,
+    which keeps the migration idempotent and lets the model change
+    land before the data is rewritten.
+    """
+    impl = LargeBinary
+    cache_ok = True
+
+    GZIP_MAGIC = b"\x1f\x8b"
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        if isinstance(value, (bytes, bytearray)):
+            return bytes(value)
+        return gzip.compress(str(value).encode("utf-8"))
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return value
+        if isinstance(value, (bytes, bytearray)):
+            b = bytes(value)
+            if b.startswith(self.GZIP_MAGIC):
+                return gzip.decompress(b).decode("utf-8")
+            return b.decode("utf-8", errors="replace")
+        return value
 
 DB_PATH = os.environ.get(
     "DB_PATH",
@@ -77,7 +112,7 @@ class Document(Base):
     local_path = Column(String)         # path to downloaded file
     file_size_bytes = Column(Integer)
     downloaded_at = Column(DateTime)
-    extracted_text = Column(Text)
+    extracted_text = Column(GzippedText)
     extraction_status = Column(String, default="pending")   # pending, done, failed
     page_count = Column(Integer)
     meeting_date = Column(DateTime)     # parsed from document or filename
