@@ -28,6 +28,16 @@ if errorlevel 1 (
     exit /b 1
 )
 
+REM Bounded RFP backfill: 100 docs per Sunday ~ $3/week worst case.
+REM Idempotent on (document_id, prompt_version) so the backfill
+REM completes naturally over many runs once document_health is reset.
+echo [%TIME%] run_rfp_extraction --limit 100 >> "%LOG%"
+python -m scripts.run_rfp_extraction --limit 100 >> "%LOG%" 2>&1
+if errorlevel 1 (
+    python -m scripts.notify_failure %TASK% rfp_extraction "%LOG%" %ERRORLEVEL%
+    exit /b 1
+)
+
 REM A1: push the DB so production Streamlit sees the pending publication
 REM and the token in the email actually resolves.
 git add db/pension.db notes/ >> "%LOG%" 2>&1
