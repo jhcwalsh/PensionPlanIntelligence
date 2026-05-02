@@ -62,6 +62,7 @@ def compose_weekly(session, period_start: date, period_end: date) -> str:
     from generate_notes import (
         MAX_TOKENS_HIGHLIGHTS,
         build_highlights_prompt,
+        format_weekly_date_range,
         gather_highlights_data,
         generate_note,
     )
@@ -78,7 +79,20 @@ def compose_weekly(session, period_start: date, period_end: date) -> str:
         )
 
     prompt = build_highlights_prompt(data, days=days)
-    return generate_note(prompt, MAX_TOKENS_HIGHLIGHTS, model=MODEL_SONNET)
+    markdown = generate_note(prompt, MAX_TOKENS_HIGHLIGHTS, model=MODEL_SONNET)
+
+    expected_title = (
+        f"# 7-Day Highlights: {format_weekly_date_range(data['date_range'], days)}"
+    )
+    actual_title = markdown.split("\n", 1)[0]
+    if actual_title != expected_title:
+        raise ValueError(
+            f"Weekly H1 title mismatch — the model produced a non-conforming "
+            f"title; aborting publish.\n"
+            f"  expected: {expected_title!r}\n"
+            f"  actual:   {actual_title!r}"
+        )
+    return markdown
 
 
 # ---------------------------------------------------------------------------

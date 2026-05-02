@@ -356,26 +356,32 @@ def format_meetings_for_prompt(meetings: list[dict]) -> str:
     return "\n\n".join(parts)
 
 
-def build_highlights_prompt(data: dict, days: int) -> str:
-    """Build the Claude prompt for 7-day highlights generation."""
-    today = datetime.utcnow()
-    today_str = today.strftime("%B %d, %Y")
+def format_weekly_date_range(date_range, days: int) -> str:
+    """Render the human-readable date-range string used in the weekly H1.
 
-    if data["date_range"]:
-        start_dt, end_dt = data["date_range"][0], data["date_range"][1]
+    Same logic ``compose_weekly`` uses to validate the model's H1, so the
+    title produced by the prompt and the title verified post-generation
+    cannot drift.
+    """
+    today = datetime.utcnow()
+    if date_range:
+        start_dt, end_dt = date_range[0], date_range[1]
     else:
         start_dt, end_dt = today - timedelta(days=days), today
     start_month = start_dt.strftime("%B")
     end_month = end_dt.strftime("%B")
     if start_dt.month == end_dt.month and start_dt.year == end_dt.year:
-        date_range_title = (
-            f"{start_month} {start_dt.day}–{end_dt.day}, {end_dt.year}"
-        )
-    else:
-        date_range_title = (
-            f"{start_month} {start_dt.day} – "
-            f"{end_month} {end_dt.day}, {end_dt.year}"
-        )
+        return f"{start_month} {start_dt.day}–{end_dt.day}, {end_dt.year}"
+    return (
+        f"{start_month} {start_dt.day} – "
+        f"{end_month} {end_dt.day}, {end_dt.year}"
+    )
+
+
+def build_highlights_prompt(data: dict, days: int) -> str:
+    """Build the Claude prompt for 7-day highlights generation."""
+    today_str = datetime.utcnow().strftime("%B %d, %Y")
+    date_range_title = format_weekly_date_range(data["date_range"], days)
 
     meetings_text = format_meetings_for_prompt(data["meetings"])
 
