@@ -498,8 +498,10 @@ FORMAT REQUIREMENTS:
 - Include specific data (return percentages, commitment sizes, vote tallies, fee rates) \
 ONLY when it appears in MEETING DATA — see GROUNDING RULES above
 - Every sentence containing a $ figure, %, bps, vote tally, or manager name must end \
-with an inline citation in the form (doc_id=42). The section-level *Sources:* line \
-(see below) remains as a summary.
+with an inline citation in the form (doc_id=42). The cited doc_id must be the one \
+whose summary contains that specific figure or name verbatim. If a sentence's \
+figures come from two different docs, split the sentence so each cite is \
+unambiguous. The section-level *Sources:* line (see below) remains as a summary.
 - Do NOT produce a section-by-section recap of each plan — synthesize across plans
 - Target 1,200–1,800 words total. Err on the short side if data is thin.
 
@@ -579,8 +581,10 @@ data is thin.
 - Include specific data (return percentages, commitment sizes, vote tallies, fee rates) \
 ONLY when it appears in MEETING DATA — see GROUNDING RULES above
 - Every sentence containing a $ figure, %, bps, vote tally, or manager name must end \
-with an inline citation in the form (doc_id=42). The section-level *Sources:* line \
-(see below) remains as a summary.
+with an inline citation in the form (doc_id=42). The cited doc_id must be the one \
+whose summary contains that specific figure or name verbatim. If a sentence's \
+figures come from two different docs, split the sentence so each cite is \
+unambiguous. The section-level *Sources:* line (see below) remains as a summary.
 - Do NOT produce a section-by-section recap of each plan — synthesize across plans
 - Target 800–1,400 words total. Err on the short side if data is thin.
 

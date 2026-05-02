@@ -145,8 +145,6 @@ introduce names from general knowledge.
 - Every claim must be traceable to at least one weekly. Drop themes \
 supported by fewer than 2 of the 4 weeks, or flag them as \
 *Emerging signal — limited data*.
-- Preserve the existing inline `(?doc=N)` source links from the weeklies \
-where relevant — they let readers click through to the underlying meeting.
 
 FORMAT REQUIREMENTS:
 - Start with exactly: # Monthly CIO Insights: {month_label}
@@ -157,8 +155,27 @@ FORMAT REQUIREMENTS:
 - Each section ends with a bold **Practical implication:** sentence.
 - Bold plan names (with AUM in parentheses on first mention), dollar \
 amounts, and manager names.
+- Every sentence containing a $ figure, %, bps, vote tally, or manager name \
+must end with an inline citation in the form (doc_id=42). The cited doc_id \
+must be the one whose source weekly attached that specific figure or name to \
+that doc_id. If a sentence's figures come from two different docs, split the \
+sentence so each cite is unambiguous. The section-level *Sources:* line (see \
+below) remains as a summary.
 - Target 1,000–1,500 words. Err on the short side if the weeklies are thin.
 - Do NOT produce a week-by-week recap — synthesize across weeks.
+
+SOURCE LINKS:
+The WEEKLY BRIEFINGS below include inline (doc_id=N) cites and section-level \
+*Sources:* lines listing each underlying meeting document as a markdown link. \
+Preserve those doc_ids end-to-end in your synthesis. At the end of each ## \
+section in your output, add a *Sources:* line listing the documents \
+referenced in that section as markdown links. Use this exact format for each \
+link:
+  [Plan Abbreviation — DocType — Date](?doc=ID)
+Example: *Sources: [CalPERS — Agenda — April 02, 2026](?doc=42), [LACERA — Board Pack — March 11, 2026](?doc=58)*
+Only cite documents whose content you actually used in that section. The \
+*Sources:* line goes immediately before the **Practical implication:** \
+sentence at the end of each section.
 
 WEEKLY BRIEFINGS:
 {weeklies_block}"""
@@ -233,7 +250,26 @@ FORMAT REQUIREMENTS:
 - Use numbered ## headings. Aim for 5–8 themes.
 - Each section ends with a bold **Practical implication:** sentence.
 - Open with a 2–3 sentence executive summary before the first ## section.
+- Every sentence containing a $ figure, %, bps, vote tally, or manager name \
+must end with an inline citation in the form (doc_id=42). The cited doc_id \
+must be the one whose source monthly attached that specific figure or name to \
+that doc_id. If a sentence's figures come from two different docs, split the \
+sentence so each cite is unambiguous. The section-level *Sources:* line (see \
+below) remains as a summary.
 - Target 2,000–3,000 words.
+
+SOURCE LINKS:
+The MONTHLY BRIEFINGS below include inline (doc_id=N) cites and section-level \
+*Sources:* lines listing each underlying meeting document as a markdown link. \
+Preserve those doc_ids end-to-end in your synthesis. At the end of each ## \
+section in your output, add a *Sources:* line listing the documents \
+referenced in that section as markdown links. Use this exact format for each \
+link:
+  [Plan Abbreviation — DocType — Date](?doc=ID)
+Example: *Sources: [CalPERS — Agenda — April 02, 2026](?doc=42), [LACERA — Board Pack — March 11, 2026](?doc=58)*
+Only cite documents whose content you actually used in that section. The \
+*Sources:* line goes immediately before the **Practical implication:** \
+sentence at the end of each section.
 
 MONTHLY BRIEFINGS:
 {monthlies_block}"""
