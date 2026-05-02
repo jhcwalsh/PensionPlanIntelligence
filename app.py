@@ -449,13 +449,16 @@ NOTES_DIR = Path(__file__).parent / "notes"
 
 
 def _find_all_highlights() -> list[tuple[Path, str, str]]:
-    """Find all 7-day highlights files, sorted newest first.
+    """Find all 7-day highlights files, sorted newest first by Generated date.
 
-    Returns list of (path, title, generated_date) tuples.
+    Returns list of (path, title, generated_date) tuples. Sorting by the
+    ``*Generated: ...*`` line rather than the filename matters because
+    filenames embed ``period_start`` while the actual content window is
+    set by ``compose_weekly``'s now()-7d gather, so a filename-sorted
+    list can put a stale note ahead of the most recently generated one.
     """
-    candidates = sorted(NOTES_DIR.glob("7day_highlights_*.md"), reverse=True)
     results = []
-    for path in candidates:
+    for path in NOTES_DIR.glob("7day_highlights_*.md"):
         content = path.read_text(encoding="utf-8")
         # Extract title from first H1 line
         first_line = content.split("\n")[0] if content else ""
@@ -474,8 +477,16 @@ def _find_all_highlights() -> list[tuple[Path, str, str]]:
             else:
                 generated_date = "Unknown"
 
-        results.append((path, title, generated_date))
-    return results
+        try:
+            sort_key = datetime.strptime(generated_date, "%B %d, %Y")
+        except ValueError:
+            sort_key = datetime.min
+
+        results.append((sort_key, path, title, generated_date))
+
+    # Newest Generated date first; filename as deterministic tie-break.
+    results.sort(key=lambda r: (r[0], r[1].name), reverse=True)
+    return [(path, title, gen) for _, path, title, gen in results]
 
 
 def _find_latest_insights() -> tuple[Path, str, str] | None:
