@@ -362,12 +362,20 @@ def build_highlights_prompt(data: dict, days: int) -> str:
     today_str = today.strftime("%B %d, %Y")
 
     if data["date_range"]:
-        start_str = data["date_range"][0].strftime("%B %#d")
-        end_str = data["date_range"][1].strftime("%#d, %Y")
-        date_range_title = f"{start_str}–{end_str}"
+        start_dt, end_dt = data["date_range"][0], data["date_range"][1]
     else:
-        start = today - timedelta(days=days)
-        date_range_title = f"{start.strftime('%B %#d')}–{today.strftime('%#d, %Y')}"
+        start_dt, end_dt = today - timedelta(days=days), today
+    start_month = start_dt.strftime("%B")
+    end_month = end_dt.strftime("%B")
+    if start_dt.month == end_dt.month and start_dt.year == end_dt.year:
+        date_range_title = (
+            f"{start_month} {start_dt.day}–{end_dt.day}, {end_dt.year}"
+        )
+    else:
+        date_range_title = (
+            f"{start_month} {start_dt.day} – "
+            f"{end_month} {end_dt.day}, {end_dt.year}"
+        )
 
     meetings_text = format_meetings_for_prompt(data["meetings"])
 
