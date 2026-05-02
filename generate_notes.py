@@ -378,6 +378,18 @@ investment committee activity for the period: {date_range_title}.
 Below is structured data from {data['plans_with_activity']} pension plans that had meetings
 or published materials in this period. Synthesize this into an analytical markdown document.
 
+GROUNDING RULES (non-negotiable):
+- Every specific figure (%, $, vote tally, fee bps, manager name, asset class \
+allocation) MUST appear verbatim in the MEETING DATA below. If a number is not in \
+the data, do not state one — use qualitative language instead ("a meaningful \
+commitment", "increased materially") or omit the point.
+- Every manager, fund, or plan name must appear in the MEETING DATA. Do not \
+introduce names from general knowledge.
+- Every claim must be traceable to at least one doc_id in the MEETING DATA. If \
+you cannot cite a doc_id, do not make the claim.
+- Prefer "no observation" over speculation. Better to write 600 well-sourced \
+words than 900 with invented detail.
+
 FORMAT REQUIREMENTS:
 - Start with exactly: # 7-Day Highlights: {date_range_title}
 - Second line must be exactly: *Generated: {today_str}*
@@ -387,6 +399,9 @@ FORMAT REQUIREMENTS:
   governance actions, performance data — but choose themes that fit the data
 - Bold (**) plan names, dollar amounts, and manager names on first mention
 - Include plan AUM in parentheses on first mention of each plan
+- Every sentence containing a $ figure, %, bps, vote tally, or manager name \
+must end with an inline citation in the form (doc_id=42). The section-level \
+*Sources:* line (see below) remains as a summary.
 - End with ## Upcoming Meetings to Watch (bullet list of what's on deck next)
 - Target 700–900 words total
 
@@ -397,6 +412,12 @@ section as markdown links. Use this exact format for each link:
   [Plan Abbreviation — DocType — Date](?doc=ID)
 Example: *Sources: [CalPERS — Agenda — April 02, 2026](?doc=42), [LACERA — Board Pack — March 11, 2026](?doc=58)*
 Only cite documents whose content you actually used in that section.
+
+BEFORE FINALISING:
+- Re-read your draft. For every number, manager name, and vote tally, confirm \
+it appears in MEETING DATA. Remove or soften any that don't.
+- Confirm every inline (doc_id=N) matches a doc_id that actually appears in \
+MEETING DATA.
 
 MEETING DATA:
 {meetings_text}"""
