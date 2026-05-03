@@ -154,8 +154,19 @@ GROUNDING RULES (non-negotiable):
 - Every figure (%, $, vote tally, fee bps, manager name, asset class \
 allocation) MUST appear verbatim in one of the WEEKLY BRIEFINGS below. If a \
 number isn't there, do not state one — use qualitative language or omit.
+- Do NOT compute new figures from source data. No subtracting a return from \
+its benchmark to produce a basis-points alpha, no dividing counts to produce \
+a percentage, no summing commitments to produce a total. If a derived figure \
+isn't already stated verbatim in WEEKLY BRIEFINGS, do not state it.
 - Every manager / fund / plan name must appear in the weeklies. Do not \
 introduce names from general knowledge.
+- Use only the source's own language for WHY things happened or what they \
+signify. Synthesis prose may use connectives like "driven by", "reflects", \
+"is consistent with", "a notable trend", "suggests", "indicates", or industry \
+jargon ("market appreciation", "flight to quality", "crowding") ONLY when (a) \
+the exact phrase appears in WEEKLY BRIEFINGS, OR (b) the connective claim is \
+anchored to ≥2 specific named plans whose evidence in WEEKLY BRIEFINGS \
+supports the relationship being asserted. Otherwise juxtapose facts neutrally.
 - Every claim must be traceable to at least one weekly. Drop themes \
 supported by fewer than 2 of the 4 weeks, or flag them as \
 *Emerging signal — limited data*.
@@ -175,8 +186,26 @@ must be the one whose source weekly attached that specific figure or name to \
 that doc_id. If a sentence's figures come from two different docs, split the \
 sentence so each cite is unambiguous. The section-level *Sources:* line (see \
 below) remains as a summary.
-- Target 1,000–1,500 words. Err on the short side if the weeklies are thin.
+- Hard cap 1,500 words total. If you reach it, drop the weakest-evidenced \
+theme entirely rather than trimming a sentence from each.
 - Do NOT produce a week-by-week recap — synthesize across weeks.
+
+BEFORE FINALISING — scan the draft for these specific patterns and verify \
+each against WEEKLY BRIEFINGS. If any item does not match the source, remove \
+it or rewrite the sentence to juxtapose facts neutrally.
+- bps / basis points figures (especially alpha or excess-return numbers — \
+these are the most common arithmetic-derived hallucinations)
+- multi-year returns (1-year, 3-year, 5-year, 10-year)
+- ratios (Nx, N:1, N-quartile, N% of)
+- list counts ("three plans", "all 11 portfolios", "two managers")
+- the connective phrases: "consistent with", "reflects", "driven by", \
+"a notable", "suggests", "indicates", "underscores" — each must either appear \
+verbatim in WEEKLY BRIEFINGS or be anchored to ≥2 specific named plans whose \
+evidence supports the relationship
+- every theme (##): supported by at least 2 of the 4 weeks; if not, drop or \
+flag as *Emerging signal — limited data*
+- every inline (doc_id=N): the cited doc must be one whose source weekly \
+attached that specific figure or name to that doc_id, not merely the same topic.
 
 SOURCE LINKS:
 The WEEKLY BRIEFINGS below include inline (doc_id=N) cites and section-level \
@@ -251,6 +280,17 @@ twelve approved monthly briefings below.
 GROUNDING RULES (non-negotiable):
 - Every figure, manager name, and plan position must appear verbatim in one \
 of the MONTHLY BRIEFINGS below.
+- Do NOT compute new figures from source data. No subtracting a return from \
+its benchmark to produce a basis-points alpha, no dividing counts to produce \
+a percentage, no summing commitments to produce a total. If a derived figure \
+isn't already stated verbatim in MONTHLY BRIEFINGS, do not state it.
+- Use only the source's own language for WHY things happened or what they \
+signify. Synthesis prose may use connectives like "driven by", "reflects", \
+"is consistent with", "a notable trend", "suggests", "indicates", or industry \
+jargon ("market appreciation", "flight to quality", "crowding") ONLY when (a) \
+the exact phrase appears in MONTHLY BRIEFINGS, OR (b) the connective claim is \
+anchored to ≥2 specific named plans whose evidence in MONTHLY BRIEFINGS \
+supports the relationship being asserted. Otherwise juxtapose facts neutrally.
 - Track how each theme evolved month-by-month — call out reversals or \
 inflection points where you see them.
 - Drop themes that appear in fewer than 3 months, or flag them as \
@@ -270,7 +310,25 @@ must be the one whose source monthly attached that specific figure or name to \
 that doc_id. If a sentence's figures come from two different docs, split the \
 sentence so each cite is unambiguous. The section-level *Sources:* line (see \
 below) remains as a summary.
-- Target 2,000–3,000 words.
+- Hard cap 3,000 words total. If you reach it, drop the weakest-evidenced \
+theme entirely rather than trimming a sentence from each.
+
+BEFORE FINALISING — scan the draft for these specific patterns and verify \
+each against MONTHLY BRIEFINGS. If any item does not match the source, \
+remove it or rewrite the sentence to juxtapose facts neutrally.
+- bps / basis points figures (especially alpha or excess-return numbers — \
+these are the most common arithmetic-derived hallucinations)
+- multi-year returns (1-year, 3-year, 5-year, 10-year)
+- ratios (Nx, N:1, N-quartile, N% of)
+- list counts ("three plans", "all 11 portfolios", "two managers")
+- the connective phrases: "consistent with", "reflects", "driven by", \
+"a notable", "suggests", "indicates", "underscores" — each must either appear \
+verbatim in MONTHLY BRIEFINGS or be anchored to ≥2 specific named plans \
+whose evidence supports the relationship
+- every theme (##): supported by at least 3 of the 12 months; if not, drop \
+or flag as *Emerging signal*
+- every inline (doc_id=N): the cited doc must be one whose source monthly \
+attached that specific figure or name to that doc_id, not merely the same topic.
 
 SOURCE LINKS:
 The MONTHLY BRIEFINGS below include inline (doc_id=N) cites and section-level \

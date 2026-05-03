@@ -431,7 +431,8 @@ If a sentence's figures come from two different docs, split the sentence so \
 each cite is unambiguous. The section-level *Sources:* line (see below) \
 remains as a summary.
 - End with ## Upcoming Meetings to Watch (bullet list of what's on deck next)
-- Target 700–900 words total
+- Hard cap 900 words total. If you reach it, drop the weakest-evidenced \
+theme entirely rather than trimming a sentence from each.
 
 SOURCE LINKS:
 Each summary in the data below includes a doc_id (e.g. doc_id=42). At the end of
@@ -483,8 +484,19 @@ GROUNDING RULES (non-negotiable):
 allocation) MUST appear verbatim in the MEETING DATA below. If a number is not in \
 the data, do not state one — use qualitative language instead ("increased materially", \
 "a meaningful allocation") or omit the point.
+- Do NOT compute new figures from source data. No subtracting a return from its \
+benchmark to produce a basis-points alpha, no dividing counts to produce a \
+percentage, no summing commitments to produce a total. If a derived figure isn't \
+already stated verbatim in MEETING DATA, do not state it.
 - Every manager, fund, or plan name must appear in the MEETING DATA. Do not introduce \
 names from general knowledge.
+- Use only the source's own language for WHY things happened or what they \
+signify. Synthesis prose may use connectives like "driven by", "reflects", \
+"is consistent with", "a notable trend", "suggests", "indicates", or industry \
+jargon ("market appreciation", "flight to quality", "crowding") ONLY when (a) \
+the exact phrase appears in MEETING DATA, OR (b) the connective claim is \
+anchored to ≥2 specific named plans whose evidence in MEETING DATA supports \
+the relationship being asserted. Otherwise juxtapose facts neutrally.
 - Every claim must be traceable to at least one doc_id in the MEETING DATA. If you \
 cannot cite a doc_id, do not make the claim.
 - If a theme is supported by fewer than 3 plans in the data, either drop it or \
@@ -509,7 +521,8 @@ whose summary contains that specific figure or name verbatim. If a sentence's \
 figures come from two different docs, split the sentence so each cite is \
 unambiguous. The section-level *Sources:* line (see below) remains as a summary.
 - Do NOT produce a section-by-section recap of each plan — synthesize across plans
-- Target 1,200–1,800 words total. Err on the short side if data is thin.
+- Hard cap 1,800 words total. If you reach it, drop the weakest-evidenced \
+theme entirely rather than trimming a sentence from each.
 
 SOURCE LINKS:
 Each summary in the data below includes a doc_id (e.g. doc_id=42). Immediately before
@@ -520,13 +533,22 @@ Use this exact format for each link:
 Example: *Sources: [CalPERS — Agenda — April 02, 2026](?doc=42), [LACERA — Board Pack — March 11, 2026](?doc=58)*
 Only cite documents whose content you actually used in that section.
 
-BEFORE FINALISING:
-- Re-read your draft. For every number, manager name, and vote tally, confirm it \
-appears in MEETING DATA. Remove or soften any that don't.
-- For every theme (##), confirm you named at least 2 plans with supporting evidence \
-from the data. If not, drop or soften the theme.
-- Confirm every inline (doc_id=N) matches a doc_id that actually appears in MEETING \
-DATA.
+BEFORE FINALISING — scan the draft for these specific patterns and verify each \
+against MEETING DATA. If any item does not match the source, remove it or \
+rewrite the sentence to juxtapose facts neutrally.
+- bps / basis points figures (especially alpha or excess-return numbers — \
+these are the most common arithmetic-derived hallucinations)
+- multi-year returns (1-year, 3-year, 5-year, 10-year)
+- ratios (Nx, N:1, N-quartile, N% of)
+- list counts ("three plans", "all 11 portfolios", "two managers")
+- the connective phrases: "consistent with", "reflects", "driven by", \
+"a notable", "suggests", "indicates", "underscores" — each must either appear \
+verbatim in MEETING DATA or be anchored to ≥2 specific named plans whose \
+evidence supports the relationship
+- every theme (##): at least 2 plans named with supporting evidence; if not, \
+drop or soften
+- every inline (doc_id=N): the cited doc must contain the specific figure or \
+name in that sentence verbatim, not merely be on the same topic.
 
 MEETING DATA:
 {meetings_text}"""
@@ -563,8 +585,19 @@ GROUNDING RULES (non-negotiable):
 allocation) MUST appear verbatim in the MEETING DATA below. If a number is not in \
 the data, do not state one — use qualitative language instead ("increased materially", \
 "a meaningful allocation") or omit the point.
+- Do NOT compute new figures from source data. No subtracting a return from its \
+benchmark to produce a basis-points alpha, no dividing counts to produce a \
+percentage, no summing commitments to produce a total. If a derived figure isn't \
+already stated verbatim in MEETING DATA, do not state it.
 - Every manager, fund, or plan name must appear in the MEETING DATA. Do not introduce \
 names from general knowledge.
+- Use only the source's own language for WHY things happened or what they \
+signify. Synthesis prose may use connectives like "driven by", "reflects", \
+"is consistent with", "a notable trend", "suggests", "indicates", or industry \
+jargon ("market appreciation", "flight to quality", "crowding") ONLY when (a) \
+the exact phrase appears in MEETING DATA, OR (b) the connective claim is \
+anchored to ≥2 specific named plans whose evidence in MEETING DATA supports \
+the relationship being asserted. Otherwise juxtapose facts neutrally.
 - Every claim must be traceable to at least one doc_id in the MEETING DATA. If you \
 cannot cite a doc_id, do not make the claim.
 - If a theme is supported by fewer than 2 plans in the data, either drop it or \
@@ -592,7 +625,8 @@ whose summary contains that specific figure or name verbatim. If a sentence's \
 figures come from two different docs, split the sentence so each cite is \
 unambiguous. The section-level *Sources:* line (see below) remains as a summary.
 - Do NOT produce a section-by-section recap of each plan — synthesize across plans
-- Target 800–1,400 words total. Err on the short side if data is thin.
+- Hard cap 1,400 words total. If you reach it, drop the weakest-evidenced \
+theme entirely rather than trimming a sentence from each.
 
 SOURCE LINKS:
 Each summary in the data below includes a doc_id (e.g. doc_id=42). Immediately before
@@ -603,13 +637,22 @@ Use this exact format for each link:
 Example: *Sources: [CalPERS — Agenda — April 02, 2026](?doc=42), [LACERA — Board Pack — March 11, 2026](?doc=58)*
 Only cite documents whose content you actually used in that section.
 
-BEFORE FINALISING:
-- Re-read your draft. For every number, manager name, and vote tally, confirm it \
-appears in MEETING DATA. Remove or soften any that don't.
-- For every theme (##), confirm you named at least 2 plans with supporting evidence \
-from the data. If not, drop or soften the theme.
-- Confirm every inline (doc_id=N) matches a doc_id that actually appears in MEETING \
-DATA.
+BEFORE FINALISING — scan the draft for these specific patterns and verify each \
+against MEETING DATA. If any item does not match the source, remove it or \
+rewrite the sentence to juxtapose facts neutrally.
+- bps / basis points figures (especially alpha or excess-return numbers — \
+these are the most common arithmetic-derived hallucinations)
+- multi-year returns (1-year, 3-year, 5-year, 10-year)
+- ratios (Nx, N:1, N-quartile, N% of)
+- list counts ("three plans", "all 11 portfolios", "two managers")
+- the connective phrases: "consistent with", "reflects", "driven by", \
+"a notable", "suggests", "indicates", "underscores" — each must either appear \
+verbatim in MEETING DATA or be anchored to ≥2 specific named plans whose \
+evidence supports the relationship
+- every theme (##): at least 2 plans named with supporting evidence; if not, \
+drop or soften
+- every inline (doc_id=N): the cited doc must contain the specific figure or \
+name in that sentence verbatim, not merely be on the same topic.
 
 MEETING DATA:
 {meetings_text}"""
