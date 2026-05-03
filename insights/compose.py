@@ -170,6 +170,11 @@ supports the relationship being asserted. Otherwise juxtapose facts neutrally.
 - Every claim must be traceable to at least one weekly. Drop themes \
 supported by fewer than 2 of the 4 weeks, or flag them as \
 *Emerging signal — limited data*.
+- AUM consistency: when the source weeklies show different AUM values for \
+the same plan (e.g. one weekly says "TRS Texas (~$200B)" and another says \
+"TRS Texas (~$235.2B as of June 30, 2025)"), pick ONE — preferring the \
+value with an "as of <date>" qualifier — and use it consistently throughout \
+the monthly. Do not switch values within a single note.
 
 FORMAT REQUIREMENTS:
 - Start with exactly: # Monthly CIO Insights: {month_label}
@@ -295,6 +300,10 @@ supports the relationship being asserted. Otherwise juxtapose facts neutrally.
 inflection points where you see them.
 - Drop themes that appear in fewer than 3 months, or flag them as \
 *Emerging signal*.
+- AUM consistency: when the source monthlies show different AUM values for \
+the same plan, pick ONE — preferring the value with an "as of <date>" \
+qualifier — and use it consistently throughout the annual. Do not switch \
+values within a single note.
 
 FORMAT REQUIREMENTS:
 - Start with exactly: # CIO Insights: {year} Year in Review

@@ -153,7 +153,7 @@ def gather_highlights_data(session, days: int = 7) -> dict:
 
     if not meetings:
         return {"meetings": [], "date_range": None, "plans_with_activity": 0,
-                "total_aum": 0}
+                "total_aum": 0, "plans": []}
 
     # Enrich with all summaries
     for m in meetings:
@@ -176,6 +176,7 @@ def gather_highlights_data(session, days: int = 7) -> dict:
         "date_range": date_range,
         "plans_with_activity": len(plan_ids),
         "total_aum": total_aum,
+        "plans": plans,
     }
 
 
@@ -186,7 +187,7 @@ def gather_trends_data(session) -> dict:
 
     if not meetings:
         return {"meetings": [], "plans_with_activity": 0, "total_aum": 0,
-                "date_range_str": "2026"}
+                "date_range_str": "2026", "plans": []}
 
     for m in meetings:
         m["all_summaries"] = _enrich_meeting_summaries(session, m)
@@ -208,6 +209,7 @@ def gather_trends_data(session) -> dict:
         "plans_with_activity": len(plan_ids),
         "total_aum": total_aum,
         "date_range_str": date_range_str,
+        "plans": plans,
     }
 
 
@@ -257,7 +259,8 @@ def gather_recent_insights_data(session, days: int = 30) -> dict:
 
     if not meetings:
         return {"meetings": [], "plans_with_activity": 0, "total_aum": 0,
-                "days": days, "date_range_str": f"Last {days} days"}
+                "days": days, "date_range_str": f"Last {days} days",
+                "plans": []}
 
     for m in meetings:
         m["all_summaries"] = _enrich_meeting_summaries(session, m)
@@ -280,6 +283,7 @@ def gather_recent_insights_data(session, days: int = 30) -> dict:
         "total_aum": total_aum,
         "days": days,
         "date_range_str": date_range_str,
+        "plans": plans,
     }
 
 
@@ -288,6 +292,31 @@ def gather_recent_insights_data(session, days: int = 30) -> dict:
 # ---------------------------------------------------------------------------
 
 MAX_PROMPT_CHARS = 500_000  # ~125k tokens — well under Sonnet's 200k context
+
+
+def _format_aum_table(plans: list) -> str:
+    """Render the canonical PLAN AUM TABLE block injected into prompts.
+
+    Sorted by registry AUM descending so the largest plans (which dominate
+    the narrative) are at the top. Plans without a registry AUM are listed
+    as "AUM unknown" so the model knows to source the figure from the
+    meeting data with an as-of-date qualifier.
+    """
+    if not plans:
+        return "(no plans referenced)"
+    sorted_plans = sorted(
+        plans, key=lambda p: -(p.aum_billions or 0)
+    )
+    lines = []
+    for p in sorted_plans:
+        abbr = p.abbreviation or p.name
+        state = p.state or "?"
+        if p.aum_billions:
+            aum_str = f"~${p.aum_billions:.0f}B"
+        else:
+            aum_str = "AUM unknown"
+        lines.append(f"- {abbr} ({state}): {aum_str}")
+    return "\n".join(lines)
 
 
 def format_meetings_for_prompt(meetings: list[dict]) -> str:
@@ -383,6 +412,7 @@ def build_highlights_prompt(data: dict, days: int) -> str:
     today_str = datetime.utcnow().strftime("%B %d, %Y")
     date_range_title = format_weekly_date_range(data["date_range"], days)
 
+    aum_table = _format_aum_table(data.get("plans") or [])
     meetings_text = format_meetings_for_prompt(data["meetings"])
 
     return f"""\
@@ -414,6 +444,12 @@ source does not state.
 you cannot cite a doc_id, do not make the claim.
 - Prefer "no observation" over speculation. Better to write 600 well-sourced \
 words than 900 with invented detail.
+- Use the PLAN AUM TABLE below as the canonical AUM for each plan. When you \
+mention a plan's AUM (in parentheses on first mention), use the value from \
+the table. You MAY substitute a more recent or more precise figure from the \
+MEETING DATA — but only if you append an "as of <date>" qualifier (e.g. \
+"~$235.2B as of June 30, 2025") and use that same value consistently for \
+that plan throughout the rest of the note. Do not switch back and forth.
 
 FORMAT REQUIREMENTS:
 - Start with exactly: # 7-Day Highlights: {date_range_title}
@@ -423,7 +459,7 @@ FORMAT REQUIREMENTS:
   private equity commitments, manager hires/mandate changes, portfolio strategy,
   governance actions, performance data — but choose themes that fit the data
 - Bold (**) plan names, dollar amounts, and manager names on first mention
-- Include plan AUM in parentheses on first mention of each plan
+- Include plan AUM in parentheses on first mention of each plan (see PLAN AUM TABLE)
 - Every sentence containing a $ figure, %, bps, vote tally, or manager name \
 must end with an inline citation in the form (doc_id=42). The cited doc_id \
 must be the one whose summary contains that specific figure or name verbatim. \
@@ -455,6 +491,12 @@ these are the most common arithmetic-derived hallucinations)
 "a notable", "suggests", "indicates", "underscores"
 - every inline (doc_id=N): the cited doc must contain the specific figure or \
 name in that sentence verbatim, not merely be on the same topic.
+- AUM consistency: each plan should appear with one and only one AUM value \
+throughout the note (the PLAN AUM TABLE value, OR a single override with an \
+"as of <date>" qualifier — never both for the same plan).
+
+PLAN AUM TABLE (canonical reference):
+{aum_table}
 
 MEETING DATA:
 {meetings_text}"""
@@ -464,6 +506,7 @@ def build_insights_prompt(data: dict) -> str:
     """Build the Claude prompt for the CIO Insights note."""
     today_str = datetime.utcnow().strftime("%B %d, %Y")
     aum_trillions = data["total_aum"] / 1000
+    aum_table = _format_aum_table(data.get("plans") or [])
     meetings_text = format_meetings_for_prompt(data["meetings"])
 
     return f"""\
@@ -503,6 +546,11 @@ cannot cite a doc_id, do not make the claim.
 explicitly flag it as "*Emerging signal — limited data*".
 - Prefer "no observation" over speculation. It is better to write 1,200 well-sourced \
 words than 1,800 with invented detail.
+- Use the PLAN AUM TABLE below as the canonical AUM for each plan. When you \
+mention a plan's AUM (in parentheses on first mention), use the value from \
+the table. You MAY substitute a more recent or more precise figure from the \
+MEETING DATA — but only if you append an "as of <date>" qualifier and use \
+that same value consistently for that plan throughout the rest of the note.
 
 FORMAT REQUIREMENTS:
 - Start with exactly: # CIO Insights: 2026 Institutional Trends
@@ -549,6 +597,12 @@ evidence supports the relationship
 drop or soften
 - every inline (doc_id=N): the cited doc must contain the specific figure or \
 name in that sentence verbatim, not merely be on the same topic.
+- AUM consistency: each plan should appear with one and only one AUM value \
+throughout the note (the PLAN AUM TABLE value, OR a single override with an \
+"as of <date>" qualifier — never both for the same plan).
+
+PLAN AUM TABLE (canonical reference):
+{aum_table}
 
 MEETING DATA:
 {meetings_text}"""
@@ -558,6 +612,7 @@ def build_recent_insights_prompt(data: dict) -> str:
     """Build the Claude prompt for the rolling-window (e.g. 30-day) CIO Insights note."""
     today_str = datetime.utcnow().strftime("%B %d, %Y")
     aum_trillions = data["total_aum"] / 1000
+    aum_table = _format_aum_table(data.get("plans") or [])
     meetings_text = format_meetings_for_prompt(data["meetings"])
     days = data.get("days", 30)
     window_label = f"the past {days} days"
@@ -605,6 +660,11 @@ explicitly flag it as "*Emerging signal — limited data*". (Threshold relaxed f
 to 2 because of the smaller window.)
 - Prefer "no observation" over speculation. It is better to write 800 well-sourced \
 words than 1,400 with invented detail.
+- Use the PLAN AUM TABLE below as the canonical AUM for each plan. When you \
+mention a plan's AUM (in parentheses on first mention), use the value from \
+the table. You MAY substitute a more recent or more precise figure from the \
+MEETING DATA — but only if you append an "as of <date>" qualifier and use \
+that same value consistently for that plan throughout the rest of the note.
 
 FORMAT REQUIREMENTS:
 - Start with exactly: # CIO Insights: Past {days} Days
@@ -653,6 +713,12 @@ evidence supports the relationship
 drop or soften
 - every inline (doc_id=N): the cited doc must contain the specific figure or \
 name in that sentence verbatim, not merely be on the same topic.
+- AUM consistency: each plan should appear with one and only one AUM value \
+throughout the note (the PLAN AUM TABLE value, OR a single override with an \
+"as of <date>" qualifier — never both for the same plan).
+
+PLAN AUM TABLE (canonical reference):
+{aum_table}
 
 MEETING DATA:
 {meetings_text}"""
