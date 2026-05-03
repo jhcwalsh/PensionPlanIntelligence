@@ -73,6 +73,36 @@ st.markdown("""
 
 
 # ---------------------------------------------------------------------------
+# Analytics
+# ---------------------------------------------------------------------------
+#
+# Privacy-friendly Plausible tracker. st.html renders inline (not in an
+# iframe), so the script runs in the host page context and Plausible sees
+# the real app URL and query params (?doc=N, ?cafr_plan=…). The dedupe
+# flag prevents Streamlit reruns from stacking duplicate <script> tags.
+
+st.html(
+    """
+    <script>
+    if (!window.__plausible_injected__) {
+        window.__plausible_injected__ = true;
+        const tracker = document.createElement('script');
+        tracker.async = true;
+        tracker.src = 'https://plausible.io/js/pa-v_mYvog2AxtbRj85Cu_EP.js';
+        document.head.appendChild(tracker);
+        window.plausible = window.plausible || function() {
+            (plausible.q = plausible.q || []).push(arguments);
+        };
+        plausible.init = plausible.init || function(i) { plausible.o = i || {}; };
+        plausible.init();
+    }
+    </script>
+    """,
+    unsafe_allow_javascript=True,
+)
+
+
+# ---------------------------------------------------------------------------
 # Session / DB helpers
 # ---------------------------------------------------------------------------
 
