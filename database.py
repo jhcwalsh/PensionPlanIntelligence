@@ -555,6 +555,25 @@ def search_summaries(session: Session, query: str, plan_id: str = None,
     return q.order_by(Document.meeting_date.desc()).limit(limit).all()
 
 
+def count_search_summaries(session: Session, query: str,
+                           plan_id: str = None) -> int:
+    """Total matching documents for a search query, ignoring the row limit.
+
+    Mirrors ``search_summaries``'s WHERE clause exactly so the count and the
+    paged results stay consistent.
+    """
+    q = (
+        session.query(Document.id)
+        .join(Summary, Document.id == Summary.document_id)
+        .filter(Summary.summary_text.ilike(f"%{query}%") |
+                Summary.key_topics.ilike(f"%{query}%") |
+                Summary.investment_actions.ilike(f"%{query}%"))
+    )
+    if plan_id:
+        q = q.filter(Document.plan_id == plan_id)
+    return q.count()
+
+
 def get_documents_pending_rfp_extraction(
     session: Session,
     prompt_version: str = RFP_PROMPT_VERSION,

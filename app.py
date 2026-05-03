@@ -27,6 +27,7 @@ from database import (
     Publication,
     RFPRecord,
     Summary,
+    count_search_summaries,
     get_new_meetings,
     get_session,
     init_db,
@@ -128,12 +129,6 @@ def load_recent_summaries(plan_id=None, limit=20):
     return q.order_by(Document.meeting_date.desc()).limit(limit).all()
 
 
-def do_search(query, plan_id=None):
-    session = get_db_session()
-    pid = plan_id if plan_id and plan_id != "All" else None
-    return search_summaries(session, query, plan_id=pid, limit=30)
-
-
 def get_stats():
     session = get_db_session()
     plans = session.query(Plan).count()
@@ -156,6 +151,19 @@ def parse_json_field(val):
 def _safe_md(text: str) -> str:
     """Escape $ so Streamlit doesn't treat them as LaTeX delimiters."""
     return text.replace("$", r"\$")
+
+
+def _highlight(text: str, query: str | None) -> str:
+    """Wrap case-insensitive matches of ``query`` in <mark> tags.
+
+    Preserves the original casing of the matched substring. Caller must
+    render with ``unsafe_allow_html=True`` for the tags to take effect.
+    Safe against regex-special characters in the query via re.escape.
+    """
+    if not query or not text:
+        return text
+    pattern = re.compile(re.escape(query), re.IGNORECASE)
+    return pattern.sub(lambda m: f"<mark>{m.group(0)}</mark>", text)
 
 
 DOWNLOADS_DIR = Path(os.environ.get("DOWNLOADS_DIR") or (Path(__file__).parent / "downloads"))
@@ -235,10 +243,14 @@ def render_summary_card(doc: Document, summary: Summary, highlight: str = None):
     performance = parse_json_field(summary.performance_data)
 
     with st.expander(f"**{plan_name}** — {doc_type} — {date_str}", expanded=False):
-        st.markdown(f"**Summary**\n\n{_safe_md(summary.summary_text)}")
+        summary_md = _highlight(_safe_md(summary.summary_text or ""), highlight)
+        st.markdown(f"**Summary**\n\n{summary_md}", unsafe_allow_html=True)
 
         if key_topics:
-            tags_html = " ".join(f'<span class="tag">{t}</span>' for t in key_topics[:8])
+            tags_html = " ".join(
+                f'<span class="tag">{_highlight(t, highlight)}</span>'
+                for t in key_topics[:8]
+            )
             st.markdown(f"**Topics:** {tags_html}", unsafe_allow_html=True)
 
         col1, col2 = st.columns(2)
@@ -251,14 +263,22 @@ def render_summary_card(doc: Document, summary: Summary, highlight: str = None):
                     amt = action.get("amount_millions")
                     amt_str = f" (${amt:,.0f}M)" if amt else ""
                     ac = action.get("asset_class", "")
-                    st.markdown(f"- {desc}{amt_str}" + (f" — *{ac}*" if ac else ""))
+                    line = (
+                        f"- {_highlight(_safe_md(desc), highlight)}{amt_str}"
+                        + (f" — *{_highlight(ac, highlight)}*" if ac else "")
+                    )
+                    st.markdown(line, unsafe_allow_html=True)
 
             if decisions:
                 st.markdown("**Decisions**")
                 for d in decisions[:5]:
                     vote = d.get("vote", "")
                     vote_str = f" [{vote}]" if vote else ""
-                    st.markdown(f"- {d.get('description', '')}{vote_str}")
+                    desc = d.get("description", "")
+                    st.markdown(
+                        f"- {_highlight(_safe_md(desc), highlight)}{vote_str}",
+                        unsafe_allow_html=True,
+                    )
 
         with col2:
             if performance:
@@ -280,23 +300,56 @@ def render_summary_card(doc: Document, summary: Summary, highlight: str = None):
 # Main pages
 # ---------------------------------------------------------------------------
 
+_SEARCH_PAGE_SIZE = 30
+
+
 def page_search(plan_id, plan_label):
     st.title("Search Meeting Documents")
 
-    query = st.text_input("Search summaries, topics, investment actions...",
-                          placeholder='e.g. "infrastructure" or "private equity mandate" or "BlackRock"')
+    # Form gate: search runs on Enter / Search button, not per-keystroke.
+    # Each ILIKE scan is 100–1100 ms on this corpus; debouncing via the form
+    # avoids running it on every typed character.
+    with st.form("search_form", clear_on_submit=False):
+        query = st.text_input(
+            "Search summaries, topics, investment actions...",
+            placeholder='e.g. "infrastructure" or "private equity mandate" or "BlackRock"',
+        )
+        st.form_submit_button("Search")
 
-    if query:
-        results = do_search(query, plan_id=plan_id)
-        st.caption(f"{len(results)} results for **{query}**"
-                   + (f" in {plan_label}" if plan_label != "All" else ""))
+    if not query:
+        st.info("Enter a search term above and press Enter (or click Search).")
+        return
 
-        if not results:
-            st.info("No results found. Try different search terms.")
-        for doc, summary in results:
-            render_summary_card(doc, summary, highlight=query)
-    else:
-        st.info("Enter a search term above to find relevant meeting content.")
+    session = get_db_session()
+    pid = plan_id if plan_id and plan_id != "All" else None
+
+    # Per-query growing limit. The key includes plan scope so switching plans
+    # resets the pagination state for the same query.
+    limit_key = f"_search_limit::{query}::{pid or 'all'}"
+    limit = st.session_state.setdefault(limit_key, _SEARCH_PAGE_SIZE)
+
+    total = count_search_summaries(session, query, plan_id=pid)
+    plan_suffix = f" in {plan_label}" if plan_label != "All" else ""
+
+    if total == 0:
+        st.info(f"No results for **{query}**{plan_suffix}. Try different search terms.")
+        return
+
+    results = search_summaries(session, query, plan_id=pid, limit=limit)
+    st.caption(
+        f"Showing **{len(results)}** of **{total:,}** results for "
+        f"**{query}**{plan_suffix}"
+    )
+
+    for doc, summary in results:
+        render_summary_card(doc, summary, highlight=query)
+
+    if len(results) < total:
+        remaining = total - len(results)
+        next_batch = min(_SEARCH_PAGE_SIZE, remaining)
+        if st.button(f"Show {next_batch} more ({remaining:,} remaining)"):
+            st.session_state[limit_key] = limit + _SEARCH_PAGE_SIZE
+            st.rerun()
 
 
 def page_browse(plan_id, plan_label):
