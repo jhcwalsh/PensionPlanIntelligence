@@ -574,6 +574,79 @@ def count_search_summaries(session: Session, query: str,
     return q.count()
 
 
+def aggregate_managers(session: Session) -> list[dict]:
+    """Aggregate manager mentions across every Summary's investment_actions.
+
+    Returns one dict per distinct raw manager string, with mention count,
+    distinct plan count, action-type breakdown, first/latest meeting date,
+    and the doc_ids it appeared in. Sorted by mention_count descending.
+
+    Bad inputs (empty manager strings, malformed JSON) are silently
+    skipped — the consumer shouldn't have to defensive-code around them.
+    """
+    import json
+    from collections import defaultdict
+
+    by_name: dict[str, dict] = defaultdict(
+        lambda: {
+            "raw_name": "",
+            "mention_count": 0,
+            "plan_ids": set(),
+            "doc_ids": set(),
+            "action_types": defaultdict(int),
+            "first_meeting": None,
+            "latest_meeting": None,
+        }
+    )
+
+    rows = (
+        session.query(Summary, Document)
+        .join(Document, Summary.document_id == Document.id)
+        .filter(Summary.investment_actions.isnot(None))
+        .all()
+    )
+    for sm, doc in rows:
+        try:
+            actions = json.loads(sm.investment_actions or "[]")
+        except (ValueError, TypeError):
+            continue
+        if not actions:
+            continue
+        for a in actions:
+            raw = (a.get("manager") or "").strip()
+            if not raw:
+                continue
+            entry = by_name[raw]
+            entry["raw_name"] = raw
+            entry["mention_count"] += 1
+            entry["plan_ids"].add(doc.plan_id)
+            entry["doc_ids"].add(doc.id)
+            action_type = (a.get("action") or "other").lower()
+            entry["action_types"][action_type] += 1
+            md = doc.meeting_date
+            if md:
+                if entry["first_meeting"] is None or md < entry["first_meeting"]:
+                    entry["first_meeting"] = md
+                if entry["latest_meeting"] is None or md > entry["latest_meeting"]:
+                    entry["latest_meeting"] = md
+
+    # Convert sets to sorted lists / counts for stable output
+    out = []
+    for entry in by_name.values():
+        out.append({
+            "raw_name": entry["raw_name"],
+            "mention_count": entry["mention_count"],
+            "plan_count": len(entry["plan_ids"]),
+            "plan_ids": sorted(entry["plan_ids"]),
+            "doc_ids": sorted(entry["doc_ids"]),
+            "action_types": dict(entry["action_types"]),
+            "first_meeting": entry["first_meeting"],
+            "latest_meeting": entry["latest_meeting"],
+        })
+    out.sort(key=lambda r: -r["mention_count"])
+    return out
+
+
 def get_documents_pending_rfp_extraction(
     session: Session,
     prompt_version: str = RFP_PROMPT_VERSION,

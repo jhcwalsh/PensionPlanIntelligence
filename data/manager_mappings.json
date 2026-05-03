@@ -1,0 +1,4805 @@
+{
+  "1315 Capital": {
+    "canonical": "1315 Capital",
+    "is_manager": true
+  },
+  "400 Capital": {
+    "canonical": "400 Capital",
+    "is_manager": true
+  },
+  "AB (AllianceBernstein)": {
+    "canonical": "AllianceBernstein",
+    "is_manager": true
+  },
+  "ABRY Partners": {
+    "canonical": "ABRY Partners",
+    "is_manager": true
+  },
+  "ACORE Credit Partners": {
+    "canonical": "ACORE Credit Partners",
+    "is_manager": true
+  },
+  "AE Industrial Partners": {
+    "canonical": "AE Industrial Partners",
+    "is_manager": true
+  },
+  "AE Industrial Partners IV, L.P.": {
+    "canonical": "AE Industrial Partners",
+    "is_manager": true
+  },
+  "AEW": {
+    "canonical": "AEW Capital Management",
+    "is_manager": true
+  },
+  "AEW Capital Management / RREEF America / Heitman / J.P. Morgan Investment Management": {
+    "canonical": "AEW Capital Management",
+    "is_manager": true
+  },
+  "AFAM": {
+    "canonical": "AFAM",
+    "is_manager": true
+  },
+  "AGL": {
+    "canonical": "AGL",
+    "is_manager": true
+  },
+  "AHL Partners LLP": {
+    "canonical": "AHL Partners",
+    "is_manager": true
+  },
+  "AQR": {
+    "canonical": "AQR Capital Management",
+    "is_manager": true
+  },
+  "AQR Capital Management": {
+    "canonical": "AQR Capital Management",
+    "is_manager": true
+  },
+  "ASF": {
+    "canonical": "ASF",
+    "is_manager": true
+  },
+  "ASRS Internal (IMD)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "internal investment division of a pension plan, not an external manager"
+  },
+  "Abacus": {
+    "canonical": "Abacus Capital Group",
+    "is_manager": true
+  },
+  "Abacus Capital Group": {
+    "canonical": "Abacus Capital Group",
+    "is_manager": true
+  },
+  "Abbott Capital / Pathway Capital Management / Direct": {
+    "canonical": "Abbott Capital Management",
+    "is_manager": true
+  },
+  "Abbott Capital Management": {
+    "canonical": "Abbott Capital Management",
+    "is_manager": true
+  },
+  "Abel Noser": {
+    "canonical": "Abel Noser",
+    "is_manager": true
+  },
+  "Abingworth": {
+    "canonical": "Abingworth",
+    "is_manager": true
+  },
+  "Acadian": {
+    "canonical": "Acadian Asset Management",
+    "is_manager": true
+  },
+  "Acadian / JP Morgan Asset Management": {
+    "canonical": "Acadian Asset Management",
+    "is_manager": true
+  },
+  "Acadian Asset Management": {
+    "canonical": "Acadian Asset Management",
+    "is_manager": true
+  },
+  "Acadian Asset Management LLC": {
+    "canonical": "Acadian Asset Management",
+    "is_manager": true
+  },
+  "Acadian Asset Management LLC / AllianceBernstein L.P. / Numeric Investors LLC": {
+    "canonical": "Acadian Asset Management",
+    "is_manager": true
+  },
+  "Acadian Asset Management, First Eagle Investment Management, Eagle Capital Management": {
+    "canonical": "Acadian Asset Management",
+    "is_manager": true
+  },
+  "Acadian and William Blair": {
+    "canonical": "Acadian Asset Management",
+    "is_manager": true
+  },
+  "Accel": {
+    "canonical": "Accel",
+    "is_manager": true
+  },
+  "Accel Leaders": {
+    "canonical": "Accel",
+    "is_manager": true
+  },
+  "Accel Leaders 5 GP Associates LLC": {
+    "canonical": "Accel",
+    "is_manager": true
+  },
+  "Accel London": {
+    "canonical": "Accel",
+    "is_manager": true
+  },
+  "Accel Partners": {
+    "canonical": "Accel",
+    "is_manager": true
+  },
+  "Accolade": {
+    "canonical": "Accolade",
+    "is_manager": true
+  },
+  "Adams Street": {
+    "canonical": "Adams Street Partners",
+    "is_manager": true
+  },
+  "Adams Street Partners": {
+    "canonical": "Adams Street Partners",
+    "is_manager": true
+  },
+  "Adams Street Partners / Pomona Capital / Kohlberg Kravis Roberts & Co.": {
+    "canonical": "Adams Street Partners",
+    "is_manager": true
+  },
+  "Adams Street, Pomona": {
+    "canonical": "Adams Street Partners",
+    "is_manager": true
+  },
+  "Adelante": {
+    "canonical": "Adelante Capital Management",
+    "is_manager": true
+  },
+  "Adelante Capital Management": {
+    "canonical": "Adelante Capital Management",
+    "is_manager": true
+  },
+  "Advent": {
+    "canonical": "Advent International",
+    "is_manager": true
+  },
+  "Advent Global": {
+    "canonical": "Advent International",
+    "is_manager": true
+  },
+  "Advent International": {
+    "canonical": "Advent International",
+    "is_manager": true
+  },
+  "Advent International GPE X": {
+    "canonical": "Advent International",
+    "is_manager": true
+  },
+  "Advised Assets Group (subsidiary of Empower)": {
+    "canonical": "Advised Assets Group",
+    "is_manager": true
+  },
+  "Aether": {
+    "canonical": "Aether",
+    "is_manager": true
+  },
+  "Agilis": {
+    "canonical": "Agilis",
+    "is_manager": true
+  },
+  "Aksia": {
+    "canonical": "Aksia",
+    "is_manager": true
+  },
+  "Aksia CA LLC": {
+    "canonical": "Aksia",
+    "is_manager": true
+  },
+  "Aksia LLC": {
+    "canonical": "Aksia",
+    "is_manager": true
+  },
+  "Albourne": {
+    "canonical": "Albourne Partners",
+    "is_manager": true
+  },
+  "Albourne America": {
+    "canonical": "Albourne Partners",
+    "is_manager": true
+  },
+  "Albourne America LLC": {
+    "canonical": "Albourne Partners",
+    "is_manager": true
+  },
+  "Albourne America, LLC": {
+    "canonical": "Albourne Partners",
+    "is_manager": true
+  },
+  "Albourne Partners": {
+    "canonical": "Albourne Partners",
+    "is_manager": true
+  },
+  "All public equity and fixed-income managers": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "generic descriptive phrase, not a specific manager"
+  },
+  "Alliance Bernstein": {
+    "canonical": "AllianceBernstein",
+    "is_manager": true
+  },
+  "Alliance NFJ": {
+    "canonical": "AllianceBernstein",
+    "is_manager": true
+  },
+  "AllianceBernstein": {
+    "canonical": "AllianceBernstein",
+    "is_manager": true
+  },
+  "AllianceBernstein L.P.": {
+    "canonical": "AllianceBernstein",
+    "is_manager": true
+  },
+  "AllianceBernstein and Thompson, Siegel & Walmsley": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "compound listing of multiple managers, not a single manager name"
+  },
+  "AllianceBernstein; Thompson, Siegel & Walmsley": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "compound listing of multiple managers, not a single manager name"
+  },
+  "Allianz NFJ": {
+    "canonical": "NFJ Investment Group",
+    "is_manager": true
+  },
+  "Allianz/RCM": {
+    "canonical": "Allianz Global Investors",
+    "is_manager": true
+  },
+  "Allspring": {
+    "canonical": "Allspring Global Investments",
+    "is_manager": true
+  },
+  "Allspring Global Investments": {
+    "canonical": "Allspring Global Investments",
+    "is_manager": true
+  },
+  "Almanac": {
+    "canonical": "Almanac Realty Investors",
+    "is_manager": true
+  },
+  "AlpInvest": {
+    "canonical": "AlpInvest Partners",
+    "is_manager": true
+  },
+  "Alyeska": {
+    "canonical": "Alyeska Investment Group",
+    "is_manager": true
+  },
+  "American Funds": {
+    "canonical": "American Funds",
+    "is_manager": true
+  },
+  "American Industrial Partners (AIP)": {
+    "canonical": "American Industrial Partners",
+    "is_manager": true
+  },
+  "American Realty Advisors": {
+    "canonical": "American Realty Advisors",
+    "is_manager": true
+  },
+  "American Strategic Value Realty Fund": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "fund name, not a manager name"
+  },
+  "Analytic Investors": {
+    "canonical": "Analytic Investors",
+    "is_manager": true
+  },
+  "Angelo Gordon": {
+    "canonical": "Angelo Gordon",
+    "is_manager": true
+  },
+  "Angelo, Gordon & Co.": {
+    "canonical": "Angelo Gordon",
+    "is_manager": true
+  },
+  "Angelo, Gordon and Co.": {
+    "canonical": "Angelo Gordon",
+    "is_manager": true
+  },
+  "Anton": {
+    "canonical": "Anton",
+    "is_manager": true
+  },
+  "Aon": {
+    "canonical": "Aon Investments USA",
+    "is_manager": true
+  },
+  "Aon (investment consultant)": {
+    "canonical": "Aon Investments USA",
+    "is_manager": true
+  },
+  "Aon / Meketa Investment Group / NEPC": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "compound listing of multiple consultants, not a single manager name"
+  },
+  "Aon Hewitt Investment Consulting": {
+    "canonical": "Aon Investments USA",
+    "is_manager": true
+  },
+  "Aon Hewitt Investment Consulting, Inc.": {
+    "canonical": "Aon Investments USA",
+    "is_manager": true
+  },
+  "Aon Investment USA Inc.": {
+    "canonical": "Aon Investments USA",
+    "is_manager": true
+  },
+  "Aon Investments": {
+    "canonical": "Aon Investments USA",
+    "is_manager": true
+  },
+  "Aon Investments USA Inc.": {
+    "canonical": "Aon Investments USA",
+    "is_manager": true
+  },
+  "Aon Investments USA Inc. / Meketa Investment Group / NEPC LLC": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "compound listing of multiple consultants, not a single manager name"
+  },
+  "Aon Investments USA Inc., Meketa Investment Group, NEPC LLC": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "compound listing of multiple consultants, not a single manager name"
+  },
+  "Apax": {
+    "canonical": "Apax Partners",
+    "is_manager": true
+  },
+  "Apax Partners": {
+    "canonical": "Apax Partners",
+    "is_manager": true
+  },
+  "Apax XI": {
+    "canonical": "Apax Partners",
+    "is_manager": true
+  },
+  "Apollo": {
+    "canonical": "Apollo Global Management",
+    "is_manager": true
+  },
+  "Apollo Capital Management": {
+    "canonical": "Apollo Global Management",
+    "is_manager": true
+  },
+  "Ara Fund II, LP": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "fund name, not a manager name"
+  },
+  "Arbour Lane": {
+    "canonical": "Arbour Lane Capital Management",
+    "is_manager": true
+  },
+  "Arcmont": {
+    "canonical": "Arcmont Asset Management",
+    "is_manager": true
+  },
+  "Ardian": {
+    "canonical": "Ardian",
+    "is_manager": true
+  },
+  "Ardian (ASF VIII)": {
+    "canonical": "Ardian",
+    "is_manager": true
+  },
+  "Ardian Investments": {
+    "canonical": "Ardian",
+    "is_manager": true
+  },
+  "Ardian Private Equity": {
+    "canonical": "Ardian",
+    "is_manager": true
+  },
+  "Ares": {
+    "canonical": "Ares Management",
+    "is_manager": true
+  },
+  "Ares Energy Investors": {
+    "canonical": "Ares Management",
+    "is_manager": true
+  },
+  "Ares Management": {
+    "canonical": "Ares Management",
+    "is_manager": true
+  },
+  "Ares Management, LLC": {
+    "canonical": "Ares Management",
+    "is_manager": true
+  },
+  "Aristotle": {
+    "canonical": "Aristotle Capital Management",
+    "is_manager": true
+  },
+  "Aristotle Capital Management": {
+    "canonical": "Aristotle Capital Management",
+    "is_manager": true
+  },
+  "Arrowstreet": {
+    "canonical": "Arrowstreet Capital",
+    "is_manager": true
+  },
+  "Arrowstreet / CC&L": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "compound listing of multiple managers, not a single manager name"
+  },
+  "Arsenal": {
+    "canonical": "Arsenal Capital Partners",
+    "is_manager": true
+  },
+  "Arsenal Capital Partners": {
+    "canonical": "Arsenal Capital Partners",
+    "is_manager": true
+  },
+  "Artemis": {
+    "canonical": "Artemis Investment Management",
+    "is_manager": true
+  },
+  "Artisan": {
+    "canonical": "Artisan Partners",
+    "is_manager": true
+  },
+  "Artisan High Income Trust (listed as a fixed income manager)": {
+    "canonical": "Artisan Partners",
+    "is_manager": true
+  },
+  "Artisan Partners": {
+    "canonical": "Artisan Partners",
+    "is_manager": true
+  },
+  "Artisan Partners Limited Partnership": {
+    "canonical": "Artisan Partners",
+    "is_manager": true
+  },
+  "Artisan Partners; Causeway; BlackRock; Boston Trust Walden; Segall Bryant & Hamill; Wellington": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "compound listing of multiple managers, not a single manager name"
+  },
+  "Asia Alternatives": {
+    "canonical": "Asia Alternatives Management",
+    "is_manager": true
+  },
+  "Asia Alternatives Management (MN Asia Investors, LP)": {
+    "canonical": "Asia Alternatives Management",
+    "is_manager": true
+  },
+  "Asset Consulting Group": {
+    "canonical": "Asset Consulting Group",
+    "is_manager": true
+  },
+  "Asset Strategy": {
+    "canonical": "Asset Strategy Consultants",
+    "is_manager": true
+  },
+  "Asset Strategy Consultants": {
+    "canonical": "Asset Strategy Consultants",
+    "is_manager": true
+  },
+  "Astorg Normec": {
+    "canonical": "Astorg Normec",
+    "is_manager": true
+  },
+  "Atalaya": {
+    "canonical": "Atalaya Capital Management",
+    "is_manager": true
+  },
+  "Ativo Capital (outflow); ARGA Investment Management (inflow)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "compound entry listing two managers with transaction context, not a single manager name"
+  },
+  "Atlantic Park": {
+    "canonical": "Atlantic Park",
+    "is_manager": true
+  },
+  "Attucks Asset Management": {
+    "canonical": "Attucks Asset Management",
+    "is_manager": true
+  },
+  "Audax": {
+    "canonical": "Audax Group",
+    "is_manager": true
+  },
+  "Audax Group": {
+    "canonical": "Audax Group",
+    "is_manager": true
+  },
+  "Axiom Investors": {
+    "canonical": "Axiom Investors",
+    "is_manager": true
+  },
+  "Axiom Investors LLC": {
+    "canonical": "Axiom Investors",
+    "is_manager": true
+  },
+  "Azani Capital Partners": {
+    "canonical": "Azani Capital Partners",
+    "is_manager": true
+  },
+  "BCP": {
+    "canonical": "BCP",
+    "is_manager": true
+  },
+  "BDT & MSD Partners": {
+    "canonical": "BDT & MSD Partners",
+    "is_manager": true
+  },
+  "BMO": {
+    "canonical": "BMO Global Asset Management",
+    "is_manager": true
+  },
+  "BNY Mellon": {
+    "canonical": "BNY Mellon",
+    "is_manager": true
+  },
+  "BNY Mellon (replacing Northern Trust)": {
+    "canonical": "BNY Mellon",
+    "is_manager": true
+  },
+  "BNY Mellon Asset Servicing (Custodian)": {
+    "canonical": "BNY Mellon",
+    "is_manager": true
+  },
+  "BNY Mellon Investments Corporation": {
+    "canonical": "BNY Mellon",
+    "is_manager": true
+  },
+  "BPEA": {
+    "canonical": "BPEA (Baring Private Equity Asia)",
+    "is_manager": true
+  },
+  "BVIP": {
+    "canonical": "BVIP",
+    "is_manager": true
+  },
+  "BVP": {
+    "canonical": "Bessemer Venture Partners",
+    "is_manager": true
+  },
+  "Baillie Gifford": {
+    "canonical": "Baillie Gifford",
+    "is_manager": true
+  },
+  "Baillie Gifford / Durable Capital": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "compound entry listing two distinct managers"
+  },
+  "Baillie Gifford Overseas Limited": {
+    "canonical": "Baillie Gifford",
+    "is_manager": true
+  },
+  "Baillie Gifford Overseas Limited; Counterpoint Global (formerly Morgan Stanley)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "compound entry listing two distinct managers"
+  },
+  "Bain Capital": {
+    "canonical": "Bain Capital",
+    "is_manager": true
+  },
+  "Bain Capital Credit": {
+    "canonical": "Bain Capital Credit",
+    "is_manager": true
+  },
+  "Baird Advisors": {
+    "canonical": "Baird Advisors",
+    "is_manager": true
+  },
+  "Baker Tilly": {
+    "canonical": "Baker Tilly",
+    "is_manager": true
+  },
+  "Bank of New York": {
+    "canonical": "BNY Mellon",
+    "is_manager": true
+  },
+  "Bank of New York Mellon": {
+    "canonical": "BNY Mellon",
+    "is_manager": true
+  },
+  "Banner Ridge": {
+    "canonical": "Banner Ridge",
+    "is_manager": true
+  },
+  "Barings": {
+    "canonical": "Barings",
+    "is_manager": true
+  },
+  "Barrow, Hanley Mewhinney & Strauss": {
+    "canonical": "Barrow Hanley Mewhinney & Strauss",
+    "is_manager": true
+  },
+  "Base10 Advancement Initiative II": {
+    "canonical": "Base10 Partners",
+    "is_manager": true
+  },
+  "Battery Ventures": {
+    "canonical": "Battery Ventures",
+    "is_manager": true
+  },
+  "Bell Partners": {
+    "canonical": "Bell Partners",
+    "is_manager": true
+  },
+  "Bell Partners Growth and Income Fund, L.P.": {
+    "canonical": "Bell Partners",
+    "is_manager": true
+  },
+  "BentallGreenOak (BGO)": {
+    "canonical": "BentallGreenOak",
+    "is_manager": true
+  },
+  "Berkeley Partners": {
+    "canonical": "Berkeley Partners",
+    "is_manager": true
+  },
+  "Bivium": {
+    "canonical": "Bivium Capital",
+    "is_manager": true
+  },
+  "Bivium Capital": {
+    "canonical": "Bivium Capital",
+    "is_manager": true
+  },
+  "BlackRock": {
+    "canonical": "BlackRock",
+    "is_manager": true
+  },
+  "BlackRock / GIP": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "compound entry listing two distinct managers"
+  },
+  "BlackRock / T. Rowe Price": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "compound entry listing two distinct managers"
+  },
+  "BlackRock / UBS": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "compound entry listing two distinct managers"
+  },
+  "BlackRock / Vanguard": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "compound entry listing two distinct managers"
+  },
+  "BlackRock Co-Investment Team": {
+    "canonical": "BlackRock",
+    "is_manager": true
+  },
+  "BlackRock Financial Management, Inc.": {
+    "canonical": "BlackRock",
+    "is_manager": true
+  },
+  "BlackRock Fixed Income": {
+    "canonical": "BlackRock",
+    "is_manager": true
+  },
+  "BlackRock GIP": {
+    "canonical": "BlackRock",
+    "is_manager": true
+  },
+  "BlackRock Institutional Trust Company": {
+    "canonical": "BlackRock",
+    "is_manager": true
+  },
+  "BlackRock Real Estate": {
+    "canonical": "BlackRock",
+    "is_manager": true
+  },
+  "Blackstone": {
+    "canonical": "Blackstone",
+    "is_manager": true
+  },
+  "Blackstone Capital Partners": {
+    "canonical": "Blackstone",
+    "is_manager": true
+  },
+  "Blackstone Capital Partners IX": {
+    "canonical": "Blackstone",
+    "is_manager": true
+  },
+  "Blackstone Group": {
+    "canonical": "Blackstone",
+    "is_manager": true
+  },
+  "Blackstone Growth II": {
+    "canonical": "Blackstone",
+    "is_manager": true
+  },
+  "Blackstone Inc.": {
+    "canonical": "Blackstone",
+    "is_manager": true
+  },
+  "Blackstone Real Estate Partners": {
+    "canonical": "Blackstone Real Estate Partners",
+    "is_manager": true
+  },
+  "Blackstone Strategic Partners": {
+    "canonical": "Blackstone Strategic Partners",
+    "is_manager": true
+  },
+  "Bloomberg": {
+    "canonical": "Bloomberg",
+    "is_manager": true
+  },
+  "Blue Owl": {
+    "canonical": "Blue Owl Capital",
+    "is_manager": true
+  },
+  "Blue Owl (fka Oak Street)": {
+    "canonical": "Blue Owl Capital",
+    "is_manager": true
+  },
+  "Blue Owl Capital": {
+    "canonical": "Blue Owl Capital",
+    "is_manager": true
+  },
+  "Blue Owl Capital / GCM Grosvenor": {
+    "canonical": "Blue Owl Capital / GCM Grosvenor",
+    "is_manager": true
+  },
+  "Blue Owl Capital or Crow Holdings Capital": {
+    "canonical": "Blue Owl Capital or Crow Holdings Capital",
+    "is_manager": true
+  },
+  "Blue Torch": {
+    "canonical": "Blue Torch Capital",
+    "is_manager": true
+  },
+  "Blue Torch Capital": {
+    "canonical": "Blue Torch Capital",
+    "is_manager": true
+  },
+  "Boston Partners": {
+    "canonical": "Boston Partners",
+    "is_manager": true
+  },
+  "Boston Partners Global Investors, Inc.": {
+    "canonical": "Boston Partners",
+    "is_manager": true
+  },
+  "Bracebridge Capital": {
+    "canonical": "Bracebridge Capital",
+    "is_manager": true
+  },
+  "Brandes": {
+    "canonical": "Brandes Investment Partners",
+    "is_manager": true
+  },
+  "Brandes Investment Partners": {
+    "canonical": "Brandes Investment Partners",
+    "is_manager": true
+  },
+  "Brandywine": {
+    "canonical": "Brandywine Global Investment Management",
+    "is_manager": true
+  },
+  "Brandywine Global": {
+    "canonical": "Brandywine Global Investment Management",
+    "is_manager": true
+  },
+  "Brandywine Global Investment Management, LLC": {
+    "canonical": "Brandywine Global Investment Management",
+    "is_manager": true
+  },
+  "Brandywine and Loomis/Sayles": {
+    "canonical": "Brandywine and Loomis/Sayles",
+    "is_manager": true
+  },
+  "Brevan Howard": {
+    "canonical": "Brevan Howard",
+    "is_manager": true
+  },
+  "Bridge Industrial": {
+    "canonical": "Bridge Industrial",
+    "is_manager": true
+  },
+  "Bridgepoint": {
+    "canonical": "Bridgepoint",
+    "is_manager": true
+  },
+  "Bridgepoint Advisers Limited": {
+    "canonical": "Bridgepoint",
+    "is_manager": true
+  },
+  "Bridgepoint Europe VII": {
+    "canonical": "Bridgepoint",
+    "is_manager": true
+  },
+  "Bridgepoint Group": {
+    "canonical": "Bridgepoint",
+    "is_manager": true
+  },
+  "Bridgewater": {
+    "canonical": "Bridgewater Associates",
+    "is_manager": true
+  },
+  "Bridgewater, PanAgora": {
+    "canonical": "Bridgewater, PanAgora",
+    "is_manager": true
+  },
+  "Brightwood Capital": {
+    "canonical": "Brightwood Capital",
+    "is_manager": true
+  },
+  "Brightwood Capital Fund V": {
+    "canonical": "Brightwood Capital",
+    "is_manager": true
+  },
+  "Brightwood Capital Fund V L.P.": {
+    "canonical": "Brightwood Capital",
+    "is_manager": true
+  },
+  "Broadridge Financial Solutions": {
+    "canonical": "Broadridge Financial Solutions",
+    "is_manager": true
+  },
+  "Brookfield": {
+    "canonical": "Brookfield Asset Management",
+    "is_manager": true
+  },
+  "Brookfield Asset Management": {
+    "canonical": "Brookfield Asset Management",
+    "is_manager": true
+  },
+  "Brookfield Capital Partners VI": {
+    "canonical": "Brookfield Asset Management",
+    "is_manager": true
+  },
+  "Brookfield Strategic Real Estate Partners": {
+    "canonical": "Brookfield Asset Management",
+    "is_manager": true
+  },
+  "Brown Brothers Harriman": {
+    "canonical": "Brown Brothers Harriman",
+    "is_manager": true
+  },
+  "Buenaventura I Chemistry": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "does not appear to be a pension fund manager or service provider; likely a fund or project name extracted in error"
+  },
+  "Bureau of Asset Management (BAM)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "internal government/plan asset management bureau, not an external manager"
+  },
+  "Burgis": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "insufficient information to identify as a known manager; likely extraction error or individual name"
+  },
+  "C.S. McKee": {
+    "canonical": "CS McKee",
+    "is_manager": true
+  },
+  "CBRE": {
+    "canonical": "CBRE",
+    "is_manager": true
+  },
+  "CBRE Group, Inc.": {
+    "canonical": "CBRE",
+    "is_manager": true
+  },
+  "CC&L Global": {
+    "canonical": "CC&L Global",
+    "is_manager": true
+  },
+  "CCA Black": {
+    "canonical": "CCA Black",
+    "is_manager": true
+  },
+  "CEM Benchmarking": {
+    "canonical": "CEM Benchmarking",
+    "is_manager": true
+  },
+  "CFI Partners, Silver Rock Capital Partners": {
+    "canonical": "CFI Partners, Silver Rock Capital Partners",
+    "is_manager": true
+  },
+  "CIM": {
+    "canonical": "CIM Group",
+    "is_manager": true
+  },
+  "CIM Investment Management": {
+    "canonical": "CIM Group",
+    "is_manager": true
+  },
+  "CIP IX – G Strategic Co-Investment Vehicle, L.P.": {
+    "canonical": "CIP IX – G Strategic Co-Investment Vehicle",
+    "is_manager": true
+  },
+  "CS McKee": {
+    "canonical": "CS McKee",
+    "is_manager": true
+  },
+  "CS McKee / Loop Capital": {
+    "canonical": "CS McKee / Loop Capital",
+    "is_manager": true
+  },
+  "CVC Capital Partners": {
+    "canonical": "CVC Capital Partners",
+    "is_manager": true
+  },
+  "CVC DIF": {
+    "canonical": "CVC DIF",
+    "is_manager": true
+  },
+  "Cabot": {
+    "canonical": "Cabot",
+    "is_manager": true
+  },
+  "Cabot (Hamilton Lane Advisors as consultant)": {
+    "canonical": "Cabot",
+    "is_manager": true
+  },
+  "Callan": {
+    "canonical": "Callan",
+    "is_manager": true
+  },
+  "Callan Associates": {
+    "canonical": "Callan",
+    "is_manager": true
+  },
+  "Callan Associates (research); Department of Law (legal opinion)": {
+    "canonical": "Callan",
+    "is_manager": true
+  },
+  "Callan Associates / Courtland Partners / The Townsend Group": {
+    "canonical": "Callan Associates / Courtland Partners / The Townsend Group",
+    "is_manager": true
+  },
+  "Callan Associates Inc.": {
+    "canonical": "Callan",
+    "is_manager": true
+  },
+  "Callan LLC": {
+    "canonical": "Callan",
+    "is_manager": true
+  },
+  "Callan LLC (advisor); Arrowstreet (International Equity manager noted)": {
+    "canonical": "Callan",
+    "is_manager": true
+  },
+  "Callan LLC (consultant)": {
+    "canonical": "Callan",
+    "is_manager": true
+  },
+  "Cambridge Associates": {
+    "canonical": "Cambridge Associates",
+    "is_manager": true
+  },
+  "Cantillon": {
+    "canonical": "Cantillon Capital Management",
+    "is_manager": true
+  },
+  "Cap Guardian": {
+    "canonical": "Capital Guardian",
+    "is_manager": true
+  },
+  "CapVest": {
+    "canonical": "CapVest Partners",
+    "is_manager": true
+  },
+  "CapVest Partners": {
+    "canonical": "CapVest Partners",
+    "is_manager": true
+  },
+  "Capital Fund Management SA": {
+    "canonical": "Capital Fund Management",
+    "is_manager": true
+  },
+  "Capital Group": {
+    "canonical": "Capital Group",
+    "is_manager": true
+  },
+  "Capital Guardian": {
+    "canonical": "Capital Guardian",
+    "is_manager": true
+  },
+  "Capital Institutional Services, Inc. (CAPIS)": {
+    "canonical": "Capital Institutional Services (CAPIS)",
+    "is_manager": true
+  },
+  "Capitol Meridian Partners": {
+    "canonical": "Capitol Meridian Partners",
+    "is_manager": true
+  },
+  "Capula": {
+    "canonical": "Capula Investment Management",
+    "is_manager": true
+  },
+  "Capula Tail Risk Fund Limited": {
+    "canonical": "Capula Investment Management",
+    "is_manager": true
+  },
+  "Carlyle": {
+    "canonical": "Carlyle Group",
+    "is_manager": true
+  },
+  "Carlyle Partners": {
+    "canonical": "Carlyle Group",
+    "is_manager": true
+  },
+  "Carlyle Partners VIII": {
+    "canonical": "Carlyle Group",
+    "is_manager": true
+  },
+  "Carlyle, Summit Partners": {
+    "canonical": "Carlyle Group",
+    "is_manager": true
+  },
+  "Carmel Partners": {
+    "canonical": "Carmel Partners",
+    "is_manager": true
+  },
+  "Castlelake L.P.": {
+    "canonical": "Castlelake",
+    "is_manager": true
+  },
+  "Causeway": {
+    "canonical": "Causeway Capital Management",
+    "is_manager": true
+  },
+  "Centerbridge Partners": {
+    "canonical": "Centerbridge Partners",
+    "is_manager": true
+  },
+  "Cerity Partners LLC": {
+    "canonical": "Cerity Partners",
+    "is_manager": true
+  },
+  "Channing Capital Management, LLC": {
+    "canonical": "Channing Capital Management",
+    "is_manager": true
+  },
+  "Charlesbank Capital Partners": {
+    "canonical": "Charlesbank Capital Partners",
+    "is_manager": true
+  },
+  "Charterhouse Capital Partners": {
+    "canonical": "Charterhouse Capital Partners",
+    "is_manager": true
+  },
+  "Chautauqua Capital Management": {
+    "canonical": "Chautauqua Capital Management",
+    "is_manager": true
+  },
+  "Cheiron, Inc.": {
+    "canonical": "Cheiron",
+    "is_manager": true
+  },
+  "Chicago-based private equity manager (name not specified)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "descriptive placeholder, manager name not specified"
+  },
+  "Chief Investment Officer Jase Auby": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "individual staff title, not a manager firm"
+  },
+  "Churchill Asset Management": {
+    "canonical": "Churchill Asset Management",
+    "is_manager": true
+  },
+  "Churchill Asset Management (Nuveen/TIAA)": {
+    "canonical": "Churchill Asset Management",
+    "is_manager": true
+  },
+  "Citibank, N.A.": {
+    "canonical": "Citibank",
+    "is_manager": true
+  },
+  "City Treasury Division": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "internal government division, not an external manager"
+  },
+  "City of Garland": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "municipal entity, not an investment manager"
+  },
+  "City of Los Angeles": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "municipal entity, not an investment manager"
+  },
+  "Clarion": {
+    "canonical": "Clarion Partners",
+    "is_manager": true
+  },
+  "Clarion Lion Properties Fund": {
+    "canonical": "Clarion Partners",
+    "is_manager": true
+  },
+  "Clarion Partners": {
+    "canonical": "Clarion Partners",
+    "is_manager": true
+  },
+  "Clarion Partners, Heitman CREDIT": {
+    "canonical": "Clarion Partners",
+    "is_manager": true
+  },
+  "Clarion Partners; Forest Investment Associates; UBS Farmland Investors": {
+    "canonical": "Clarion Partners",
+    "is_manager": true
+  },
+  "ClearBridge Investments": {
+    "canonical": "ClearBridge Investments",
+    "is_manager": true
+  },
+  "Clearlake": {
+    "canonical": "Clearlake Capital Group",
+    "is_manager": true
+  },
+  "Clearlake Capital": {
+    "canonical": "Clearlake Capital Group",
+    "is_manager": true
+  },
+  "Clearlake Capital Group": {
+    "canonical": "Clearlake Capital Group",
+    "is_manager": true
+  },
+  "Clearlake Capital Partners VII": {
+    "canonical": "Clearlake Capital Group",
+    "is_manager": true
+  },
+  "Clearwater Advisors": {
+    "canonical": "Clearwater Advisors",
+    "is_manager": true
+  },
+  "Clearwater Analytics": {
+    "canonical": "Clearwater Analytics",
+    "is_manager": true
+  },
+  "Cliffwater": {
+    "canonical": "Cliffwater",
+    "is_manager": true
+  },
+  "Cliffwater LLC (consultant)": {
+    "canonical": "Cliffwater",
+    "is_manager": true
+  },
+  "Cliffwater and Verus (consultants)": {
+    "canonical": "Cliffwater",
+    "is_manager": true
+  },
+  "Cloverlay": {
+    "canonical": "Cloverlay",
+    "is_manager": true
+  },
+  "Cohen & Steers": {
+    "canonical": "Cohen & Steers",
+    "is_manager": true
+  },
+  "Cohen & Steers Capital Management, Inc.; Dimensional Fund Advisors LP": {
+    "canonical": "Cohen & Steers",
+    "is_manager": true
+  },
+  "Cohen Milstein": {
+    "canonical": "Cohen Milstein Sellers & Toll",
+    "is_manager": true
+  },
+  "Cohen Milstein Sellers and Toll PLLC": {
+    "canonical": "Cohen Milstein Sellers & Toll",
+    "is_manager": true
+  },
+  "Cohen and Steers": {
+    "canonical": "Cohen & Steers",
+    "is_manager": true
+  },
+  "Coleman & Associates": {
+    "canonical": "Coleman & Associates",
+    "is_manager": true
+  },
+  "Coller": {
+    "canonical": "Coller Capital",
+    "is_manager": true
+  },
+  "Coller International Partners IX – G, L.P.": {
+    "canonical": "Coller Capital",
+    "is_manager": true
+  },
+  "Columbia Threadneedle": {
+    "canonical": "Columbia Threadneedle Investments",
+    "is_manager": true
+  },
+  "Commonfund": {
+    "canonical": "Commonfund",
+    "is_manager": true
+  },
+  "Community Preservation Corporation": {
+    "canonical": "Community Preservation Corporation",
+    "is_manager": true
+  },
+  "Comptroller of the City of New York": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "government office, not an investment manager"
+  },
+  "Comvest": {
+    "canonical": "Comvest Partners",
+    "is_manager": true
+  },
+  "Comvest / Crestline": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "combined placeholder referencing two separate managers"
+  },
+  "Comvest Credit Partners": {
+    "canonical": "Comvest Partners",
+    "is_manager": true
+  },
+  "Constellation Wealth Capital": {
+    "canonical": "Constellation Wealth Capital",
+    "is_manager": true
+  },
+  "Constitution Capital Partners": {
+    "canonical": "Constitution Capital Partners",
+    "is_manager": true
+  },
+  "Cookson Pierce": {
+    "canonical": "Cookson Pierce",
+    "is_manager": true
+  },
+  "Copeland Capital Management, LLC": {
+    "canonical": "Copeland Capital Management",
+    "is_manager": true
+  },
+  "Corebridge": {
+    "canonical": "Corebridge Financial",
+    "is_manager": true
+  },
+  "Corry Capital": {
+    "canonical": "Corry Capital",
+    "is_manager": true
+  },
+  "Corry Capital (CCA)": {
+    "canonical": "Corry Capital",
+    "is_manager": true
+  },
+  "Cortex Applied Research": {
+    "canonical": "Cortex Applied Research",
+    "is_manager": true
+  },
+  "Cortex Applied Research Inc.": {
+    "canonical": "Cortex Applied Research",
+    "is_manager": true
+  },
+  "Court Square Capital Partners": {
+    "canonical": "Court Square Capital Partners",
+    "is_manager": true
+  },
+  "Crayhill Capital Management": {
+    "canonical": "Crayhill Capital Management",
+    "is_manager": true
+  },
+  "Credit Suisse": {
+    "canonical": "Credit Suisse",
+    "is_manager": true
+  },
+  "Crescent": {
+    "canonical": "Crescent Capital Group",
+    "is_manager": true
+  },
+  "Crescent Private Credit Income Corp.": {
+    "canonical": "Crescent Capital Group",
+    "is_manager": true
+  },
+  "Crestline": {
+    "canonical": "Crestline Investors",
+    "is_manager": true
+  },
+  "Crestline Investors": {
+    "canonical": "Crestline Investors",
+    "is_manager": true
+  },
+  "Cross Ocean Partners": {
+    "canonical": "Cross Ocean Partners",
+    "is_manager": true
+  },
+  "Crow Holdings": {
+    "canonical": "Crow Holdings Capital",
+    "is_manager": true
+  },
+  "Cushman & Wakefield, Inc.": {
+    "canonical": "Cushman & Wakefield",
+    "is_manager": true
+  },
+  "D.B. Fitzpatrick and Co.": {
+    "canonical": "D.B. Fitzpatrick and Co.",
+    "is_manager": true
+  },
+  "D.E. Shaw / BlackRock": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "combined placeholder referencing two separate managers"
+  },
+  "DRA Growth and Income Fund XII, LLC": {
+    "canonical": "DRA Advisors",
+    "is_manager": true
+  },
+  "DSOF": {
+    "canonical": "DSOF",
+    "is_manager": true
+  },
+  "Danita Johnson (internal hire)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "individual internal staff hire, not an external manager"
+  },
+  "Darren Schlissel": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "individual person, not a manager firm"
+  },
+  "Davidson Kempner Capital Management": {
+    "canonical": "Davidson Kempner Capital Management",
+    "is_manager": true
+  },
+  "DePrince, Race & Zollo": {
+    "canonical": "DePrince, Race & Zollo",
+    "is_manager": true
+  },
+  "Demopolis": {
+    "canonical": "Demopolis",
+    "is_manager": true
+  },
+  "Denali Advisors LLC": {
+    "canonical": "Denali Advisors",
+    "is_manager": true
+  },
+  "Department of Revenue Internal Staff": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "internal government staff, not an external manager"
+  },
+  "Deutsche Asset & Wealth Management": {
+    "canonical": "Deutsche Asset & Wealth Management",
+    "is_manager": true
+  },
+  "Development Partners International": {
+    "canonical": "Development Partners International",
+    "is_manager": true
+  },
+  "Development Partners International (DPI)": {
+    "canonical": "Development Partners International",
+    "is_manager": true
+  },
+  "Diamond Hill": {
+    "canonical": "Diamond Hill Capital Management",
+    "is_manager": true
+  },
+  "Digital Colony": {
+    "canonical": "DigitalBridge",
+    "is_manager": true
+  },
+  "Dimensional": {
+    "canonical": "Dimensional Fund Advisors",
+    "is_manager": true
+  },
+  "Dimensional Fund Advisors": {
+    "canonical": "Dimensional Fund Advisors",
+    "is_manager": true
+  },
+  "Dimensional Fund Advisors LP": {
+    "canonical": "Dimensional Fund Advisors",
+    "is_manager": true
+  },
+  "Dodge & Cox": {
+    "canonical": "Dodge & Cox",
+    "is_manager": true
+  },
+  "Dodge & Cox, DoubleLine, JP Morgan": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "combined placeholder referencing multiple separate managers"
+  },
+  "Dodge & Cox; Vanguard": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "combined placeholder referencing two separate managers"
+  },
+  "Dodge and Cox": {
+    "canonical": "Dodge & Cox",
+    "is_manager": true
+  },
+  "Domain Capital Partners": {
+    "canonical": "Domain Capital Partners",
+    "is_manager": true
+  },
+  "Dorsal": {
+    "canonical": "Dorsal Capital Management",
+    "is_manager": true
+  },
+  "DoubleLine": {
+    "canonical": "DoubleLine Capital",
+    "is_manager": true
+  },
+  "Dr. Keith Brown": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "individual person, not a manager firm"
+  },
+  "Dragoneer Investment Group": {
+    "canonical": "Dragoneer Investment Group",
+    "is_manager": true
+  },
+  "Driehaus Capital Management LLC": {
+    "canonical": "Driehaus Capital Management",
+    "is_manager": true
+  },
+  "Durable Capital": {
+    "canonical": "Durable Capital Partners",
+    "is_manager": true
+  },
+  "Durable Capital Partners": {
+    "canonical": "Durable Capital Partners",
+    "is_manager": true
+  },
+  "Dynamo Software Inc.": {
+    "canonical": "Dynamo Software",
+    "is_manager": true
+  },
+  "ECP": {
+    "canonical": "Energy Capital Partners",
+    "is_manager": true
+  },
+  "ECP VI, L.P.": {
+    "canonical": "Energy Capital Partners",
+    "is_manager": true
+  },
+  "EQT": {
+    "canonical": "EQT",
+    "is_manager": true
+  },
+  "EQT Exeter Logistics Value Fund V, L.P.": {
+    "canonical": "EQT Exeter",
+    "is_manager": true
+  },
+  "EY": {
+    "canonical": "Ernst & Young",
+    "is_manager": true
+  },
+  "Eagle Asset Management": {
+    "canonical": "Eagle Asset Management",
+    "is_manager": true
+  },
+  "Eagle Capital Management": {
+    "canonical": "Eagle Capital Management",
+    "is_manager": true
+  },
+  "Eagle Capital, Brandes, Jacobs Levy, River Road, Wedge": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "multiple managers listed together as a group"
+  },
+  "Eastern Shore": {
+    "canonical": "Eastern Shore Capital Management",
+    "is_manager": true
+  },
+  "Eastern Shore Capital Management": {
+    "canonical": "Eastern Shore Capital Management",
+    "is_manager": true
+  },
+  "Eaton Vance": {
+    "canonical": "Eaton Vance",
+    "is_manager": true
+  },
+  "Ecosystem Investment Partners IV": {
+    "canonical": "Ecosystem Investment Partners",
+    "is_manager": true
+  },
+  "Elkins McSherry; Klarity FX": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "multiple managers listed together as a group"
+  },
+  "Elliott Associates": {
+    "canonical": "Elliott Associates",
+    "is_manager": true
+  },
+  "Elliott Associates, L.P.": {
+    "canonical": "Elliott Associates",
+    "is_manager": true
+  },
+  "Elm Tree": {
+    "canonical": "Elm Tree",
+    "is_manager": true
+  },
+  "Emerald": {
+    "canonical": "Emerald",
+    "is_manager": true
+  },
+  "Empower": {
+    "canonical": "Empower",
+    "is_manager": true
+  },
+  "Empower / Morningstar": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "multiple managers listed together as a group"
+  },
+  "Emstone": {
+    "canonical": "Emstone",
+    "is_manager": true
+  },
+  "Energy Capital Partners": {
+    "canonical": "Energy Capital Partners",
+    "is_manager": true
+  },
+  "Envision": {
+    "canonical": "Envision",
+    "is_manager": true
+  },
+  "Equilibrium Capital": {
+    "canonical": "Equilibrium Capital",
+    "is_manager": true
+  },
+  "Equilibrium Capital Group / Wastewater Capital Management": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "multiple managers listed together as a group"
+  },
+  "Ernst & Young": {
+    "canonical": "Ernst & Young",
+    "is_manager": true
+  },
+  "Ernst and Young LLP": {
+    "canonical": "Ernst & Young",
+    "is_manager": true
+  },
+  "Etho": {
+    "canonical": "Etho Capital",
+    "is_manager": true
+  },
+  "Etho Climate Leadership": {
+    "canonical": "Etho Capital",
+    "is_manager": true
+  },
+  "Express Scripts": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "pharmacy benefit manager / healthcare company, not a pension investment manager"
+  },
+  "F.N.B. Investment Advisors": {
+    "canonical": "FNB Investment Advisors",
+    "is_manager": true
+  },
+  "FNB Investment Advisors": {
+    "canonical": "FNB Investment Advisors",
+    "is_manager": true
+  },
+  "Farallon Capital": {
+    "canonical": "Farallon Capital",
+    "is_manager": true
+  },
+  "Federated": {
+    "canonical": "Federated Hermes",
+    "is_manager": true
+  },
+  "Fidelity": {
+    "canonical": "Fidelity Investments",
+    "is_manager": true
+  },
+  "Fidelity / PineBridge": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "multiple managers listed together as a group"
+  },
+  "Fidelity Institutional Asset Management": {
+    "canonical": "Fidelity Investments",
+    "is_manager": true
+  },
+  "Fidelity Investments": {
+    "canonical": "Fidelity Investments",
+    "is_manager": true
+  },
+  "Fidelity Real Estate High Income": {
+    "canonical": "Fidelity Investments",
+    "is_manager": true
+  },
+  "Fidelity Signals": {
+    "canonical": "Fidelity Investments",
+    "is_manager": true
+  },
+  "Fidelity; Segall, Bryant & Hamill": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "multiple managers listed together as a group"
+  },
+  "Fiera / Morgan Stanley": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "multiple managers listed together as a group"
+  },
+  "Fiera Comox": {
+    "canonical": "Fiera Comox",
+    "is_manager": true
+  },
+  "First Eagle Investment Management": {
+    "canonical": "First Eagle Investment Management",
+    "is_manager": true
+  },
+  "First Eagle Investments": {
+    "canonical": "First Eagle Investment Management",
+    "is_manager": true
+  },
+  "Five unnamed hedge fund managers": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "placeholder for unnamed managers"
+  },
+  "Flagship Pioneering": {
+    "canonical": "Flagship Pioneering",
+    "is_manager": true
+  },
+  "Flat Footed": {
+    "canonical": "Flat Footed",
+    "is_manager": true
+  },
+  "Florin Court Capital": {
+    "canonical": "Florin Court Capital",
+    "is_manager": true
+  },
+  "Focus Healthcare Partners": {
+    "canonical": "Focus Healthcare Partners",
+    "is_manager": true
+  },
+  "Focus Senior Housing": {
+    "canonical": "Focus Senior Housing",
+    "is_manager": true
+  },
+  "Focus Senior Housing Fund III": {
+    "canonical": "Focus Senior Housing",
+    "is_manager": true
+  },
+  "Focused Investors": {
+    "canonical": "Focused Investors",
+    "is_manager": true
+  },
+  "Forest Investment Associates": {
+    "canonical": "Forest Investment Associates",
+    "is_manager": true
+  },
+  "Fort Washington": {
+    "canonical": "Fort Washington Investment Advisors",
+    "is_manager": true
+  },
+  "Fort Washington Investment Advisors": {
+    "canonical": "Fort Washington Investment Advisors",
+    "is_manager": true
+  },
+  "Fort Washington, North Sky, JPM PEG, Portfolio Advisors, Siguler Guff, Timber Bay, JPMorgan Co Investment, Sapphire, WindRose": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "multiple managers listed together as a group"
+  },
+  "Foster Garvey / K&L Gates": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "law firms, not investment managers"
+  },
+  "Foundation Capital": {
+    "canonical": "Foundation Capital",
+    "is_manager": true
+  },
+  "Four existing firms (unnamed)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "placeholder for unnamed managers"
+  },
+  "Fragasso Financial Advisors": {
+    "canonical": "Fragasso Financial Advisors",
+    "is_manager": true
+  },
+  "Francisco Partners": {
+    "canonical": "Francisco Partners",
+    "is_manager": true
+  },
+  "Franklin Park": {
+    "canonical": "Franklin Park",
+    "is_manager": true
+  },
+  "Franklin Templeton": {
+    "canonical": "Franklin Templeton",
+    "is_manager": true
+  },
+  "Franklin Templeton (outflow); ARGA Investment Management (inflow)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "compound transition description, not a single manager name"
+  },
+  "Franklin Templeton Asset Management Ltd": {
+    "canonical": "Franklin Templeton",
+    "is_manager": true
+  },
+  "Fred Alger Management, Inc.": {
+    "canonical": "Fred Alger Management",
+    "is_manager": true
+  },
+  "Freeman Spogli": {
+    "canonical": "Freeman Spogli",
+    "is_manager": true
+  },
+  "Frontier": {
+    "canonical": "Frontier Capital Management",
+    "is_manager": true
+  },
+  "Frontier Capital Management CO, LLC / Westfield Capital Management Company, L.P. / William Blair Investment Management, LLC": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "multiple managers listed together, not a single manager name"
+  },
+  "Fund AL (name redacted)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "redacted fund placeholder"
+  },
+  "Fund AM (name redacted)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "redacted fund placeholder"
+  },
+  "Fund AN (name withheld)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "redacted fund placeholder"
+  },
+  "Fund AO (name undisclosed)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "redacted fund placeholder"
+  },
+  "Fund AP (name undisclosed)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "redacted fund placeholder"
+  },
+  "Funston Advisory Services": {
+    "canonical": "Funston Advisory Services",
+    "is_manager": true
+  },
+  "GAM": {
+    "canonical": "GAM",
+    "is_manager": true
+  },
+  "GCM Grosvenor": {
+    "canonical": "GCM Grosvenor",
+    "is_manager": true
+  },
+  "GCM Grosvenor (Grosvenor Capital Management)": {
+    "canonical": "GCM Grosvenor",
+    "is_manager": true
+  },
+  "GCM Grosvenor / Pathway Capital Management": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "multiple managers listed together, not a single manager name"
+  },
+  "GEI Capital X, LLC": {
+    "canonical": "GEI Capital",
+    "is_manager": true
+  },
+  "GEI-Jade Investors": {
+    "canonical": "GEI-Jade Investors",
+    "is_manager": true
+  },
+  "GIP Capital": {
+    "canonical": "Global Infrastructure Partners",
+    "is_manager": true
+  },
+  "GQG": {
+    "canonical": "GQG Partners",
+    "is_manager": true
+  },
+  "GTCR": {
+    "canonical": "GTCR",
+    "is_manager": true
+  },
+  "Gabriel, Roeder, Smith & Company (GRS)": {
+    "canonical": "Gabriel, Roeder, Smith & Company",
+    "is_manager": true
+  },
+  "Galliard Capital Management": {
+    "canonical": "Galliard Capital Management",
+    "is_manager": true
+  },
+  "Garcia Hamilton": {
+    "canonical": "Garcia Hamilton & Associates",
+    "is_manager": true
+  },
+  "Garcia Hamilton & Associates": {
+    "canonical": "Garcia Hamilton & Associates",
+    "is_manager": true
+  },
+  "Garda Capital Partners": {
+    "canonical": "Garda Capital Partners",
+    "is_manager": true
+  },
+  "Genstar": {
+    "canonical": "Genstar Capital",
+    "is_manager": true
+  },
+  "Genstar Capital": {
+    "canonical": "Genstar Capital",
+    "is_manager": true
+  },
+  "Glass Lewis": {
+    "canonical": "Glass Lewis",
+    "is_manager": true
+  },
+  "Glass Lewis & Co., LLC": {
+    "canonical": "Glass Lewis",
+    "is_manager": true
+  },
+  "Glendon": {
+    "canonical": "Glendon Capital Management",
+    "is_manager": true
+  },
+  "Global Alpha / Northern Trust": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "multiple managers listed together, not a single manager name"
+  },
+  "Global Infrastructure Partners": {
+    "canonical": "Global Infrastructure Partners",
+    "is_manager": true
+  },
+  "Global Infrastructure Partners / IFM Investors / Stonepeak Associates": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "multiple managers listed together, not a single manager name"
+  },
+  "Golden Tree Loan Management III": {
+    "canonical": "GoldenTree Asset Management",
+    "is_manager": true
+  },
+  "Golden Tree Tactical Opportunities Fund, LP": {
+    "canonical": "GoldenTree Asset Management",
+    "is_manager": true
+  },
+  "Goldman Sachs GQG Partners": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "appears to conflate two distinct managers; ambiguous compound name"
+  },
+  "Goldner Hawn": {
+    "canonical": "Goldner Hawn",
+    "is_manager": true
+  },
+  "Golub Capital": {
+    "canonical": "Golub Capital",
+    "is_manager": true
+  },
+  "Graham Allen Partners": {
+    "canonical": "Graham Allen Partners",
+    "is_manager": true
+  },
+  "Granahan Investment Management, Inc.": {
+    "canonical": "Granahan Investment Management",
+    "is_manager": true
+  },
+  "Great Hill": {
+    "canonical": "Great Hill Partners",
+    "is_manager": true
+  },
+  "Great Hill Equity Partners": {
+    "canonical": "Great Hill Partners",
+    "is_manager": true
+  },
+  "Great Hill Partners": {
+    "canonical": "Great Hill Partners",
+    "is_manager": true
+  },
+  "Great Mountain Partners LLC": {
+    "canonical": "Great Mountain Partners",
+    "is_manager": true
+  },
+  "Great West Life & Annuity": {
+    "canonical": "Great-West Life & Annuity",
+    "is_manager": true
+  },
+  "Green Equity Investors X, L.P.": {
+    "canonical": "Leonard Green & Partners",
+    "is_manager": true
+  },
+  "Gridiron": {
+    "canonical": "Gridiron Capital",
+    "is_manager": true
+  },
+  "Gridiron Capital": {
+    "canonical": "Gridiron Capital",
+    "is_manager": true
+  },
+  "Gridiron Partners": {
+    "canonical": "Gridiron Capital",
+    "is_manager": true
+  },
+  "Grosvenor Capital Management": {
+    "canonical": "GCM Grosvenor",
+    "is_manager": true
+  },
+  "Grove Street": {
+    "canonical": "Grove Street Advisors",
+    "is_manager": true
+  },
+  "Guidepost Growth Equity": {
+    "canonical": "Guidepost Growth Equity",
+    "is_manager": true
+  },
+  "HFRI": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "HFRI is a hedge fund index/benchmark, not a manager"
+  },
+  "HG Capital": {
+    "canonical": "HgCapital",
+    "is_manager": true
+  },
+  "HIG Advantage": {
+    "canonical": "H.I.G. Capital",
+    "is_manager": true
+  },
+  "HPS": {
+    "canonical": "HPS Investment Partners",
+    "is_manager": true
+  },
+  "HPS Investment Partners": {
+    "canonical": "HPS Investment Partners",
+    "is_manager": true
+  },
+  "HPS Investment Partners, LLC": {
+    "canonical": "HPS Investment Partners",
+    "is_manager": true
+  },
+  "HPS Investment Partners, PGIM Core": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "appears to be a combined/garbled entry mixing two manager names, not a single identifiable manager"
+  },
+  "HPS Strategic Investment Partners Fund V": {
+    "canonical": "HPS Investment Partners",
+    "is_manager": true
+  },
+  "Hamilton Lane": {
+    "canonical": "Hamilton Lane",
+    "is_manager": true
+  },
+  "Hamilton Lane / STG Allegro Fund II": {
+    "canonical": "Hamilton Lane",
+    "is_manager": true
+  },
+  "Hamilton Lane Advisors, LLC": {
+    "canonical": "Hamilton Lane",
+    "is_manager": true
+  },
+  "Hamilton Lane Advisors, LLC; HarbourVest Partners, LLC; StepStone Group": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "multiple managers listed together, not a single manager"
+  },
+  "Hamilton Lane Advisors, LLC; StepStone Group; Townsend Holdings LLC d/b/a Townsend Group": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "multiple managers listed together, not a single manager"
+  },
+  "Hamilton Lane/HPS": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "multiple managers listed together, not a single manager"
+  },
+  "HarbourVest": {
+    "canonical": "HarbourVest Partners",
+    "is_manager": true
+  },
+  "HarbourVest / GoldenTree": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "multiple managers listed together, not a single manager"
+  },
+  "HarbourVest Partners": {
+    "canonical": "HarbourVest Partners",
+    "is_manager": true
+  },
+  "HarbourVest Partners LLC": {
+    "canonical": "HarbourVest Partners",
+    "is_manager": true
+  },
+  "Hark Capital": {
+    "canonical": "Hark Capital",
+    "is_manager": true
+  },
+  "Hark Capital V, L.P.": {
+    "canonical": "Hark Capital",
+    "is_manager": true
+  },
+  "Heitman Credit": {
+    "canonical": "Heitman",
+    "is_manager": true
+  },
+  "Helios Capital": {
+    "canonical": "Helios Capital",
+    "is_manager": true
+  },
+  "Hellman & Friedman": {
+    "canonical": "Hellman & Friedman",
+    "is_manager": true
+  },
+  "Hellman and Friedman": {
+    "canonical": "Hellman & Friedman",
+    "is_manager": true
+  },
+  "Heron Bay Capital": {
+    "canonical": "Heron Bay Capital",
+    "is_manager": true
+  },
+  "Hg": {
+    "canonical": "Hg",
+    "is_manager": true
+  },
+  "High Street": {
+    "canonical": "High Street",
+    "is_manager": true
+  },
+  "HighVista": {
+    "canonical": "HighVista Strategies",
+    "is_manager": true
+  },
+  "HighVista Fund": {
+    "canonical": "HighVista Strategies",
+    "is_manager": true
+  },
+  "Highclere": {
+    "canonical": "Highclere International Investors",
+    "is_manager": true
+  },
+  "Highland Rim Capital Fund I, LP": {
+    "canonical": "Highland Rim Capital",
+    "is_manager": true
+  },
+  "Hillhouse": {
+    "canonical": "Hillhouse Capital",
+    "is_manager": true
+  },
+  "Hillwood": {
+    "canonical": "Hillwood",
+    "is_manager": true
+  },
+  "Hillwood US Industrial Club VII, LP": {
+    "canonical": "Hillwood",
+    "is_manager": true
+  },
+  "Hoisington Investment Management": {
+    "canonical": "Hoisington Investment Management",
+    "is_manager": true
+  },
+  "Humphreys Real Estate": {
+    "canonical": "Humphreys Real Estate",
+    "is_manager": true
+  },
+  "I Squared Capital": {
+    "canonical": "I Squared Capital",
+    "is_manager": true
+  },
+  "I-Squared Capital": {
+    "canonical": "I Squared Capital",
+    "is_manager": true
+  },
+  "ICG": {
+    "canonical": "ICG (Intermediate Capital Group)",
+    "is_manager": true
+  },
+  "ICG (Intermediate Capital Group)": {
+    "canonical": "ICG (Intermediate Capital Group)",
+    "is_manager": true
+  },
+  "ICG North American Credit Partners Fund III": {
+    "canonical": "ICG (Intermediate Capital Group)",
+    "is_manager": true
+  },
+  "ICONIQ": {
+    "canonical": "ICONIQ Capital",
+    "is_manager": true
+  },
+  "IDG China Venture Capital": {
+    "canonical": "IDG Capital",
+    "is_manager": true
+  },
+  "IDG-Accel": {
+    "canonical": "IDG Capital",
+    "is_manager": true
+  },
+  "IFM": {
+    "canonical": "IFM Investors",
+    "is_manager": true
+  },
+  "IFM Global Infrastructure": {
+    "canonical": "IFM Investors",
+    "is_manager": true
+  },
+  "IK": {
+    "canonical": "IK Partners",
+    "is_manager": true
+  },
+  "IK Investment Partners": {
+    "canonical": "IK Partners",
+    "is_manager": true
+  },
+  "IK Partners": {
+    "canonical": "IK Partners",
+    "is_manager": true
+  },
+  "IK X Fund": {
+    "canonical": "IK Partners",
+    "is_manager": true
+  },
+  "INVESCO Real Estate and LaSalle Real Estate": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "multiple managers listed together, not a single manager"
+  },
+  "IR+M": {
+    "canonical": "Income Research & Management",
+    "is_manager": true
+  },
+  "ISQ": {
+    "canonical": "I Squared Capital",
+    "is_manager": true
+  },
+  "ISQ Global Infrastructure": {
+    "canonical": "I Squared Capital",
+    "is_manager": true
+  },
+  "ISS (Institutional Shareholder Services)": {
+    "canonical": "Institutional Shareholder Services",
+    "is_manager": true
+  },
+  "ITE Rail Fund": {
+    "canonical": "ITE Management",
+    "is_manager": true
+  },
+  "IVA": {
+    "canonical": "International Value Advisers",
+    "is_manager": true
+  },
+  "Illinois State Board of Investment": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "pension plan, not a manager"
+  },
+  "Illinois State Board of Investment (ISBI)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "pension plan, not a manager"
+  },
+  "Income Research & Management (IR+M)": {
+    "canonical": "Income Research & Management",
+    "is_manager": true
+  },
+  "Industry Ventures": {
+    "canonical": "Industry Ventures",
+    "is_manager": true
+  },
+  "Informed Momentum Company LLC": {
+    "canonical": "Informed Momentum",
+    "is_manager": true
+  },
+  "Infrastructure Fund Management": {
+    "canonical": "Infrastructure Fund Management",
+    "is_manager": true
+  },
+  "Insight": {
+    "canonical": "Insight Partners",
+    "is_manager": true
+  },
+  "Insight Partners XII Buyout Annex, LP": {
+    "canonical": "Insight Partners",
+    "is_manager": true
+  },
+  "Insight Partners XII, LP": {
+    "canonical": "Insight Partners",
+    "is_manager": true
+  },
+  "Institutional Shareholder Services (ISS)": {
+    "canonical": "Institutional Shareholder Services",
+    "is_manager": true
+  },
+  "Intech": {
+    "canonical": "Intech",
+    "is_manager": true
+  },
+  "Integrum": {
+    "canonical": "Integrum",
+    "is_manager": true
+  },
+  "Internal": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "refers to internal management, not an external manager"
+  },
+  "Internal (Alaska Treasury)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "internal management by Alaska Treasury"
+  },
+  "Internal (Kenji Griffith)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "internal staff reference, not an external manager"
+  },
+  "Internal (MFPRSI)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "internal management by pension plan"
+  },
+  "Internal (RIO)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "internal management reference"
+  },
+  "Internal (VRS)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "internal management by pension plan"
+  },
+  "Internal - RPM": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "internal management reference"
+  },
+  "Internal / Fidelity": {
+    "canonical": "Fidelity",
+    "is_manager": true
+  },
+  "Invesco": {
+    "canonical": "Invesco",
+    "is_manager": true
+  },
+  "Invesco Advisors, Inc.": {
+    "canonical": "Invesco",
+    "is_manager": true
+  },
+  "Invesco Real Estate": {
+    "canonical": "Invesco Real Estate",
+    "is_manager": true
+  },
+  "Investindustrial Lower Mid-Market IV": {
+    "canonical": "Investindustrial",
+    "is_manager": true
+  },
+  "J.P. Morgan": {
+    "canonical": "J.P. Morgan Asset Management",
+    "is_manager": true
+  },
+  "J.P. Morgan / Loomis Sayles / Slow Capital / Sawgrass Asset Management": {
+    "canonical": "J.P. Morgan Asset Management",
+    "is_manager": true
+  },
+  "J.P. Morgan Transition Management": {
+    "canonical": "J.P. Morgan Asset Management",
+    "is_manager": true
+  },
+  "J.P. Morgan, Slow Capital, Loomis Sayles, Sawgrass": {
+    "canonical": "J.P. Morgan Asset Management",
+    "is_manager": true
+  },
+  "JLL Partners": {
+    "canonical": "JLL Partners",
+    "is_manager": true
+  },
+  "JP Morgan": {
+    "canonical": "J.P. Morgan Asset Management",
+    "is_manager": true
+  },
+  "JP Morgan Strategic Property Fund": {
+    "canonical": "J.P. Morgan Asset Management",
+    "is_manager": true
+  },
+  "JP Morgan, IFM, Ullico": {
+    "canonical": "J.P. Morgan Asset Management",
+    "is_manager": true
+  },
+  "JPMorgan": {
+    "canonical": "J.P. Morgan Asset Management",
+    "is_manager": true
+  },
+  "JPMorgan (JPM COIN)": {
+    "canonical": "J.P. Morgan Asset Management",
+    "is_manager": true
+  },
+  "JPMorgan (JPM Coin Fund II)": {
+    "canonical": "J.P. Morgan Asset Management",
+    "is_manager": true
+  },
+  "JPMorgan Investment Management": {
+    "canonical": "J.P. Morgan Asset Management",
+    "is_manager": true
+  },
+  "Janchor": {
+    "canonical": "Janchor Partners",
+    "is_manager": true
+  },
+  "John Romasko": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "individual person name, not a manager entity"
+  },
+  "Jon Putnam": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "individual person name, not a manager entity"
+  },
+  "K2 Mauna Kea": {
+    "canonical": "K2 Mauna Kea",
+    "is_manager": true
+  },
+  "KBI": {
+    "canonical": "KBI Global Investors",
+    "is_manager": true
+  },
+  "KBI (incumbent); Acadian and LSV (candidates)": {
+    "canonical": "KBI Global Investors",
+    "is_manager": true
+  },
+  "KBI Global Investors": {
+    "canonical": "KBI Global Investors",
+    "is_manager": true
+  },
+  "KKR": {
+    "canonical": "KKR",
+    "is_manager": true
+  },
+  "KKR (KKR Global Infrastructure Investors Fund IV)": {
+    "canonical": "KKR",
+    "is_manager": true
+  },
+  "KKR (KKR Real Estate Partners Americas III)": {
+    "canonical": "KKR",
+    "is_manager": true
+  },
+  "KKR Core Investments Fund II": {
+    "canonical": "KKR",
+    "is_manager": true
+  },
+  "KKR Europe VI": {
+    "canonical": "KKR",
+    "is_manager": true
+  },
+  "KKR Prisma": {
+    "canonical": "KKR Prisma",
+    "is_manager": true
+  },
+  "KSL Credit Opportunities": {
+    "canonical": "KSL Capital Partners",
+    "is_manager": true
+  },
+  "Kayne Anderson": {
+    "canonical": "Kayne Anderson Capital Advisors",
+    "is_manager": true
+  },
+  "Kayne Anderson Capital Advisors": {
+    "canonical": "Kayne Anderson Capital Advisors",
+    "is_manager": true
+  },
+  "Kennedy Lewis Capital Partners": {
+    "canonical": "Kennedy Lewis Capital Management",
+    "is_manager": true
+  },
+  "Khosla Ventures": {
+    "canonical": "Khosla Ventures",
+    "is_manager": true
+  },
+  "Kiltearn": {
+    "canonical": "Kiltearn Partners",
+    "is_manager": true
+  },
+  "Kingswood Capital": {
+    "canonical": "Kingswood Capital Management",
+    "is_manager": true
+  },
+  "Kingswood Capital Management": {
+    "canonical": "Kingswood Capital Management",
+    "is_manager": true
+  },
+  "Klarity FX": {
+    "canonical": "Klarity FX",
+    "is_manager": true
+  },
+  "Kohlberg Kravis Roberts & Co.": {
+    "canonical": "KKR",
+    "is_manager": true
+  },
+  "L Squared Capital Partners": {
+    "canonical": "L Squared Capital Partners",
+    "is_manager": true
+  },
+  "L.R. Wechsler, Ltd": {
+    "canonical": "L.R. Wechsler",
+    "is_manager": true
+  },
+  "LACERS/LAFPP": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "pension plan names, not external managers"
+  },
+  "LASERS Internal": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "internal management by pension plan"
+  },
+  "LCN Capital Partners": {
+    "canonical": "LCN Capital Partners",
+    "is_manager": true
+  },
+  "LFL Partners": {
+    "canonical": "LFL Partners",
+    "is_manager": true
+  },
+  "LGT": {
+    "canonical": "LGT Capital Partners",
+    "is_manager": true
+  },
+  "LGT Capital Partners": {
+    "canonical": "LGT Capital Partners",
+    "is_manager": true
+  },
+  "LLR Equity Partner": {
+    "canonical": "LLR Partners",
+    "is_manager": true
+  },
+  "LS Power": {
+    "canonical": "LS Power",
+    "is_manager": true
+  },
+  "LS Power Equity Partners VI, L.P.": {
+    "canonical": "LS Power",
+    "is_manager": true
+  },
+  "LS Power Fund VI, L.P.": {
+    "canonical": "LS Power",
+    "is_manager": true
+  },
+  "LSV": {
+    "canonical": "LSV Asset Management",
+    "is_manager": true
+  },
+  "LSV Asset Management": {
+    "canonical": "LSV Asset Management",
+    "is_manager": true
+  },
+  "Landmark Equity Partners": {
+    "canonical": "Landmark Partners",
+    "is_manager": true
+  },
+  "Landmark Partners": {
+    "canonical": "Landmark Partners",
+    "is_manager": true
+  },
+  "Landmark Partners (Ares Management)": {
+    "canonical": "Landmark Partners",
+    "is_manager": true
+  },
+  "Landmark Real Estate Partners": {
+    "canonical": "Landmark Partners",
+    "is_manager": true
+  },
+  "Lazard": {
+    "canonical": "Lazard Asset Management",
+    "is_manager": true
+  },
+  "Lazard / Aristotle": {
+    "canonical": "Lazard Asset Management",
+    "is_manager": true
+  },
+  "Lazard Asset Management": {
+    "canonical": "Lazard Asset Management",
+    "is_manager": true
+  },
+  "Lazard Asset Management (outflow); ARGA Investment Management (inflow)": {
+    "canonical": "Lazard Asset Management",
+    "is_manager": true
+  },
+  "Lead Edge Capital": {
+    "canonical": "Lead Edge Capital",
+    "is_manager": true
+  },
+  "Lead Edge Capital Partners VII GP, LP": {
+    "canonical": "Lead Edge Capital",
+    "is_manager": true
+  },
+  "Legal & General": {
+    "canonical": "Legal & General Investment Management",
+    "is_manager": true
+  },
+  "Legal & General Investment Management America (LGIMA) - presenter, manager TBD": {
+    "canonical": "Legal & General Investment Management",
+    "is_manager": true
+  },
+  "Leonard Green": {
+    "canonical": "Leonard Green & Partners",
+    "is_manager": true
+  },
+  "Leonard Green Partners": {
+    "canonical": "Leonard Green & Partners",
+    "is_manager": true
+  },
+  "Lexington": {
+    "canonical": "Lexington Partners",
+    "is_manager": true
+  },
+  "Lexington Capital Partners": {
+    "canonical": "Lexington Partners",
+    "is_manager": true
+  },
+  "Lexington Co-Investment Partners": {
+    "canonical": "Lexington Partners",
+    "is_manager": true
+  },
+  "Lexington Partners": {
+    "canonical": "Lexington Partners",
+    "is_manager": true
+  },
+  "Life Cycle Investment Partners": {
+    "canonical": "Life Cycle Investment Partners",
+    "is_manager": true
+  },
+  "Lighthouse Investment Partners, LLC": {
+    "canonical": "Lighthouse Investment Partners",
+    "is_manager": true
+  },
+  "Lightstone Ventures": {
+    "canonical": "Lightstone Ventures",
+    "is_manager": true
+  },
+  "Lingotto": {
+    "canonical": "Lingotto",
+    "is_manager": true
+  },
+  "Lisanti Capital Growth, LLC": {
+    "canonical": "Lisanti Capital Growth",
+    "is_manager": true
+  },
+  "Lone Star Investment Advisors": {
+    "canonical": "Lone Star Investment Advisors",
+    "is_manager": true
+  },
+  "Loomis Sayles": {
+    "canonical": "Loomis Sayles & Company",
+    "is_manager": true
+  },
+  "Loomis Sayles & Company, L.P.": {
+    "canonical": "Loomis Sayles & Company",
+    "is_manager": true
+  },
+  "Loomis, Sayles & Company, L.P.": {
+    "canonical": "Loomis Sayles & Company",
+    "is_manager": true
+  },
+  "Loop Capital": {
+    "canonical": "Loop Capital Asset Management",
+    "is_manager": true
+  },
+  "Loop Capital Asset Management": {
+    "canonical": "Loop Capital Asset Management",
+    "is_manager": true
+  },
+  "Lord Abbett": {
+    "canonical": "Lord Abbett",
+    "is_manager": true
+  },
+  "Lord Abbett & Co.": {
+    "canonical": "Lord Abbett",
+    "is_manager": true
+  },
+  "Los Angeles Fire and Police Pension System": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "pension plan, not a manager"
+  },
+  "Lyme Forest Fund VI": {
+    "canonical": "Lyme Forest Fund VI",
+    "is_manager": true
+  },
+  "Lyric Capital": {
+    "canonical": "Lyric Capital",
+    "is_manager": true
+  },
+  "MFS": {
+    "canonical": "MFS Investment Management",
+    "is_manager": true
+  },
+  "MFS Institutional Advisors, Inc.": {
+    "canonical": "MFS Investment Management",
+    "is_manager": true
+  },
+  "MFS Investment Management": {
+    "canonical": "MFS Investment Management",
+    "is_manager": true
+  },
+  "MIP VI": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "likely a fund vehicle abbreviation without sufficient context to identify a manager"
+  },
+  "MN Asia Investors (Asia Alternatives Management)": {
+    "canonical": "Asia Alternatives Management",
+    "is_manager": true
+  },
+  "MN Asia Investors, LP (Asia Alternatives)": {
+    "canonical": "Asia Alternatives Management",
+    "is_manager": true
+  },
+  "MSCI": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "index/data provider, not an investment manager"
+  },
+  "MSCI / Cambridge": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "index/benchmarking data providers, not investment managers"
+  },
+  "MSCI Burgiss": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "index/data provider, not an investment manager"
+  },
+  "MTP Climate Infrastructure Fund, LLC": {
+    "canonical": "MTP Climate Infrastructure Fund",
+    "is_manager": true
+  },
+  "MWBE non-core real estate manager (name not specified)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "placeholder, manager name not specified"
+  },
+  "MacKay Shields LLC": {
+    "canonical": "MacKay Shields",
+    "is_manager": true
+  },
+  "Macquarie": {
+    "canonical": "Macquarie Asset Management",
+    "is_manager": true
+  },
+  "Macquarie Asset Management": {
+    "canonical": "Macquarie Asset Management",
+    "is_manager": true
+  },
+  "Macquarie Investment Management": {
+    "canonical": "Macquarie Asset Management",
+    "is_manager": true
+  },
+  "Macquarie Investment Management Advisors (MIMA)": {
+    "canonical": "Macquarie Asset Management",
+    "is_manager": true
+  },
+  "Man": {
+    "canonical": "Man Group",
+    "is_manager": true
+  },
+  "Man Group": {
+    "canonical": "Man Group",
+    "is_manager": true
+  },
+  "Man Numeric": {
+    "canonical": "Man Numeric",
+    "is_manager": true
+  },
+  "Manulife": {
+    "canonical": "Manulife Investment Management",
+    "is_manager": true
+  },
+  "Manulife GLC Farms": {
+    "canonical": "Manulife Investment Management",
+    "is_manager": true
+  },
+  "Marathon": {
+    "canonical": "Marathon Asset Management",
+    "is_manager": true
+  },
+  "Marathon Asset Management": {
+    "canonical": "Marathon Asset Management",
+    "is_manager": true
+  },
+  "Marcus Partners": {
+    "canonical": "Marcus Partners",
+    "is_manager": true
+  },
+  "Mariner Institutional": {
+    "canonical": "Mariner Wealth Advisors",
+    "is_manager": true
+  },
+  "Mariner Wealth Advisors": {
+    "canonical": "Mariner Wealth Advisors",
+    "is_manager": true
+  },
+  "Mariner, Asset Strategies": {
+    "canonical": "Mariner Wealth Advisors",
+    "is_manager": true
+  },
+  "Marquette": {
+    "canonical": "Marquette Associates",
+    "is_manager": true
+  },
+  "Marquette Associates": {
+    "canonical": "Marquette Associates",
+    "is_manager": true
+  },
+  "Marquette Associates, Inc. / Maketa Investment Group": {
+    "canonical": "Marquette Associates",
+    "is_manager": true
+  },
+  "Marshall Wace, LLP": {
+    "canonical": "Marshall Wace",
+    "is_manager": true
+  },
+  "Mass Mutual": {
+    "canonical": "MassMutual",
+    "is_manager": true
+  },
+  "McCarthy Capital": {
+    "canonical": "McCarthy Capital",
+    "is_manager": true
+  },
+  "McKinley": {
+    "canonical": "McKinley",
+    "is_manager": true
+  },
+  "Meadow Energy": {
+    "canonical": "Meadow Energy",
+    "is_manager": true
+  },
+  "Media Technology Ventures": {
+    "canonical": "Media Technology Ventures",
+    "is_manager": true
+  },
+  "Meketa": {
+    "canonical": "Meketa Investment Group",
+    "is_manager": true
+  },
+  "Meketa (investment consultant)": {
+    "canonical": "Meketa Investment Group",
+    "is_manager": true
+  },
+  "Meketa / Townsend Group / Aksia": {
+    "canonical": "Meketa Investment Group",
+    "is_manager": true
+  },
+  "Meketa Investment Consulting": {
+    "canonical": "Meketa Investment Group",
+    "is_manager": true
+  },
+  "Meketa Investment Group": {
+    "canonical": "Meketa Investment Group",
+    "is_manager": true
+  },
+  "Meketa Investment Group, Inc.": {
+    "canonical": "Meketa Investment Group",
+    "is_manager": true
+  },
+  "Meketa Investment Group, LLC": {
+    "canonical": "Meketa Investment Group",
+    "is_manager": true
+  },
+  "Meketa Investments": {
+    "canonical": "Meketa Investment Group",
+    "is_manager": true
+  },
+  "Mellon": {
+    "canonical": "Mellon",
+    "is_manager": true
+  },
+  "Mellon Capital Management": {
+    "canonical": "Mellon",
+    "is_manager": true
+  },
+  "Mellon Transition Management": {
+    "canonical": "Mellon",
+    "is_manager": true
+  },
+  "Mercer": {
+    "canonical": "Mercer",
+    "is_manager": true
+  },
+  "Mercer (consultant)": {
+    "canonical": "Mercer",
+    "is_manager": true
+  },
+  "Meridiam": {
+    "canonical": "Meridiam",
+    "is_manager": true
+  },
+  "Merit Capital": {
+    "canonical": "Merit Capital Partners",
+    "is_manager": true
+  },
+  "Merit Capital Partners": {
+    "canonical": "Merit Capital Partners",
+    "is_manager": true
+  },
+  "Meritech Capital Partners": {
+    "canonical": "Meritech Capital Partners",
+    "is_manager": true
+  },
+  "Mesirow Financial": {
+    "canonical": "Mesirow Financial",
+    "is_manager": true
+  },
+  "Mesirow Institutional Investment Management, Inc.": {
+    "canonical": "Mesirow Financial",
+    "is_manager": true
+  },
+  "MetLife": {
+    "canonical": "MetLife",
+    "is_manager": true
+  },
+  "Milliman": {
+    "canonical": "Milliman",
+    "is_manager": true
+  },
+  "Minnesota State Board of Investment": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "pension plan / public investment board, not a manager"
+  },
+  "Minnesota State Board of Investment (SBI)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "pension plan / public investment board, not a manager"
+  },
+  "MissionSquare Retirement": {
+    "canonical": "MissionSquare Retirement",
+    "is_manager": true
+  },
+  "Mitsubishi": {
+    "canonical": "Mitsubishi UFJ Trust and Banking",
+    "is_manager": true
+  },
+  "Mitsubishi UFJ Trust and Banking Corp.": {
+    "canonical": "Mitsubishi UFJ Trust and Banking",
+    "is_manager": true
+  },
+  "Monarch Capital Partners": {
+    "canonical": "Monarch Capital Partners",
+    "is_manager": true
+  },
+  "Mondrian Investment Partners": {
+    "canonical": "Mondrian Investment Partners",
+    "is_manager": true
+  },
+  "Monroe Capital": {
+    "canonical": "Monroe Capital",
+    "is_manager": true
+  },
+  "Moran": {
+    "canonical": "Moran",
+    "is_manager": true
+  },
+  "Morgan Stanley": {
+    "canonical": "Morgan Stanley Investment Management",
+    "is_manager": true
+  },
+  "Morgan Stanley Investment Management": {
+    "canonical": "Morgan Stanley Investment Management",
+    "is_manager": true
+  },
+  "Morgan Stanley and Principal": {
+    "canonical": "Morgan Stanley Investment Management",
+    "is_manager": true
+  },
+  "Morgan Stanley, J.P. Morgan, Prudential, Principal, StepStone": {
+    "canonical": "Morgan Stanley Investment Management",
+    "is_manager": true
+  },
+  "Morgan Stanley, Principal": {
+    "canonical": "Morgan Stanley Investment Management",
+    "is_manager": true
+  },
+  "Mountain Pacific": {
+    "canonical": "Mountain Pacific",
+    "is_manager": true
+  },
+  "Multiple": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "placeholder for multiple unnamed managers"
+  },
+  "Multiple (12 managers, not individually named)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "placeholder for multiple unnamed managers"
+  },
+  "Multiple (17 investment managers across 25 vehicles)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "placeholder for multiple unnamed managers"
+  },
+  "Multiple (2 small cap managers, unnamed)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "placeholder for multiple unnamed managers"
+  },
+  "Multiple (4 large cap active managers, unnamed)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "placeholder for multiple unnamed managers"
+  },
+  "Multiple (4 opportunistic fixed income managers, unnamed)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "placeholder for multiple unnamed managers"
+  },
+  "Multiple (5 managers, not individually named)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "placeholder for multiple unnamed managers"
+  },
+  "Multiple (6 managers, not individually named)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "placeholder for multiple unnamed managers"
+  },
+  "Multiple (AEW Core Property Trust, Carlyle Property Investors, Cortland Growth & Income Fund, Kayne Anderson Core Fund, Lion Industrial Trust, Prime Property Fund, Principal U.S. Property Account among existing managers)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "placeholder listing multiple named managers collectively, not a single manager entity"
+  },
+  "Multiple (Barclays, Capital Guardian, Wellington, Western Asset, Lazard, MFS, Dimensional Fund Advisors, Bear Stearns, Wall Street Associates, Snow Capital, Amerindo, J.P. Morgan, RREEF, Kennedy-MEPT, etc.)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "placeholder listing multiple managers, not a single manager name"
+  },
+  "Multiple (BlackRock, SSGA, Wasatch, Wellington)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "placeholder listing multiple managers, not a single manager name"
+  },
+  "Multiple (Rreef America II, Barings Core Property Fund)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "placeholder listing multiple managers, not a single manager name"
+  },
+  "Multiple (SSgA Active Emerging Markets Fund, ABS Emerging Markets)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "placeholder listing multiple managers, not a single manager name"
+  },
+  "Multiple (Vanguard Ultra Short Duration, Federated Investors)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "placeholder listing multiple managers, not a single manager name"
+  },
+  "Multiple (Xponance, Frontier Capital Management, Vanguard Russell 2000)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "placeholder listing multiple managers, not a single manager name"
+  },
+  "Multiple (not specified)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "generic placeholder"
+  },
+  "Multiple (to be determined)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "generic placeholder"
+  },
+  "Multiple (unspecified)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "generic placeholder"
+  },
+  "Multiple (via secondary offerings)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "generic placeholder"
+  },
+  "Multiple International Equity Managers": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "generic descriptive phrase, not a specific manager"
+  },
+  "Multiple Managers": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "generic placeholder"
+  },
+  "Multiple Short-Term Fixed Income Managers": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "generic descriptive phrase, not a specific manager"
+  },
+  "Multiple advisers": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "generic placeholder"
+  },
+  "Multiple emerging markets managers": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "generic descriptive phrase, not a specific manager"
+  },
+  "Multiple existing managers": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "generic placeholder"
+  },
+  "Multiple hedge fund managers": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "generic descriptive phrase, not a specific manager"
+  },
+  "Multiple internal and external managers": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "generic placeholder"
+  },
+  "Multiple managers": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "generic placeholder"
+  },
+  "Multiple managers including large-cap, SMID, and international strategies": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "generic descriptive phrase, not a specific manager"
+  },
+  "Multiple managers via Callan LLC as investment consultant": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "generic placeholder"
+  },
+  "Multiple minority and women-owned firms": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "generic descriptive phrase, not a specific manager"
+  },
+  "NEPC": {
+    "canonical": "NEPC",
+    "is_manager": true
+  },
+  "NEPC (conducting search)": {
+    "canonical": "NEPC",
+    "is_manager": true
+  },
+  "NEPC (consultant); ASRS IMD (internal)": {
+    "canonical": "NEPC",
+    "is_manager": true
+  },
+  "NEPC, LLC": {
+    "canonical": "NEPC",
+    "is_manager": true
+  },
+  "NGP Resources XIII": {
+    "canonical": "NGP Energy Capital Management",
+    "is_manager": true
+  },
+  "NMS Fund V": {
+    "canonical": "NMS Capital",
+    "is_manager": true
+  },
+  "NYC Comptroller": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "government office, not an investment manager"
+  },
+  "NYCERS": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "pension plan (New York City Employees' Retirement System), not a manager"
+  },
+  "Nautic Partners": {
+    "canonical": "Nautic Partners",
+    "is_manager": true
+  },
+  "NeighborWorks Montana": {
+    "canonical": "NeighborWorks Montana",
+    "is_manager": true
+  },
+  "Neuberger Berman": {
+    "canonical": "Neuberger Berman",
+    "is_manager": true
+  },
+  "Neuberger Berman / Dyal Capital Partners": {
+    "canonical": "Neuberger Berman",
+    "is_manager": true
+  },
+  "Neuberger Berman, Whitebox, Manager A, Kirkoswald": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "placeholder listing multiple managers, not a single manager name"
+  },
+  "New Enterprise Associates": {
+    "canonical": "New Enterprise Associates",
+    "is_manager": true
+  },
+  "New Enterprise Associates (NEA)": {
+    "canonical": "New Enterprise Associates",
+    "is_manager": true
+  },
+  "New Mountain Capital": {
+    "canonical": "New Mountain Capital",
+    "is_manager": true
+  },
+  "New York Life": {
+    "canonical": "New York Life Investment Management",
+    "is_manager": true
+  },
+  "New private equity firm (unnamed)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "unnamed placeholder, not a specific manager"
+  },
+  "Newport Capital Partners": {
+    "canonical": "Newport Capital Partners",
+    "is_manager": true
+  },
+  "Newton Investment Management North America LLC": {
+    "canonical": "Newton Investment Management",
+    "is_manager": true
+  },
+  "Niobrara": {
+    "canonical": "Niobrara",
+    "is_manager": true
+  },
+  "Nomura": {
+    "canonical": "Nomura Asset Management",
+    "is_manager": true
+  },
+  "Nomura Corporate Research and Asset Management Inc.": {
+    "canonical": "Nomura Corporate Research and Asset Management",
+    "is_manager": true
+  },
+  "Nordic Capital": {
+    "canonical": "Nordic Capital",
+    "is_manager": true
+  },
+  "Nordic Capital XI": {
+    "canonical": "Nordic Capital",
+    "is_manager": true
+  },
+  "Northern Trust": {
+    "canonical": "Northern Trust",
+    "is_manager": true
+  },
+  "Northern Trust / Bank of New York": {
+    "canonical": "Northern Trust",
+    "is_manager": true
+  },
+  "Northern Trust Investments, Inc.": {
+    "canonical": "Northern Trust",
+    "is_manager": true
+  },
+  "Not specified": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "generic placeholder"
+  },
+  "Not specified (recommended by Aksia TorreyCove Partners and NYC Comptroller)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "generic placeholder"
+  },
+  "Nova Infrastructure": {
+    "canonical": "Nova Infrastructure",
+    "is_manager": true
+  },
+  "Numeric Investors, LLC": {
+    "canonical": "Numeric Investors",
+    "is_manager": true
+  },
+  "Nuveen": {
+    "canonical": "Nuveen",
+    "is_manager": true
+  },
+  "Nuveen Asset Management / Fifth Third/MainStreet Investment Advisors": {
+    "canonical": "Nuveen",
+    "is_manager": true
+  },
+  "Nuveen Investment Management": {
+    "canonical": "Nuveen",
+    "is_manager": true
+  },
+  "Nuveen/TIAA": {
+    "canonical": "Nuveen",
+    "is_manager": true
+  },
+  "O'Brien Staley Partners": {
+    "canonical": "O'Brien Staley Partners",
+    "is_manager": true
+  },
+  "ORG": {
+    "canonical": "ORG Portfolio Management",
+    "is_manager": true
+  },
+  "ORG Portfolio Management / American Realty": {
+    "canonical": "ORG Portfolio Management",
+    "is_manager": true
+  },
+  "ORG Portfolio Management LLC": {
+    "canonical": "ORG Portfolio Management",
+    "is_manager": true
+  },
+  "Oak HC/FT Partners": {
+    "canonical": "Oak HC/FT Partners",
+    "is_manager": true
+  },
+  "Oak Hill Advisors": {
+    "canonical": "Oak Hill Advisors",
+    "is_manager": true
+  },
+  "Oaktree": {
+    "canonical": "Oaktree Capital Management",
+    "is_manager": true
+  },
+  "Oaktree Capital Management": {
+    "canonical": "Oaktree Capital Management",
+    "is_manager": true
+  },
+  "Oaktree Special Situations Fund III": {
+    "canonical": "Oaktree Capital Management",
+    "is_manager": true
+  },
+  "Oaktree Special Situations Fund IV": {
+    "canonical": "Oaktree Capital Management",
+    "is_manager": true
+  },
+  "OceanSound Partners": {
+    "canonical": "OceanSound Partners",
+    "is_manager": true
+  },
+  "Odyssey Investment Partners": {
+    "canonical": "Odyssey Investment Partners",
+    "is_manager": true
+  },
+  "Olympus Partners": {
+    "canonical": "Olympus Partners",
+    "is_manager": true
+  },
+  "Omar Martin": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "appears to be an individual person's name, not a firm"
+  },
+  "OneRock Capital Partners": {
+    "canonical": "OneRock Capital Partners",
+    "is_manager": true
+  },
+  "OrbiMed": {
+    "canonical": "OrbiMed",
+    "is_manager": true
+  },
+  "Orbis": {
+    "canonical": "Orbis",
+    "is_manager": true
+  },
+  "Orchard Platform": {
+    "canonical": "Orchard Platform",
+    "is_manager": true
+  },
+  "Otro Capital Fund I, L.P.": {
+    "canonical": "Otro Capital",
+    "is_manager": true
+  },
+  "Overland Advantage": {
+    "canonical": "Overland Advantage",
+    "is_manager": true
+  },
+  "PEARLS": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "appears to be an acronym for a program or index, not a manager"
+  },
+  "PEWIN (Private Equity Women Investor Network)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "industry network/association, not an investment manager"
+  },
+  "PFM Asset Management": {
+    "canonical": "PFM Asset Management",
+    "is_manager": true
+  },
+  "PGIM Quantitative Solutions, LLC": {
+    "canonical": "PGIM Quantitative Solutions",
+    "is_manager": true
+  },
+  "PGIM Real Estate (PRISA)": {
+    "canonical": "PGIM Real Estate",
+    "is_manager": true
+  },
+  "PIMCO": {
+    "canonical": "PIMCO",
+    "is_manager": true
+  },
+  "PRISA III": {
+    "canonical": "PGIM Real Estate",
+    "is_manager": true
+  },
+  "PSG": {
+    "canonical": "PSG",
+    "is_manager": true
+  },
+  "PSG Europe III S.C.Sp.": {
+    "canonical": "PSG",
+    "is_manager": true
+  },
+  "PSG V, LP": {
+    "canonical": "PSG",
+    "is_manager": true
+  },
+  "Paamco Prisma": {
+    "canonical": "PAAMCO Prisma",
+    "is_manager": true
+  },
+  "Pacific Investment Management Company LLC": {
+    "canonical": "PIMCO",
+    "is_manager": true
+  },
+  "Pacific Investment Management Company, LLC": {
+    "canonical": "PIMCO",
+    "is_manager": true
+  },
+  "Paine Schwartz": {
+    "canonical": "Paine Schwartz Partners",
+    "is_manager": true
+  },
+  "Palisade": {
+    "canonical": "Palisade Capital Management",
+    "is_manager": true
+  },
+  "Palisade / Vanguard": {
+    "canonical": "Palisade Capital Management",
+    "is_manager": true
+  },
+  "Palisade Capital Management, LP": {
+    "canonical": "Palisade Capital Management",
+    "is_manager": true
+  },
+  "Palladium": {
+    "canonical": "Palladium Equity Partners",
+    "is_manager": true
+  },
+  "Palladium Equity Partners": {
+    "canonical": "Palladium Equity Partners",
+    "is_manager": true
+  },
+  "PanAgora": {
+    "canonical": "PanAgora Asset Management",
+    "is_manager": true
+  },
+  "Pantheon": {
+    "canonical": "Pantheon",
+    "is_manager": true
+  },
+  "Parametric": {
+    "canonical": "Parametric Portfolio Associates",
+    "is_manager": true
+  },
+  "Parametric Advisors, LLC": {
+    "canonical": "Parametric Portfolio Associates",
+    "is_manager": true
+  },
+  "Parametric Defensive Equity": {
+    "canonical": "Parametric Portfolio Associates",
+    "is_manager": true
+  },
+  "Partners Group": {
+    "canonical": "Partners Group",
+    "is_manager": true
+  },
+  "Partners Group / Brightwood": {
+    "canonical": "Partners Group",
+    "is_manager": true
+  },
+  "Partners Group Private Credit Strategy Class A": {
+    "canonical": "Partners Group",
+    "is_manager": true
+  },
+  "Pathlight Capital": {
+    "canonical": "Pathlight Capital",
+    "is_manager": true
+  },
+  "Pathway": {
+    "canonical": "Pathway Capital Management",
+    "is_manager": true
+  },
+  "Pathway Capital Management": {
+    "canonical": "Pathway Capital Management",
+    "is_manager": true
+  },
+  "Patient Capital": {
+    "canonical": "Patient Capital Management",
+    "is_manager": true
+  },
+  "Payden & Rygel": {
+    "canonical": "Payden & Rygel",
+    "is_manager": true
+  },
+  "Pemberton": {
+    "canonical": "Pemberton Capital Advisors",
+    "is_manager": true
+  },
+  "Pemberton Capital Management": {
+    "canonical": "Pemberton Capital Advisors",
+    "is_manager": true
+  },
+  "Pemberton Strategic Credit Fund IV": {
+    "canonical": "Pemberton Capital Advisors",
+    "is_manager": true
+  },
+  "Pension Manager": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "generic placeholder/role description, not a firm name"
+  },
+  "Peppertree Capital": {
+    "canonical": "Peppertree Capital Management",
+    "is_manager": true
+  },
+  "Peppertree Capital Management": {
+    "canonical": "Peppertree Capital Management",
+    "is_manager": true
+  },
+  "Permira": {
+    "canonical": "Permira",
+    "is_manager": true
+  },
+  "Permira Credit": {
+    "canonical": "Permira",
+    "is_manager": true
+  },
+  "Pharos Capital": {
+    "canonical": "Pharos Capital Group",
+    "is_manager": true
+  },
+  "Phocas": {
+    "canonical": "Phocas Financial",
+    "is_manager": true
+  },
+  "Pimco RAE": {
+    "canonical": "PIMCO RAE",
+    "is_manager": true
+  },
+  "Pine Bridge": {
+    "canonical": "PineBridge Investments",
+    "is_manager": true
+  },
+  "PineBridge": {
+    "canonical": "PineBridge Investments",
+    "is_manager": true
+  },
+  "PineBridge / Fidelity": {
+    "canonical": "PineBridge Investments / Fidelity",
+    "is_manager": true
+  },
+  "PineBridge Investments": {
+    "canonical": "PineBridge Investments",
+    "is_manager": true
+  },
+  "Plexus Fund VII, L.P.": {
+    "canonical": "Plexus Fund VII",
+    "is_manager": true
+  },
+  "Pomona Capital": {
+    "canonical": "Pomona Capital",
+    "is_manager": true
+  },
+  "Portland Advisors": {
+    "canonical": "Portland Advisors",
+    "is_manager": true
+  },
+  "Primary Venture Partners": {
+    "canonical": "Primary Venture Partners",
+    "is_manager": true
+  },
+  "Primary Wave": {
+    "canonical": "Primary Wave",
+    "is_manager": true
+  },
+  "Primary Wave Music IP Fund 4": {
+    "canonical": "Primary Wave",
+    "is_manager": true
+  },
+  "Prime Property Fund, LLC": {
+    "canonical": "Prime Property Fund",
+    "is_manager": true
+  },
+  "Principal": {
+    "canonical": "Principal Global Investors",
+    "is_manager": true
+  },
+  "Principal Bank": {
+    "canonical": "Principal Bank",
+    "is_manager": true
+  },
+  "Principal Global Investors, LLC": {
+    "canonical": "Principal Global Investors",
+    "is_manager": true
+  },
+  "Principal International": {
+    "canonical": "Principal International",
+    "is_manager": true
+  },
+  "Private Markets": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "asset class descriptor, not a manager name"
+  },
+  "Prudential": {
+    "canonical": "Prudential Financial",
+    "is_manager": true
+  },
+  "Public Pension Capital, LLC": {
+    "canonical": "Public Pension Capital",
+    "is_manager": true
+  },
+  "QED": {
+    "canonical": "QED",
+    "is_manager": true
+  },
+  "QMA and SSGA": {
+    "canonical": "QMA / SSGA",
+    "is_manager": true
+  },
+  "Quad-C": {
+    "canonical": "Quad-C Management",
+    "is_manager": true
+  },
+  "Quantum Energy Partners": {
+    "canonical": "Quantum Energy Partners",
+    "is_manager": true
+  },
+  "RAM Realty": {
+    "canonical": "RAM Realty Advisors",
+    "is_manager": true
+  },
+  "RCLCO Fund Advisors": {
+    "canonical": "RCLCO Fund Advisors",
+    "is_manager": true
+  },
+  "RS Investments": {
+    "canonical": "RS Investments",
+    "is_manager": true
+  },
+  "RV Kuhns and Associates (RVK)": {
+    "canonical": "RVK",
+    "is_manager": true
+  },
+  "RVK": {
+    "canonical": "RVK",
+    "is_manager": true
+  },
+  "RVK (incumbent)": {
+    "canonical": "RVK",
+    "is_manager": true
+  },
+  "RVK Investment Consultant": {
+    "canonical": "RVK",
+    "is_manager": true
+  },
+  "RVK, Inc.": {
+    "canonical": "RVK",
+    "is_manager": true
+  },
+  "Raith": {
+    "canonical": "Raith Capital Partners",
+    "is_manager": true
+  },
+  "Rande Muffick": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "appears to be an individual person's name, not a firm"
+  },
+  "Real Term": {
+    "canonical": "RealTerm",
+    "is_manager": true
+  },
+  "Real Term Logistics": {
+    "canonical": "RealTerm",
+    "is_manager": true
+  },
+  "Redwood": {
+    "canonical": "Redwood Capital Management",
+    "is_manager": true
+  },
+  "Redwood Capital Management": {
+    "canonical": "Redwood Capital Management",
+    "is_manager": true
+  },
+  "Regal Healthcare Capital Partners IV, L.P.": {
+    "canonical": "Regal Healthcare Capital Partners",
+    "is_manager": true
+  },
+  "Retirement System Investment Commission (RSIC)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "pension plan / investment commission, not a manager"
+  },
+  "RhumbLine": {
+    "canonical": "RhumbLine Advisers",
+    "is_manager": true
+  },
+  "RhumbLine Advisers, LP": {
+    "canonical": "RhumbLine Advisers",
+    "is_manager": true
+  },
+  "Ridgemont Equity Partners": {
+    "canonical": "Ridgemont Equity Partners",
+    "is_manager": true
+  },
+  "Riverside": {
+    "canonical": "The Riverside Company",
+    "is_manager": true
+  },
+  "Riverstone": {
+    "canonical": "Riverstone Holdings",
+    "is_manager": true
+  },
+  "Robbins Geller": {
+    "canonical": "Robbins Geller Rudman & Dowd",
+    "is_manager": true
+  },
+  "Robert W. Baird & Co. Incorporated": {
+    "canonical": "Robert W. Baird & Co.",
+    "is_manager": true
+  },
+  "Rock Creek": {
+    "canonical": "Rock Creek Group",
+    "is_manager": true
+  },
+  "Rockwood Capital": {
+    "canonical": "Rockwood Capital",
+    "is_manager": true
+  },
+  "Russell": {
+    "canonical": "Russell Investments",
+    "is_manager": true
+  },
+  "Russell Implementation Services (transition manager)": {
+    "canonical": "Russell Investments",
+    "is_manager": true
+  },
+  "Russell Investments": {
+    "canonical": "Russell Investments",
+    "is_manager": true
+  },
+  "S3 LB Real Estate Credit III, L.P.": {
+    "canonical": "S3 LB Real Estate Credit III",
+    "is_manager": true
+  },
+  "SB&H": {
+    "canonical": "SB&H",
+    "is_manager": true
+  },
+  "SDC": {
+    "canonical": "SDC Capital Partners",
+    "is_manager": true
+  },
+  "SDC Capital Partners": {
+    "canonical": "SDC Capital Partners",
+    "is_manager": true
+  },
+  "SIS": {
+    "canonical": "SIS",
+    "is_manager": true
+  },
+  "SJ Progress Point LLC / TriStar Property Associates LLC / Contegra Construction": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "appears to be a real estate development / construction joint venture, not a pension investment manager"
+  },
+  "SME Consulting": {
+    "canonical": "SME Consulting",
+    "is_manager": true
+  },
+  "SMID Investment Manager (name not disclosed in document)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "placeholder — actual manager name not disclosed"
+  },
+  "SV Biotech": {
+    "canonical": "SV Biotech",
+    "is_manager": true
+  },
+  "SWIB": {
+    "canonical": "State of Wisconsin Investment Board",
+    "is_manager": true
+  },
+  "SWIB (State of Wisconsin Investment Board)": {
+    "canonical": "State of Wisconsin Investment Board",
+    "is_manager": true
+  },
+  "SWIB / BNY (securities lending agent)": {
+    "canonical": "BNY Mellon",
+    "is_manager": true
+  },
+  "Saba Capital": {
+    "canonical": "Saba Capital",
+    "is_manager": true
+  },
+  "Sands Capital Alternatives": {
+    "canonical": "Sands Capital Alternatives",
+    "is_manager": true
+  },
+  "Sands Capital Alternatives LLC": {
+    "canonical": "Sands Capital Alternatives",
+    "is_manager": true
+  },
+  "Sapphire Venture Fund 7": {
+    "canonical": "Sapphire Ventures",
+    "is_manager": true
+  },
+  "Sapphire Ventures": {
+    "canonical": "Sapphire Ventures",
+    "is_manager": true
+  },
+  "Sapphire and Windhaven": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "compound phrase referencing multiple managers, not a single manager name"
+  },
+  "Sares Regis": {
+    "canonical": "Sares Regis",
+    "is_manager": true
+  },
+  "Savano Capital Partners": {
+    "canonical": "Savano Capital Partners",
+    "is_manager": true
+  },
+  "Savills, Inc.": {
+    "canonical": "Savills",
+    "is_manager": true
+  },
+  "Sawgrass": {
+    "canonical": "Sawgrass Asset Management",
+    "is_manager": true
+  },
+  "Sawgrass Asset Management": {
+    "canonical": "Sawgrass Asset Management",
+    "is_manager": true
+  },
+  "Schroders": {
+    "canonical": "Schroders",
+    "is_manager": true
+  },
+  "Schroders Investment Management N.A. Inc.": {
+    "canonical": "Schroders",
+    "is_manager": true
+  },
+  "Scientific Beta": {
+    "canonical": "Scientific Beta",
+    "is_manager": true
+  },
+  "Scout Investments, Inc. (Reams Asset Management)": {
+    "canonical": "Reams Asset Management",
+    "is_manager": true
+  },
+  "Sculptor Real Estate": {
+    "canonical": "Sculptor Real Estate",
+    "is_manager": true
+  },
+  "Securities Finance Trust Company": {
+    "canonical": "Securities Finance Trust Company",
+    "is_manager": true
+  },
+  "Segal Marco Advisors": {
+    "canonical": "Segal Marco Advisors",
+    "is_manager": true
+  },
+  "Segal, Bryant, & Hamill": {
+    "canonical": "Segall Bryant & Hamill",
+    "is_manager": true
+  },
+  "Segall Bryant & Hamill, LLC": {
+    "canonical": "Segall Bryant & Hamill",
+    "is_manager": true
+  },
+  "Segall, Bryant & Hamill": {
+    "canonical": "Segall Bryant & Hamill",
+    "is_manager": true
+  },
+  "Select Equity Cooper Square": {
+    "canonical": "Select Equity Group",
+    "is_manager": true
+  },
+  "Shenkman Capital": {
+    "canonical": "Shenkman Capital Management",
+    "is_manager": true
+  },
+  "Shenkman Capital Management": {
+    "canonical": "Shenkman Capital Management",
+    "is_manager": true
+  },
+  "Sigular Guff": {
+    "canonical": "Siguler Guff",
+    "is_manager": true
+  },
+  "Siguler Guff": {
+    "canonical": "Siguler Guff",
+    "is_manager": true
+  },
+  "Siguler Guff, JP Morgan, Timber Bay": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "compound phrase referencing multiple managers, not a single manager name"
+  },
+  "Silver Lake": {
+    "canonical": "Silver Lake",
+    "is_manager": true
+  },
+  "Siris": {
+    "canonical": "Siris Partners",
+    "is_manager": true
+  },
+  "Siris Partners": {
+    "canonical": "Siris Partners",
+    "is_manager": true
+  },
+  "Siris Partners V": {
+    "canonical": "Siris Partners",
+    "is_manager": true
+  },
+  "Sixth Street": {
+    "canonical": "Sixth Street Partners",
+    "is_manager": true
+  },
+  "Sixth Street Partners": {
+    "canonical": "Sixth Street Partners",
+    "is_manager": true
+  },
+  "Sixth Street Partners (Sixth Street Opportunities Partners V)": {
+    "canonical": "Sixth Street Partners",
+    "is_manager": true
+  },
+  "Sound Point Capital": {
+    "canonical": "Sound Point Capital",
+    "is_manager": true
+  },
+  "Spark Capital": {
+    "canonical": "Spark Capital",
+    "is_manager": true
+  },
+  "Square Nine": {
+    "canonical": "Square Nine",
+    "is_manager": true
+  },
+  "Stanley Iezman, American Realty Advisors": {
+    "canonical": "American Realty Advisors",
+    "is_manager": true
+  },
+  "State Board of Administration": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "pension/investment board, not a manager"
+  },
+  "State Board of Investment (SBI)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "pension/investment board, not a manager"
+  },
+  "State Street": {
+    "canonical": "State Street",
+    "is_manager": true
+  },
+  "State Street Bank": {
+    "canonical": "State Street",
+    "is_manager": true
+  },
+  "State Street Bank & Trust": {
+    "canonical": "State Street",
+    "is_manager": true
+  },
+  "State Street Bank and Trust": {
+    "canonical": "State Street",
+    "is_manager": true
+  },
+  "State Street Bank and Trust Company": {
+    "canonical": "State Street",
+    "is_manager": true
+  },
+  "State Street Corporation": {
+    "canonical": "State Street",
+    "is_manager": true
+  },
+  "State Street Global Advisers": {
+    "canonical": "State Street Global Advisors",
+    "is_manager": true
+  },
+  "State Street Global Advisors": {
+    "canonical": "State Street Global Advisors",
+    "is_manager": true
+  },
+  "State Street Global Advisors (SSGA)": {
+    "canonical": "State Street Global Advisors",
+    "is_manager": true
+  },
+  "State Street Global Markets": {
+    "canonical": "State Street Global Markets",
+    "is_manager": true
+  },
+  "State Street, Inc.": {
+    "canonical": "State Street",
+    "is_manager": true
+  },
+  "State of Michigan Bureau of Investments": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "government investment bureau/pension entity, not a manager"
+  },
+  "Stellex": {
+    "canonical": "Stellex Capital",
+    "is_manager": true
+  },
+  "Stellex Capital": {
+    "canonical": "Stellex Capital",
+    "is_manager": true
+  },
+  "Stellex Capital Partners": {
+    "canonical": "Stellex Capital",
+    "is_manager": true
+  },
+  "Stellus": {
+    "canonical": "Stellus Capital Management",
+    "is_manager": true
+  },
+  "StepStone Group": {
+    "canonical": "StepStone Group",
+    "is_manager": true
+  },
+  "StepStone Group LP": {
+    "canonical": "StepStone Group",
+    "is_manager": true
+  },
+  "StepStone Group Private Debt LLC": {
+    "canonical": "StepStone Group",
+    "is_manager": true
+  },
+  "Stepstone": {
+    "canonical": "StepStone Group",
+    "is_manager": true
+  },
+  "Stockbridge": {
+    "canonical": "Stockbridge Capital Group",
+    "is_manager": true
+  },
+  "Stone Point": {
+    "canonical": "Stone Point Capital",
+    "is_manager": true
+  },
+  "Stone Point Capital": {
+    "canonical": "Stone Point Capital",
+    "is_manager": true
+  },
+  "Stonepeak": {
+    "canonical": "Stonepeak",
+    "is_manager": true
+  },
+  "Stonepeak Partners LP": {
+    "canonical": "Stonepeak",
+    "is_manager": true
+  },
+  "Strategic Partners": {
+    "canonical": "Strategic Partners",
+    "is_manager": true
+  },
+  "Strategic Value": {
+    "canonical": "Strategic Value Partners",
+    "is_manager": true
+  },
+  "Strategic Value Partners": {
+    "canonical": "Strategic Value Partners",
+    "is_manager": true
+  },
+  "Sumeru Equity Partners": {
+    "canonical": "Sumeru Equity Partners",
+    "is_manager": true
+  },
+  "Summit": {
+    "canonical": "Summit Partners",
+    "is_manager": true
+  },
+  "Summit Growth Equity": {
+    "canonical": "Summit Partners",
+    "is_manager": true
+  },
+  "Summit Partners": {
+    "canonical": "Summit Partners",
+    "is_manager": true
+  },
+  "Summit Partners (Summit Partners Growth Equity Fund XI)": {
+    "canonical": "Summit Partners",
+    "is_manager": true
+  },
+  "SurgoCap": {
+    "canonical": "SurgoCap",
+    "is_manager": true
+  },
+  "Sycamore Partners": {
+    "canonical": "Sycamore Partners",
+    "is_manager": true
+  },
+  "Sycamore Partners II": {
+    "canonical": "Sycamore Partners",
+    "is_manager": true
+  },
+  "T. Rowe / Mass Mutual": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "combined placeholder referencing multiple entities; not a single manager"
+  },
+  "T. Rowe Price": {
+    "canonical": "T. Rowe Price",
+    "is_manager": true
+  },
+  "T. Rowe Price / BlackRock": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "combined placeholder referencing multiple distinct managers"
+  },
+  "T. Rowe Price Associates, Inc.": {
+    "canonical": "T. Rowe Price",
+    "is_manager": true
+  },
+  "TA Associates Management": {
+    "canonical": "TA Associates",
+    "is_manager": true
+  },
+  "TA Fund XV": {
+    "canonical": "TA Associates",
+    "is_manager": true
+  },
+  "TA Realty": {
+    "canonical": "TA Realty",
+    "is_manager": true
+  },
+  "TA Realty LLC": {
+    "canonical": "TA Realty",
+    "is_manager": true
+  },
+  "TBD": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "placeholder"
+  },
+  "TBD (multiple finalists)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "placeholder"
+  },
+  "TBD – finalists include Legal & General Asset Management, NISA Investment Advisors, Parametric Portfolio Associates, Russell Investments, State Street Investment Management": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "placeholder listing multiple finalists, not a single manager"
+  },
+  "TCI": {
+    "canonical": "TCI Fund Management",
+    "is_manager": true
+  },
+  "TCI Real Estate Partners": {
+    "canonical": "TCI Real Estate Partners",
+    "is_manager": true
+  },
+  "TCW": {
+    "canonical": "TCW",
+    "is_manager": true
+  },
+  "TCW Brazos Fund LLC": {
+    "canonical": "TCW",
+    "is_manager": true
+  },
+  "TCW Metropolitan West Asset Management": {
+    "canonical": "Metropolitan West Asset Management",
+    "is_manager": true
+  },
+  "TIAA": {
+    "canonical": "TIAA",
+    "is_manager": true
+  },
+  "TIAA, Fidelity": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "combined placeholder referencing multiple distinct managers"
+  },
+  "TIAA-CREF Tuition Financing Inc.": {
+    "canonical": "TIAA",
+    "is_manager": true
+  },
+  "TIAA-CREF Tuition Financing Inc. (TFI)": {
+    "canonical": "TIAA",
+    "is_manager": true
+  },
+  "TIAA/CREF": {
+    "canonical": "TIAA",
+    "is_manager": true
+  },
+  "TPG": {
+    "canonical": "TPG Capital",
+    "is_manager": true
+  },
+  "TPG Capital": {
+    "canonical": "TPG Capital",
+    "is_manager": true
+  },
+  "TPG Partners IX": {
+    "canonical": "TPG Capital",
+    "is_manager": true
+  },
+  "TPG Partners X, L.P.": {
+    "canonical": "TPG Capital",
+    "is_manager": true
+  },
+  "TPG Twin Brook": {
+    "canonical": "TPG Twin Brook",
+    "is_manager": true
+  },
+  "TRP": {
+    "canonical": "T. Rowe Price",
+    "is_manager": true
+  },
+  "TRS Investment Management Division and Aon": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "combined reference to an internal plan division and a consultant, not a single external manager"
+  },
+  "TRS Staff": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "internal pension plan staff, not an external manager"
+  },
+  "TSG": {
+    "canonical": "TSG Consumer Partners",
+    "is_manager": true
+  },
+  "TSG Consumer Partners": {
+    "canonical": "TSG Consumer Partners",
+    "is_manager": true
+  },
+  "TSG9": {
+    "canonical": "TSG Consumer Partners",
+    "is_manager": true
+  },
+  "Tenex Capital Partners": {
+    "canonical": "Tenex Capital Partners",
+    "is_manager": true
+  },
+  "TerraCap Management": {
+    "canonical": "TerraCap Management",
+    "is_manager": true
+  },
+  "The Blackstone Group": {
+    "canonical": "Blackstone",
+    "is_manager": true
+  },
+  "The Blackstone Group (Blackstone Real Estate Partners Asia III)": {
+    "canonical": "Blackstone",
+    "is_manager": true
+  },
+  "The Carlyle Group": {
+    "canonical": "The Carlyle Group",
+    "is_manager": true
+  },
+  "The Carlyle Group (Carlyle Partners VIII)": {
+    "canonical": "The Carlyle Group",
+    "is_manager": true
+  },
+  "The Carlyle Group (Carlyle/MN Co-Invest)": {
+    "canonical": "The Carlyle Group",
+    "is_manager": true
+  },
+  "The Jordan Company": {
+    "canonical": "The Jordan Company",
+    "is_manager": true
+  },
+  "The Townsend Group": {
+    "canonical": "The Townsend Group",
+    "is_manager": true
+  },
+  "The Townsend Group / CBRE Investment Management / Principal (Real Estate)": {
+    "canonical": "The Townsend Group / CBRE Investment Management / Principal Real Estate",
+    "is_manager": true
+  },
+  "Thoma Bravo": {
+    "canonical": "Thoma Bravo",
+    "is_manager": true
+  },
+  "Thoma Bravo XV": {
+    "canonical": "Thoma Bravo",
+    "is_manager": true
+  },
+  "Thomas H. Lee": {
+    "canonical": "Thomas H. Lee Partners",
+    "is_manager": true
+  },
+  "Thomas H. Lee Partners": {
+    "canonical": "Thomas H. Lee Partners",
+    "is_manager": true
+  },
+  "Thompson Siegal & Walmsley": {
+    "canonical": "Thompson, Siegel & Walmsley",
+    "is_manager": true
+  },
+  "Thompson, Siegal, and Walmsley (TSW)": {
+    "canonical": "Thompson, Siegel & Walmsley",
+    "is_manager": true
+  },
+  "Three unnamed external money managers": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "placeholder for unnamed managers"
+  },
+  "Timber Bay": {
+    "canonical": "Timber Bay",
+    "is_manager": true
+  },
+  "Tishman Speyer": {
+    "canonical": "Tishman Speyer",
+    "is_manager": true
+  },
+  "To be selected from Acadian Asset Management LLC, AllianceBernstein L.P., or Numeric Investors LLC": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "placeholder, manager not yet selected"
+  },
+  "To be selected via RFI/RFP process": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "placeholder, manager not yet selected"
+  },
+  "Todd Asset Management": {
+    "canonical": "Todd Asset Management",
+    "is_manager": true
+  },
+  "Top Tier": {
+    "canonical": "Top Tier Capital Partners",
+    "is_manager": true
+  },
+  "Top Tier Capital Partners": {
+    "canonical": "Top Tier Capital Partners",
+    "is_manager": true
+  },
+  "Torchlight": {
+    "canonical": "Torchlight Investors",
+    "is_manager": true
+  },
+  "Torchlight Investors": {
+    "canonical": "Torchlight Investors",
+    "is_manager": true
+  },
+  "Tortoise": {
+    "canonical": "Tortoise Capital Advisors",
+    "is_manager": true
+  },
+  "Tortoise Capital Advisors": {
+    "canonical": "Tortoise Capital Advisors",
+    "is_manager": true
+  },
+  "Townsend": {
+    "canonical": "The Townsend Group",
+    "is_manager": true
+  },
+  "Townsend (real estate advisor)": {
+    "canonical": "The Townsend Group",
+    "is_manager": true
+  },
+  "Townsend Group": {
+    "canonical": "The Townsend Group",
+    "is_manager": true
+  },
+  "Tradewinds": {
+    "canonical": "Tradewinds",
+    "is_manager": true
+  },
+  "TrailWest Bank": {
+    "canonical": "TrailWest Bank",
+    "is_manager": true
+  },
+  "Tree Line": {
+    "canonical": "Tree Line",
+    "is_manager": true
+  },
+  "Trent Kaeslin": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "individual person's name, not a firm"
+  },
+  "Trian Partners": {
+    "canonical": "Trian Partners",
+    "is_manager": true
+  },
+  "Trident Capital": {
+    "canonical": "Trident Capital",
+    "is_manager": true
+  },
+  "Trident X": {
+    "canonical": "Trident Capital",
+    "is_manager": true
+  },
+  "Trinity Ventures": {
+    "canonical": "Trinity Ventures",
+    "is_manager": true
+  },
+  "Trive Capital": {
+    "canonical": "Trive Capital",
+    "is_manager": true
+  },
+  "TruAmerica Workforce Housing Fund": {
+    "canonical": "TruAmerica Multifamily",
+    "is_manager": true
+  },
+  "Truelink Capital": {
+    "canonical": "Truelink Capital",
+    "is_manager": true
+  },
+  "Truist Bank": {
+    "canonical": "Truist Bank",
+    "is_manager": true
+  },
+  "Two MWBE managers (names not specified)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "placeholder for unnamed managers"
+  },
+  "Two MWBE private equity managers (names not specified)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "placeholder for unnamed managers"
+  },
+  "Two emerging managers (names not specified)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "placeholder for unnamed managers"
+  },
+  "UBS Trumbull Property Fund": {
+    "canonical": "UBS Trumbull Property Fund",
+    "is_manager": true
+  },
+  "Undisclosed": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "placeholder, manager not named"
+  },
+  "Undisclosed (confidential)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "placeholder, manager not named"
+  },
+  "Undisclosed (fund manager not named)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "placeholder, manager not named"
+  },
+  "Undisclosed (per Comptroller recommendation)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "placeholder, manager not named"
+  },
+  "Undisclosed (within SMID White Label structure)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "placeholder, manager not named"
+  },
+  "Unnamed Private Equity manager": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "placeholder for unnamed manager"
+  },
+  "Unnamed opportunistic equity manager": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "placeholder for unnamed manager"
+  },
+  "Updata": {
+    "canonical": "Updata Partners",
+    "is_manager": true
+  },
+  "Updata Partners": {
+    "canonical": "Updata Partners",
+    "is_manager": true
+  },
+  "Valstone": {
+    "canonical": "Valstone",
+    "is_manager": true
+  },
+  "ValueAct": {
+    "canonical": "ValueAct Capital",
+    "is_manager": true
+  },
+  "Vance Street": {
+    "canonical": "Vance Street Capital",
+    "is_manager": true
+  },
+  "Vance Street Capital": {
+    "canonical": "Vance Street Capital",
+    "is_manager": true
+  },
+  "Vanguard": {
+    "canonical": "Vanguard",
+    "is_manager": true
+  },
+  "Vanguard (replacing Hartford)": {
+    "canonical": "Vanguard",
+    "is_manager": true
+  },
+  "Vanguard / Palisade Capital Management": {
+    "canonical": "Vanguard / Palisade Capital Management",
+    "is_manager": true
+  },
+  "Vanguard International": {
+    "canonical": "Vanguard",
+    "is_manager": true
+  },
+  "Vanguard International Explorer": {
+    "canonical": "Vanguard",
+    "is_manager": true
+  },
+  "Vanguard Russell 2000": {
+    "canonical": "Vanguard",
+    "is_manager": true
+  },
+  "Various": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "generic placeholder"
+  },
+  "Various (unspecified in excerpt)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "generic placeholder"
+  },
+  "Various (unspecified)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "generic placeholder"
+  },
+  "Various (via Pathway PE Fund XXV and others)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "placeholder referring to multiple underlying managers via a fund-of-funds"
+  },
+  "Various Equity Managers": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "generic placeholder for multiple managers"
+  },
+  "Various Fixed Income Managers": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "generic placeholder for multiple managers"
+  },
+  "Various MWBE Firms": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "generic placeholder for multiple firms"
+  },
+  "Various Real Estate Managers": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "generic placeholder for multiple managers"
+  },
+  "Various external investment managers": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "generic placeholder for multiple managers"
+  },
+  "Various private debt managers": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "generic placeholder for multiple managers"
+  },
+  "Various private equity managers": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "generic placeholder for multiple managers"
+  },
+  "Verus": {
+    "canonical": "Verus",
+    "is_manager": true
+  },
+  "Verus (Wurts & Associates)": {
+    "canonical": "Verus",
+    "is_manager": true
+  },
+  "Verus (current consultant)": {
+    "canonical": "Verus",
+    "is_manager": true
+  },
+  "Verus (general consultant)": {
+    "canonical": "Verus",
+    "is_manager": true
+  },
+  "Victory Park": {
+    "canonical": "Victory Park Capital",
+    "is_manager": true
+  },
+  "Victory Park Capital": {
+    "canonical": "Victory Park Capital",
+    "is_manager": true
+  },
+  "Viking": {
+    "canonical": "Viking Global Investors",
+    "is_manager": true
+  },
+  "Viking Global Opportunities": {
+    "canonical": "Viking Global Investors",
+    "is_manager": true
+  },
+  "Vision Ridge Partners": {
+    "canonical": "Vision Ridge Partners",
+    "is_manager": true
+  },
+  "Vitech (software developer)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "software developer/technology vendor, not an investment manager"
+  },
+  "Vitech Systems Sub LLC": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "software/technology vendor, not an investment manager"
+  },
+  "Voya": {
+    "canonical": "Voya Financial",
+    "is_manager": true
+  },
+  "Voya Financial; TIAA; Corebridge Financial": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "multiple distinct managers listed together as a compound string"
+  },
+  "Värde": {
+    "canonical": "Värde Partners",
+    "is_manager": true
+  },
+  "Värde Fund XIV": {
+    "canonical": "Värde Partners",
+    "is_manager": true
+  },
+  "Värde Partners": {
+    "canonical": "Värde Partners",
+    "is_manager": true
+  },
+  "WCAS XIV": {
+    "canonical": "Welsh Carson Anderson & Stowe",
+    "is_manager": true
+  },
+  "WCM Investment Management": {
+    "canonical": "WCM Investment Management",
+    "is_manager": true
+  },
+  "WEDGE Capital": {
+    "canonical": "WEDGE Capital Management",
+    "is_manager": true
+  },
+  "WEDGE Capital Management": {
+    "canonical": "WEDGE Capital Management",
+    "is_manager": true
+  },
+  "WRS Investment Team": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "internal staff team of a pension plan, not an external manager"
+  },
+  "WRS Staff / Meketa": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "compound reference mixing internal staff with a consultant"
+  },
+  "Walter Scott": {
+    "canonical": "Walter Scott & Partners",
+    "is_manager": true
+  },
+  "Walton Street Real Estate Debt Core Fund LP": {
+    "canonical": "Walton Street Capital",
+    "is_manager": true
+  },
+  "Warburg Pincus": {
+    "canonical": "Warburg Pincus",
+    "is_manager": true
+  },
+  "Warburg Pincus Energy": {
+    "canonical": "Warburg Pincus",
+    "is_manager": true
+  },
+  "Warburg Pincus LLC": {
+    "canonical": "Warburg Pincus",
+    "is_manager": true
+  },
+  "Warren Equity Partners V, L.P.": {
+    "canonical": "Warren Equity Partners",
+    "is_manager": true
+  },
+  "Warwick Partners V, L.P.": {
+    "canonical": "Warwick Partners",
+    "is_manager": true
+  },
+  "Wasatch Global Investors": {
+    "canonical": "Wasatch Global Investors",
+    "is_manager": true
+  },
+  "Wastewater Capital Management": {
+    "canonical": "Wastewater Capital Management",
+    "is_manager": true
+  },
+  "Waycross Partners": {
+    "canonical": "Waycross Partners",
+    "is_manager": true
+  },
+  "Wedge Capital Management": {
+    "canonical": "WEDGE Capital Management",
+    "is_manager": true
+  },
+  "Wellington": {
+    "canonical": "Wellington Management",
+    "is_manager": true
+  },
+  "Wellington Asset Management": {
+    "canonical": "Wellington Management",
+    "is_manager": true
+  },
+  "Wellington Investment Partners": {
+    "canonical": "Wellington Management",
+    "is_manager": true
+  },
+  "Wellington Management": {
+    "canonical": "Wellington Management",
+    "is_manager": true
+  },
+  "Wellington Management Company LLP": {
+    "canonical": "Wellington Management",
+    "is_manager": true
+  },
+  "Wells Fargo Asset Management (formerly Analytic Investors)": {
+    "canonical": "Allspring Global Investments",
+    "is_manager": true
+  },
+  "Welsh Carson Anderson & Stowe": {
+    "canonical": "Welsh Carson Anderson & Stowe",
+    "is_manager": true
+  },
+  "Welsh, Carson, Anderson & Stowe": {
+    "canonical": "Welsh Carson Anderson & Stowe",
+    "is_manager": true
+  },
+  "West Street": {
+    "canonical": "West Street Capital Partners",
+    "is_manager": true
+  },
+  "West Virginia Investment Management Board": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "pension/investment board, not an external manager"
+  },
+  "Western Asset Management (outflow); Longfellow, Loop Capital, Brandes, NTI (inflows)": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "multiple distinct managers listed together as a compound string"
+  },
+  "Westfield Capital Management": {
+    "canonical": "Westfield Capital Management",
+    "is_manager": true
+  },
+  "Westwood Management Corp": {
+    "canonical": "Westwood Management",
+    "is_manager": true
+  },
+  "Whitehorse": {
+    "canonical": "Whitehorse Liquidity Partners",
+    "is_manager": true
+  },
+  "Whitehorse Liquidity Partners": {
+    "canonical": "Whitehorse Liquidity Partners",
+    "is_manager": true
+  },
+  "William Blair": {
+    "canonical": "William Blair",
+    "is_manager": true
+  },
+  "William Blair Investment Management, LLC": {
+    "canonical": "William Blair",
+    "is_manager": true
+  },
+  "William Blair, Macquarie": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "multiple distinct managers listed together as a compound string"
+  },
+  "Wilshire": {
+    "canonical": "Wilshire Associates",
+    "is_manager": true
+  },
+  "Wilshire Associates": {
+    "canonical": "Wilshire Associates",
+    "is_manager": true
+  },
+  "Wind Point Partners": {
+    "canonical": "Wind Point Partners",
+    "is_manager": true
+  },
+  "Wind Point Partners X": {
+    "canonical": "Wind Point Partners",
+    "is_manager": true
+  },
+  "Wind River": {
+    "canonical": "Wind River",
+    "is_manager": true
+  },
+  "WindRose": {
+    "canonical": "WindRose",
+    "is_manager": true
+  },
+  "Windjammer": {
+    "canonical": "Windjammer",
+    "is_manager": true
+  },
+  "Windrose Fund 7": {
+    "canonical": "WindRose",
+    "is_manager": true
+  },
+  "Wolff": {
+    "canonical": "Wolff",
+    "is_manager": true
+  },
+  "Wurts": {
+    "canonical": "Wurts & Associates",
+    "is_manager": true
+  },
+  "Wurts & Associates": {
+    "canonical": "Wurts & Associates",
+    "is_manager": true
+  },
+  "XTP": {
+    "canonical": "XTP",
+    "is_manager": true
+  },
+  "Xponance": {
+    "canonical": "Xponance",
+    "is_manager": true
+  },
+  "custodian bank": {
+    "canonical": null,
+    "is_manager": false,
+    "reason": "generic descriptive phrase, not a specific manager name"
+  },
+  "eSecLending (Securities Finance Trust Company)": {
+    "canonical": "eSecLending",
+    "is_manager": true
+  },
+  "eVestment Alliance": {
+    "canonical": "eVestment Alliance",
+    "is_manager": true
+  },
+  "iNetworks": {
+    "canonical": "iNetworks",
+    "is_manager": true
+  }
+}

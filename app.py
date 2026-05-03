@@ -27,6 +27,7 @@ from database import (
     Publication,
     RFPRecord,
     Summary,
+    aggregate_managers,
     count_search_summaries,
     get_new_meetings,
     get_session,
@@ -868,6 +869,163 @@ def page_investment_actions(plan_id, plan_label):
         st.download_button("Download CSV", csv, "investment_actions.csv", "text/csv")
     else:
         st.info("No actions match the current filter.")
+
+
+# ---------------------------------------------------------------------------
+# Managers tab
+# ---------------------------------------------------------------------------
+
+MANAGER_MAPPINGS_PATH = Path(__file__).parent / "data" / "manager_mappings.json"
+
+
+@st.cache_data(ttl=300)
+def _load_manager_mappings() -> dict:
+    """Load the LLM-classified manager-name mappings.
+
+    Returns ``{}`` if the file is missing — page falls back to raw names.
+    Refreshed via ``python -m scripts.normalize_managers``.
+    """
+    if not MANAGER_MAPPINGS_PATH.exists():
+        return {}
+    return json.loads(MANAGER_MAPPINGS_PATH.read_text())
+
+
+@st.cache_data(ttl=300)
+def _aggregate_canonical_managers() -> tuple[list[dict], int]:
+    """Aggregate raw mentions, then collapse by canonical name from the mapping.
+
+    Each output row represents one canonical manager and merges every raw
+    variant's mention count, plan count, doc IDs, and date range. Rows
+    classified as ``is_manager: false`` (placeholders, plan names, etc.)
+    are excluded from the output but counted in the returned excluded
+    count for transparency.
+    """
+    session = get_db_session()
+    raw = aggregate_managers(session)
+    mappings = _load_manager_mappings()
+
+    canonical: dict[str, dict] = {}
+    excluded = 0
+    for row in raw:
+        m = mappings.get(row["raw_name"])
+        if m is None:
+            # Unmapped → fall back to using the raw name as canonical
+            canon = row["raw_name"]
+            is_mgr = True
+        elif not m.get("is_manager"):
+            excluded += row["mention_count"]
+            continue
+        else:
+            canon = m.get("canonical") or row["raw_name"]
+            is_mgr = True
+
+        existing = canonical.setdefault(canon, {
+            "canonical": canon,
+            "variants": [],
+            "mention_count": 0,
+            "plan_ids": set(),
+            "doc_ids": set(),
+            "first_meeting": None,
+            "latest_meeting": None,
+        })
+        existing["variants"].append(row["raw_name"])
+        existing["mention_count"] += row["mention_count"]
+        existing["plan_ids"].update(row["plan_ids"])
+        existing["doc_ids"].update(row["doc_ids"])
+        for fld in ("first_meeting", "latest_meeting"):
+            v = row[fld]
+            if v is None:
+                continue
+            if existing[fld] is None or (fld == "first_meeting" and v < existing[fld]) \
+                    or (fld == "latest_meeting" and v > existing[fld]):
+                existing[fld] = v
+
+    out = []
+    for entry in canonical.values():
+        out.append({
+            "canonical": entry["canonical"],
+            "variants": sorted(entry["variants"]),
+            "mention_count": entry["mention_count"],
+            "plan_count": len(entry["plan_ids"]),
+            "doc_ids": sorted(entry["doc_ids"]),
+            "first_meeting": entry["first_meeting"],
+            "latest_meeting": entry["latest_meeting"],
+        })
+    out.sort(key=lambda r: -r["mention_count"])
+    return out, excluded
+
+
+def page_managers():
+    st.title("Managers")
+    st.caption(
+        "Investment managers, consultants, custodians, and advisors mentioned in "
+        "the structured `investment_actions` extracted from board materials. "
+        "Canonical names produced by `scripts/normalize_managers.py`."
+    )
+
+    rows, excluded_mentions = _aggregate_canonical_managers()
+    if not rows:
+        st.info("No manager mentions found yet. Run the pipeline to summarize documents.")
+        return
+
+    total_mentions = sum(r["mention_count"] for r in rows)
+    st.markdown(
+        f"**{len(rows):,} distinct managers** across **{total_mentions:,} mentions**"
+        + (f" — {excluded_mentions:,} additional mentions excluded "
+           "(placeholders, plan names, compound listings)" if excluded_mentions else "")
+    )
+
+    col_a, col_b = st.columns([2, 1])
+    with col_a:
+        query = st.text_input(
+            "Filter by name", placeholder="e.g. BlackRock, Meketa, Albourne",
+            key="manager_filter",
+        )
+    with col_b:
+        min_mentions = st.number_input(
+            "Min. mentions", min_value=1, max_value=100, value=1, step=1,
+            key="manager_min_mentions",
+        )
+
+    filtered = [
+        r for r in rows
+        if r["mention_count"] >= min_mentions
+        and (not query or query.lower() in r["canonical"].lower()
+             or any(query.lower() in v.lower() for v in r["variants"]))
+    ]
+    st.caption(f"Showing {len(filtered):,} of {len(rows):,} managers")
+
+    for r in filtered[:200]:
+        first = r["first_meeting"].strftime("%Y-%m-%d") if r["first_meeting"] else "—"
+        latest = r["latest_meeting"].strftime("%Y-%m-%d") if r["latest_meeting"] else "—"
+        header = (
+            f"**{r['canonical']}** — {r['mention_count']} mentions, "
+            f"{r['plan_count']} plans · {first} → {latest}"
+        )
+        with st.expander(header):
+            if len(r["variants"]) > 1:
+                variants_str = " · ".join(f"`{v}`" for v in r["variants"])
+                st.markdown(f"**Raw variants ({len(r['variants'])}):** {variants_str}")
+
+            session = get_db_session()
+            docs = (
+                session.query(Document)
+                .filter(Document.id.in_(r["doc_ids"]))
+                .order_by(Document.meeting_date.desc())
+                .limit(20)
+                .all()
+            )
+            st.markdown(f"**Recent documents ({min(len(docs), 20)} of {len(r['doc_ids'])}):**")
+            for d in docs:
+                date_str = d.meeting_date.strftime("%Y-%m-%d") if d.meeting_date else "—"
+                doc_type = (d.doc_type or "document").replace("_", " ").title()
+                st.markdown(
+                    f"- {date_str} · **{d.plan_id.upper()}** · {doc_type} "
+                    f"[→ open](?doc={d.id})"
+                )
+
+    if len(filtered) > 200:
+        st.caption(f"… {len(filtered) - 200:,} more matches not shown — refine the filter to narrow.")
 
 
 # ---------------------------------------------------------------------------
@@ -2057,7 +2215,7 @@ def main():
 
     tabs = st.tabs([
         "Notes", "Summary", "Updates", "Search", "Browse Recent",
-        "Investment Actions", "RFPs", "CAFR", "Asset Allocation",
+        "Investment Actions", "Managers", "RFPs", "CAFR", "Asset Allocation",
         "Plans", "Drafts", "Insights", "Admin",
     ])
 
@@ -2074,18 +2232,20 @@ def main():
     with tabs[5]:
         page_investment_actions(plan_id, plan_label)
     with tabs[6]:
-        page_rfp(plan_id, plan_label)
+        page_managers()
     with tabs[7]:
-        page_cafr()
+        page_rfp(plan_id, plan_label)
     with tabs[8]:
-        page_asset_allocation()
+        page_cafr()
     with tabs[9]:
-        page_plans()
+        page_asset_allocation()
     with tabs[10]:
-        page_drafts()
+        page_plans()
     with tabs[11]:
-        page_insights()
+        page_drafts()
     with tabs[12]:
+        page_insights()
+    with tabs[13]:
         page_admin()
 
 
