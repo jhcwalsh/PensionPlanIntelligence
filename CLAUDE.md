@@ -91,10 +91,10 @@ Render hosts only two web services now: Streamlit (`pension-plan-intelligence`) 
 | Daily document pipeline (137 plans) | cron 11:00 UTC | GHA | `.github/workflows/daily-pipeline.yml` |
 | Daily document pipeline (11 WAF-blocked plans) | Task Scheduler | local Windows | `scripts/run_daily.bat` |
 | Weekly CIO Insights composition + email | cron Sundays 11:00 UTC | GHA | `.github/workflows/weekly-insights.yml` |
-| Weekly RFP backfill (`--limit 100`) | Task Scheduler | local Windows | `scripts/run_weekly.bat` |
+| Weekly RFP backfill (`--limit 100`) | cron Sundays 11:30 UTC | GHA | `.github/workflows/weekly-rfp.yml` |
 | Monthly CAFR refresh | Task Scheduler | local Windows | `scripts/run_monthly.bat` |
 | Monthly CAFR extraction + insights composition + email | cron 1st of month 18:00 UTC | GHA | `.github/workflows/monthly-insights.yml` |
-| Quarterly | Task Scheduler | local Windows | `scripts/run_quarterly.bat` |
+| Quarterly insights composition + email | cron 1st of Jan/Apr/Jul/Oct 19:00 UTC | GHA | `.github/workflows/quarterly-insights.yml` |
 
 GHA secrets that must exist for the cron entries to work: `ANTHROPIC_API_KEY`, `RESEND_API_KEY`, `APPROVAL_EMAIL_RECIPIENT`, `APPROVAL_EMAIL_FROM`. Local cron uses the same names from `.env`. Schedules are UTC; ET drifts one hour between EDT and EST. The 18:00 UTC monthly-insights time is deliberately late so the local CAFR refresh on the 1st has time to push before GHA pulls fresh.
 
