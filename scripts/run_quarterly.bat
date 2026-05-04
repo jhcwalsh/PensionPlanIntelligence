@@ -1,15 +1,16 @@
 @echo off
 REM ------------------------------------------------------------------------
-REM Quarterly local cadence — 1st of Jan/Apr/Jul/Oct at 09:00.
-REM Composes a quarter-in-review CIO Insight, emails approval link,
-REM pushes DB.
+REM DEPRECATED FOR SCHEDULED USE — moved to GitHub Actions on 2026-05-04
+REM (.github/workflows/quarterly-insights.yml fires 1st of Jan/Apr/Jul/Oct
+REM at 19:00 UTC).
 REM
-REM Note: insights.scheduler still has only weekly/monthly/annual sub-
-REM commands. We invoke 'annual' here as the closest existing entry
-REM point — it'll compose from whatever monthlies are approved in the
-REM lookback window. The prompt logic in insights/annual.py is tuned
-REM for a 12-month window; tweaking it for a 3-month quarterly window
-REM is a small follow-up but not blocking.
+REM Kept in the repo as a manual fallback only — if GHA is unavailable,
+REM run this directly:  scripts\run_quarterly.bat
+REM Otherwise the Windows Task Scheduler entry has been removed; see
+REM scripts\register_tasks.ps1.
+REM
+REM Original purpose: quarter-in-review CIO Insight (uses 'annual' sub-
+REM command since insights.scheduler doesn't have a 'quarterly' verb yet).
 REM ------------------------------------------------------------------------
 
 setlocal

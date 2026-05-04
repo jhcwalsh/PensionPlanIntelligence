@@ -1,9 +1,14 @@
 @echo off
 REM ------------------------------------------------------------------------
-REM Weekly local cadence — Sunday morning. Runs the bounded RFP backfill
-REM and pushes the DB. The CIO Insights weekly composition + approval
-REM email moved to GitHub Actions on 2026-05-04
-REM (.github/workflows/weekly-insights.yml fires Sundays at 11:00 UTC).
+REM DEPRECATED FOR SCHEDULED USE — moved to GitHub Actions on 2026-05-04
+REM (.github/workflows/weekly-rfp.yml fires Sundays at 11:30 UTC).
+REM
+REM Kept in the repo as a manual fallback only — if GHA is unavailable,
+REM run this directly:  scripts\run_weekly.bat
+REM Otherwise the Windows Task Scheduler entry has been removed; see
+REM scripts\register_tasks.ps1.
+REM
+REM Original purpose: bounded RFP backfill (--limit 100) + push.
 REM ------------------------------------------------------------------------
 
 setlocal

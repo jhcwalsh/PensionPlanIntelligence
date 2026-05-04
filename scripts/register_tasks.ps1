@@ -14,7 +14,13 @@ $User = "$env:USERDOMAIN\$env:USERNAME"
 
 # Clean up any task names from previous registrations (so renames take
 # effect cleanly — Register-ScheduledTask -Force only overwrites by name).
-foreach ($legacy in @("PensionPipeline-Annual")) {
+# Also unregisters tasks that have moved to GitHub Actions and no longer
+# need a local Task Scheduler entry.
+foreach ($legacy in @(
+    "PensionPipeline-Annual",
+    "PensionPipeline-Weekly",       # → .github/workflows/weekly-rfp.yml (2026-05-04)
+    "PensionPipeline-Quarterly"     # → .github/workflows/quarterly-insights.yml (2026-05-04)
+)) {
     if (Get-ScheduledTask -TaskName $legacy -ErrorAction SilentlyContinue) {
         Unregister-ScheduledTask -TaskName $legacy -Confirm:$false
         Write-Host "Removed legacy task $legacy"
@@ -56,16 +62,12 @@ function Register-PipelineTask {
 }
 
 # Daily — every day at 06:00 local time.
+# (Daily handles the 11 WAF-blocked plans; the other 137 run on
+# .github/workflows/daily-pipeline.yml at 11:00 UTC.)
 Register-PipelineTask `
     -Name "Daily" `
     -BatFile "run_daily.bat" `
     -Trigger (New-ScheduledTaskTrigger -Daily -At 6:00am)
-
-# Weekly — Sunday at 07:00 (after daily completes).
-Register-PipelineTask `
-    -Name "Weekly" `
-    -BatFile "run_weekly.bat" `
-    -Trigger (New-ScheduledTaskTrigger -Weekly -DaysOfWeek Sunday -At 7:00am)
 
 # Monthly — 1st of every month at 08:00.
 # (Task Scheduler's "Monthly" trigger needs cmdlet via PowerShell 6+; on
@@ -92,29 +94,13 @@ $MonthlyFolder.RegisterTaskDefinition(
 ) | Out-Null
 Write-Host "Registered PensionPipeline-Monthly"
 
-# Quarterly — 1st of Jan/Apr/Jul/Oct at 09:00.
-# MonthsOfYear bitmask: Jan=1 + Apr=8 + Jul=64 + Oct=512 = 585.
-$QuarterlyDef = $MonthlyService.NewTask(0)
-$QuarterlyDef.RegistrationInfo.Description = "PensionPipeline quarterly cron-equivalent"
-$QuarterlyDef.Settings.StartWhenAvailable = $true
-$QuarterlyDef.Settings.DisallowStartIfOnBatteries = $false
-$QuarterlyDef.Settings.StopIfGoingOnBatteries = $false
-$QuarterlyDef.Settings.RunOnlyIfNetworkAvailable = $true
-$QuarterlyDef.Settings.ExecutionTimeLimit = "PT6H"
-$QuarterlyTrigger = $QuarterlyDef.Triggers.Create(4)
-$QuarterlyTrigger.StartBoundary = (Get-Date -Hour 9 -Minute 0 -Second 0).ToString("s")
-$QuarterlyTrigger.DaysOfMonth = 1
-$QuarterlyTrigger.MonthsOfYear = 585
-$QuarterlyAction = $QuarterlyDef.Actions.Create(0)
-$QuarterlyAction.Path = "$Repo\scripts\run_quarterly.bat"
-$QuarterlyAction.WorkingDirectory = $Repo
-$MonthlyFolder.RegisterTaskDefinition(
-    "PensionPipeline-Quarterly", $QuarterlyDef, 6, $User, $null, 3
-) | Out-Null
-Write-Host "Registered PensionPipeline-Quarterly"
+# Weekly + Quarterly tasks moved to GitHub Actions on 2026-05-04.
+# See .github/workflows/weekly-rfp.yml and quarterly-insights.yml.
+# The legacy-cleanup loop at the top of this script unregisters those
+# tasks on next re-run.
 
 Write-Host ""
-Write-Host "All 4 tasks registered. Verify with:"
+Write-Host "Tasks registered. Verify with:"
 Write-Host "    Get-ScheduledTask -TaskName 'PensionPipeline-*'"
 Write-Host ""
 Write-Host "Run one manually to test (won't wait for the trigger):"
