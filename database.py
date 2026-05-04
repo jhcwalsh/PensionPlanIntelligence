@@ -455,6 +455,23 @@ class FetchRun(Base):
     )
 
 
+class DocumentSkip(Base):
+    """Documents the summarizer should permanently skip.
+
+    Currently used only for Claude content-policy refusals (stop_reason
+    ='refusal'), which are deterministic — retrying them just costs money.
+    The reason field is open-ended for future cases (broken text, OCR-only
+    PDFs, etc.). To un-skip a document, delete its row.
+    """
+
+    __tablename__ = "document_skips"
+
+    document_id = Column(Integer, ForeignKey("documents.id"), primary_key=True)
+    reason = Column(String, nullable=False)                       # e.g. 'refusal'
+    detected_at = Column(DateTime, default=_utcnow, nullable=False)
+    error_message = Column(Text)
+
+
 # ---------------------------------------------------------------------------
 # Init / helpers
 # ---------------------------------------------------------------------------
@@ -511,6 +528,9 @@ def get_unsummarized_documents(session: Session) -> list[Document]:
         .filter(Document.extraction_status == "done")
         .filter(~Document.id.in_(
             session.query(Summary.document_id)
+        ))
+        .filter(~Document.id.in_(
+            session.query(DocumentSkip.document_id)
         ))
         .all()
     )

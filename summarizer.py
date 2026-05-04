@@ -18,10 +18,15 @@ from datetime import datetime
 import anthropic
 from dotenv import load_dotenv
 from rich.console import Console
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import (
+    retry,
+    retry_if_not_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from database import (
-    Document, Summary, get_session, get_unsummarized_documents,
+    Document, DocumentSkip, Summary, get_session, get_unsummarized_documents,
     summary_exists_for_hash, Plan,
 )
 
@@ -227,6 +232,25 @@ def _max_tokens(model: str) -> int:
     return 4096 if model == MODEL_HAIKU else 4096
 
 
+class ClaudeRefusedError(RuntimeError):
+    """Claude returned stop_reason='refusal'. Permanent — don't retry."""
+    pass
+
+
+def _record_refusal(session, doc: Document, error_message: str) -> None:
+    """Insert a DocumentSkip row so future runs don't re-attempt this doc."""
+    session.merge(DocumentSkip(
+        document_id=doc.id,
+        reason="refusal",
+        error_message=error_message,
+    ))
+    session.commit()
+    console.print(
+        f"  [yellow]Claude refused {doc.filename}; recorded permanent skip "
+        f"(saves ~$0.10/run on retries)[/yellow]"
+    )
+
+
 def _unwrap(exc: Exception) -> Exception:
     """Surface the real exception inside a tenacity RetryError wrapper."""
     if hasattr(exc, "last_attempt"):
@@ -237,7 +261,14 @@ def _unwrap(exc: Exception) -> Exception:
     return exc
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=2, min=4, max=30))
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=2, min=4, max=30),
+    # Refusals are deterministic — retrying just costs money. Other empty
+    # responses (max_tokens, transient API hiccups) still get the 3-attempt
+    # treatment.
+    retry=retry_if_not_exception_type(ClaudeRefusedError),
+)
 def call_claude(prompt: str, model: str) -> str:
     message = _get_client().messages.create(
         model=model,
@@ -246,12 +277,14 @@ def call_claude(prompt: str, model: str) -> str:
         messages=[{"role": "user", "content": prompt}]
     )
     if not message.content:
-        raise RuntimeError(
-            f"Claude returned empty content "
-            f"(stop_reason={message.stop_reason}, "
+        diagnostic = (
+            f"stop_reason={message.stop_reason}, "
             f"input_tokens={message.usage.input_tokens}, "
-            f"output_tokens={message.usage.output_tokens})"
+            f"output_tokens={message.usage.output_tokens}"
         )
+        if message.stop_reason == "refusal":
+            raise ClaudeRefusedError(f"Claude refused ({diagnostic})")
+        raise RuntimeError(f"Claude returned empty content ({diagnostic})")
     return message.content[0].text
 
 
@@ -332,9 +365,15 @@ def summarize_document(doc: Document, plan_name: str,
             prompt = build_extraction_prompt(doc, plan_name, short_text)
             raw = call_claude(prompt, model)
             data = parse_response(raw)
+        except ClaudeRefusedError as e2:
+            _record_refusal(session, doc, str(e2))
+            return None
         except Exception as e2:
             console.print(f"  [red]Retry failed: {_unwrap(e2)}[/red]")
             return None
+    except ClaudeRefusedError as e:
+        _record_refusal(session, doc, str(e))
+        return None
     except Exception as e:
         console.print(f"  [red]Claude API error: {_unwrap(e)}[/red]")
         return None
