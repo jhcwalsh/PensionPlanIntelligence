@@ -6,9 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Three layered systems sharing one SQLite database (`db/pension.db`, ~42 MB, tracked in git):
 
-1. **Meeting-document pipeline** (`pipeline.py`, `fetcher.py`, `extractor.py`, `summarizer.py`) — fetches board materials and CAFRs from ~148 U.S. public pension plans, extracts text, summarizes with Claude per-document. Local-only.
-2. **CIO Insights automation** (`insights/` package) — composes weekly / monthly / annual editorial briefings from the existing summaries, gated on a magic-link approval email to the founder. Render cron-triggered.
-3. **RFP alerts pipeline** (`rfp/`, `lib/`, `api/`, `scripts/`) — structured extraction of RFP records from already-fetched documents into `rfp_records` / `document_health` / `pipeline_runs`, served via FastAPI. Render cron-triggered.
+1. **Meeting-document pipeline** (`pipeline.py`, `fetcher.py`, `extractor.py`, `summarizer.py`) — fetches board materials and CAFRs from ~148 U.S. public pension plans, extracts text, summarizes with Claude per-document. Hybrid: GHA cron handles 137 of 148 plans daily; local Windows Task Scheduler handles the 11 WAF-blocked plans (see `data/local_only_plans.json`).
+2. **CIO Insights automation** (`insights/` package) — composes weekly / monthly / annual editorial briefings from the existing summaries, gated on a magic-link approval email to the founder. GHA cron-triggered (weekly Sundays 11:00 UTC, monthly 1st of month 18:00 UTC).
+3. **RFP alerts pipeline** (`rfp/`, `lib/`, `api/`, `scripts/`) — structured extraction of RFP records from already-fetched documents into `rfp_records` / `document_health` / `pipeline_runs`, served via FastAPI. RFP backfill runs locally via Windows Task Scheduler weekly; FastAPI lives on Render.
 
 The Streamlit app (`app.py`) reads from the same DB and surfaces all three layers as tabs.
 
@@ -50,7 +50,12 @@ uvicorn api.main:app --reload --port 8000
 ## Architecture you have to internalize before editing
 
 ### The DB IS the deploy mechanism for data
-`db/pension.db` is committed. Pushing to `master` is how new data lands on Render. The Render cron services and Streamlit web service mount the same persistent disk at `/data`, but read from the deployed `db/pension.db` until something writes back. The pipeline only runs locally, so the data flow is: local pipeline → `db/pension.db` → `git push` → Render deploys → cron services consume. This is intentional — Playwright + Chromium doesn't work well on Render's Native Python runtime, hence `--skip-scrape` on every Render cron.
+`db/pension.db` is committed. Pushing to `master` is how new data lands on Render. The Streamlit web service and FastAPI service on Render mount the persistent disk at `/data` but read from the deployed `db/pension.db` until something writes back. Three things now write back to master:
+1. **GHA daily-pipeline** (~11:00 UTC) — fetches/extracts/summarizes 137 plans, commits the DB.
+2. **Local Windows Task Scheduler daily** — same pipeline scoped to the 11 WAF-blocked plans via `--local-only`, commits the DB.
+3. **GHA weekly-insights** (Sundays 11:00 UTC) and **GHA monthly-insights** (1st of month 18:00 UTC) — compose digests, send approval email, commit the DB + `notes/` (+ `cafr_summaries/` for monthly).
+
+Local Task Scheduler also still owns weekly RFP backfill and monthly CAFR refresh — both are `git push`-back operations on the same master branch. Each writer runs at a distinct time; conflicts haven't been observed but a `git pull --rebase` would be the next defensive step if they appear.
 
 GitHub's hard 100 MB single-file limit is the ceiling on this model. The DB started bumping into it once `documents.extracted_text` accumulated, which forced the gzip wrapper (next section). When the DB approaches ~80 MB again, plan a real fix (Git LFS, or moving the DB out of git onto Render's persistent disk via a separate sync) rather than another column-level workaround.
 
@@ -78,8 +83,20 @@ Magic-link emails contain `?approve=<token>` and `?reject=<token>`. The Streamli
 - To force a re-send, expire the existing publication first (or use `--force` on the scheduler CLI). Setting it back to `"generating"` directly works but bypasses the audit trail.
 - The same idempotency pattern applies to `WeeklyRun` (unique on `period_start`) and the RFP `rfp_id` (deterministic from `sha256(plan_id + doc_id + chunk_id + record_index)`).
 
-### Render = 7 services, one repo
-`render.yaml` defines: the Streamlit web service (`pension-plan-intelligence`), 4 insights cron services (weekly/monthly/annual/reminders), the FastAPI web service (`pension-rfp-api`), and the RFP cron service (`pension-rfp-pipeline`). All share the same persistent disk `pension-db` at `/data`. Env vars marked `sync: false` in `render.yaml` (API keys, Slack webhook) must be set in the Render dashboard per-service. Schedules are UTC; comments in `render.yaml` show the ET equivalents (which drift one hour between EDT and EST).
+### Where each cadence runs
+Render hosts only two web services now: Streamlit (`pension-plan-intelligence`) and FastAPI (`pension-rfp-api`), both mounting the persistent disk `pension-db` at `/data`. All cron-style work moved off Render — partly to GHA, partly to local Windows Task Scheduler:
+
+| Cadence | Trigger | Where | Workflow / .bat |
+|---|---|---|---|
+| Daily document pipeline (137 plans) | cron 11:00 UTC | GHA | `.github/workflows/daily-pipeline.yml` |
+| Daily document pipeline (11 WAF-blocked plans) | Task Scheduler | local Windows | `scripts/run_daily.bat` |
+| Weekly CIO Insights composition + email | cron Sundays 11:00 UTC | GHA | `.github/workflows/weekly-insights.yml` |
+| Weekly RFP backfill (`--limit 100`) | Task Scheduler | local Windows | `scripts/run_weekly.bat` |
+| Monthly CAFR refresh | Task Scheduler | local Windows | `scripts/run_monthly.bat` |
+| Monthly CAFR extraction + insights composition + email | cron 1st of month 18:00 UTC | GHA | `.github/workflows/monthly-insights.yml` |
+| Quarterly | Task Scheduler | local Windows | `scripts/run_quarterly.bat` |
+
+GHA secrets that must exist for the cron entries to work: `ANTHROPIC_API_KEY`, `RESEND_API_KEY`, `APPROVAL_EMAIL_RECIPIENT`, `APPROVAL_EMAIL_FROM`. Local cron uses the same names from `.env`. Schedules are UTC; ET drifts one hour between EDT and EST. The 18:00 UTC monthly-insights time is deliberately late so the local CAFR refresh on the 1st has time to push before GHA pulls fresh.
 
 ## Conventions worth knowing
 
