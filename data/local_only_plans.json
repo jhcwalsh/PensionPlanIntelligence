@@ -1,0 +1,17 @@
+{
+  "_doc": "Plans whose materials_url is fronted by Cloudflare/Akamai/etc. and blocks GitHub Actions Azure datacenter IPs. These run on local Windows Task Scheduler; the GHA daily-pipeline workflow skips them. Anything outside this list runs from GHA. Verified by `python -m scripts.probe_scrape --all` from a hosted runner on 2026-05-04 (run 67284... at SHA a03f733).",
+  "_how_it_works": "pipeline.py loads this file and consults it in two ways: (1) when GITHUB_ACTIONS=true, the listed plan IDs are excluded from the default plan set; (2) when --local-only is passed, ONLY the listed plan IDs are processed. Explicit positional plan_ids on the CLI bypass both filters.",
+  "plans": [
+    {"id": "asrs",          "reason": "Cloudflare 'Just a moment' challenge"},
+    {"id": "corp_az",       "reason": "Cloudflare 'Just a moment' challenge"},
+    {"id": "frs",           "reason": "Generic HTTP 403 access-denied"},
+    {"id": "kpers_ks",      "reason": "Cloudflare 'Just a moment' challenge"},
+    {"id": "lasers_la",     "reason": "Cloudflare 'Just a moment' challenge"},
+    {"id": "mcera",         "reason": "Cloudflare 'Attention Required' challenge"},
+    {"id": "nmpera",        "reason": "Cloudflare 'Just a moment' challenge"},
+    {"id": "nv_pers",       "reason": "Cloudflare 'Just a moment' challenge"},
+    {"id": "pgcers_md",     "reason": "Generic HTTP 403 access-denied"},
+    {"id": "scers_suffolk", "reason": "Cloudflare 'Just a moment' challenge"},
+    {"id": "strs_ohio",     "reason": "Cloudflare 'Just a moment' challenge"}
+  ]
+}
