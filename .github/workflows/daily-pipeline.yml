@@ -33,6 +33,18 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Verify ANTHROPIC_API_KEY is set
+        env:
+          KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::error::ANTHROPIC_API_KEY repository secret is empty or unset."
+            echo "Fix: Settings → Secrets and variables → Actions → Repository secrets."
+            echo "The name must be exactly ANTHROPIC_API_KEY (case-sensitive)."
+            exit 1
+          fi
+          echo "ANTHROPIC_API_KEY is present (length: ${#KEY} chars)"
+
       - name: Set up Python 3.12
         uses: actions/setup-python@v6
         with:
