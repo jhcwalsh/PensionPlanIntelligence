@@ -1169,7 +1169,7 @@ def _render_recent_runs():
                 f"· {run.source} · {summary}{elapsed_str}"
             )
 
-            with st.expander(label, expanded=(run is runs[0] and doc_ids)):
+            with st.expander(label, expanded=(run is runs[0] and bool(doc_ids))):
                 if run.status == "failed":
                     st.error(run.error_message or "No error message captured.")
                 if not doc_ids:
