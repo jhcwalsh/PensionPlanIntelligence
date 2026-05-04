@@ -1,0 +1,88 @@
+name: Monthly insights (GHA edition)
+
+# Extracts CAFR investment data from already-downloaded CAFRs, then
+# composes the monthly CIO Insights digest and sends the approve/reject
+# magic-link email. CAFR fetching itself stays on local Task Scheduler
+# (it's a Playwright scrape with the same WAF risks the daily had) --
+# see scripts/run_monthly.bat.
+#
+# Runs the 1st of each month at 18:00 UTC (~2 PM EDT / 1 PM EST). Late
+# in the day deliberately, so the local CAFR refresh has time to fire,
+# push, and have its DB changes available when GHA pulls fresh.
+
+on:
+  schedule:
+    - cron: "0 18 1 * *"   # 1st of month at 18:00 UTC = 2 PM EDT / 1 PM EST
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Skip the final commit/push of db/pension.db + notes/ + cafr_summaries/"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: monthly-insights
+  cancel-in-progress: false
+
+jobs:
+  monthly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Verify required secrets are set
+        env:
+          ANTHROPIC: ${{ secrets.ANTHROPIC_API_KEY }}
+          RESEND: ${{ secrets.RESEND_API_KEY }}
+        run: |
+          missing=()
+          [ -z "$ANTHROPIC" ] && missing+=("ANTHROPIC_API_KEY")
+          [ -z "$RESEND" ] && missing+=("RESEND_API_KEY")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing repository secret(s): ${missing[*]}"
+            echo "Fix: Settings → Secrets and variables → Actions → Repository secrets."
+            exit 1
+          fi
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-pipeline.txt
+
+      - name: Extract CAFR investment data
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python extract_cafr_investments.py
+
+      - name: Compose monthly insights + send approval email
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          APPROVAL_EMAIL_RECIPIENT: ${{ secrets.APPROVAL_EMAIL_RECIPIENT }}
+          APPROVAL_EMAIL_FROM: ${{ secrets.APPROVAL_EMAIL_FROM }}
+          INSIGHTS_MODE: live
+        run: python -m insights.scheduler monthly
+
+      - name: Commit DB + notes + cafr_summaries changes
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add db/pension.db notes/ cafr_summaries/
+          if git diff --staged --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Monthly insights $(date -u +%Y-%m-%d) [GHA]"
+            git push
+          fi
