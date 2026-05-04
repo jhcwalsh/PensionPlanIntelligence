@@ -34,7 +34,7 @@ from dotenv import load_dotenv
 from rich.console import Console
 from rich.table import Table
 
-from database import Document, Plan, Summary, get_session, init_db
+from database import Document, FetchRun, Plan, Summary, get_session, init_db
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 console = Console(legacy_windows=False)
@@ -103,30 +103,62 @@ def run_pipeline(
 ):
     init_db()
     start = datetime.utcnow()
+    source = "gha" if os.environ.get("GITHUB_ACTIONS") == "true" else "local"
     console.rule("[bold blue]Pension Plan Intelligence Pipeline[/bold blue]")
 
-    if do_fetch:
-        console.rule("[bold]Step 1: Fetch Documents[/bold]")
-        import fetcher as _fetcher
-        from fetcher import run_fetcher
-        _fetcher.MIN_DATE = datetime(min_year, 1, 1)
-        run_fetcher(plan_ids=plan_ids, max_docs_per_plan=max_docs_per_plan)
+    # Open one row in fetch_runs so the Admin tab (and the eventual email
+    # digest) can show what this invocation did. Status starts as 'running'
+    # and is finalized in the try/finally below.
+    log_session = get_session()
+    fetch_run = FetchRun(source=source, started_at=start, status="running")
+    log_session.add(fetch_run)
+    log_session.commit()
+    fetch_run_id = fetch_run.id
 
-    if do_extract:
-        console.rule("[bold]Step 2: Extract Text[/bold]")
-        from extractor import run_extractor
-        run_extractor(retry_failed=retry_failed)
+    try:
+        if do_fetch:
+            console.rule("[bold]Step 1: Fetch Documents[/bold]")
+            import fetcher as _fetcher
+            from fetcher import run_fetcher
+            _fetcher.MIN_DATE = datetime(min_year, 1, 1)
+            run_fetcher(plan_ids=plan_ids, max_docs_per_plan=max_docs_per_plan)
 
-    if do_summarize:
-        console.rule("[bold]Step 3: Summarize with Claude[/bold]")
-        from summarizer import run_summarizer
-        run_summarizer()
+        if do_extract:
+            console.rule("[bold]Step 2: Extract Text[/bold]")
+            from extractor import run_extractor
+            run_extractor(retry_failed=retry_failed)
+
+        if do_summarize:
+            console.rule("[bold]Step 3: Summarize with Claude[/bold]")
+            from summarizer import run_summarizer
+            run_summarizer()
+    except Exception as exc:
+        run = log_session.get(FetchRun, fetch_run_id)
+        run.status = "failed"
+        run.error_message = f"{type(exc).__name__}: {exc}"
+        run.completed_at = datetime.utcnow()
+        log_session.commit()
+        log_session.close()
+        raise
+
+    # Success path: capture document IDs created during this run window.
+    new_doc_ids = [
+        d.id for d in log_session.query(Document.id)
+        .filter(Document.downloaded_at >= start)
+        .all()
+    ]
+    run = log_session.get(FetchRun, fetch_run_id)
+    run.status = "success"
+    run.completed_at = datetime.utcnow()
+    run.new_document_ids = json.dumps(new_doc_ids)
+    log_session.commit()
+    log_session.close()
 
     session = get_session()
     try:
         console.rule("[bold]Pipeline Complete[/bold]")
         elapsed = (datetime.utcnow() - start).seconds
-        console.print(f"Total time: {elapsed}s\n")
+        console.print(f"Total time: {elapsed}s ({len(new_doc_ids)} new documents)\n")
         print_status(session)
     finally:
         session.close()
