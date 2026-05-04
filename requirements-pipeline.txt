@@ -18,6 +18,9 @@ python-docx==1.1.2
 # AI
 anthropic==0.42.0
 
+# Pipeline status output (rich tables in pipeline.py)
+rich==13.9.4
+
 # Shared utilities (used by both insights and RFP)
 tenacity==9.0.0
 
