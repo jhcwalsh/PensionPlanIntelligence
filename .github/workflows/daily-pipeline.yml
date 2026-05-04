@@ -1,16 +1,17 @@
 name: Daily pipeline (GHA edition)
 
-# Manually-triggered fetch + extract + summarize for the GHA-eligible
-# plans (137 of 148; the WAF-blocked 11 stay on local Task Scheduler --
-# see data/local_only_plans.json). No cron schedule yet -- wire that in
-# once we've watched a few manual runs succeed end-to-end.
+# Fetch + extract + summarize for the GHA-eligible plans (137 of 148;
+# the WAF-blocked 11 stay on local Task Scheduler -- see
+# data/local_only_plans.json). Runs daily at 11:00 UTC (~7 AM EDT /
+# 6 AM EST) and on manual dispatch.
 #
-# Default behavior: dry_run=true, so this runs the full pipeline but
-# skips the final `git commit && git push` of db/pension.db. Flip
-# dry_run=false to exercise the real flow (which is what enables the
-# Render redeploy after a successful run).
+# Manual dispatch defaults to actually pushing the resulting db/pension.db.
+# Tick "Skip the final commit/push" for a debug run that exercises
+# fetch/extract/summarize without committing the result.
 
 on:
+  schedule:
+    - cron: "0 11 * * *"   # 11:00 UTC daily = 7 AM EDT / 6 AM EST
   workflow_dispatch:
     inputs:
       plan_ids:
@@ -21,10 +22,17 @@ on:
         description: "Skip the final commit/push of db/pension.db"
         required: false
         type: boolean
-        default: true
+        default: false
 
 permissions:
   contents: write
+
+# Prevent overlap between a scheduled run and a manual one. Queue rather
+# than cancel -- losing a partial pipeline run could leave half-extracted
+# documents in the DB.
+concurrency:
+  group: daily-pipeline
+  cancel-in-progress: false
 
 jobs:
   pipeline:
@@ -67,8 +75,11 @@ jobs:
       - name: Pipeline status
         run: python pipeline.py --status
 
+      # Skip only when the manual dispatch explicitly checks "dry_run".
+      # Scheduled runs have no inputs (dry_run is empty/null), so this
+      # condition is true for cron and for unchecked manual runs.
       - name: Commit DB changes
-        if: ${{ github.event.inputs.dry_run == 'false' }}
+        if: ${{ github.event.inputs.dry_run != 'true' }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
