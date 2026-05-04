@@ -22,6 +22,7 @@ from database import (
     CafrPerformance,
     Document,
     DocumentHealth,
+    DocumentSkip,
     FetchRun,
     PipelineRun,
     Plan,
@@ -1196,6 +1197,107 @@ def _render_recent_runs():
         session.close()
 
 
+def _render_failed_docs():
+    """Render the 'Failed Docs' Admin sub-tab: per-plan list of documents
+    that won't get summarised — either because text extraction failed, or
+    because they're recorded in the DocumentSkip table (Claude refusals)."""
+    from collections import defaultdict
+    from sqlalchemy import desc
+
+    st.caption(
+        "Plans with at least one document the pipeline cannot process. "
+        "Two failure modes: PDF text extraction failed (PyMuPDF couldn't "
+        "read the file), or the summariser was permanently skipped "
+        "(currently only Claude content-policy refusals)."
+    )
+
+    session = get_session()
+    try:
+        # Two queries, then merge by plan
+        ext_rows = (
+            session.query(Plan.id, Plan.name, Document.id, Document.filename)
+            .join(Document, Document.plan_id == Plan.id)
+            .filter(Document.extraction_status == "failed")
+            .all()
+        )
+        skip_rows = (
+            session.query(Plan.id, Plan.name, Document.id, Document.filename,
+                          DocumentSkip.reason, DocumentSkip.error_message)
+            .join(Document, Document.plan_id == Plan.id)
+            .join(DocumentSkip, DocumentSkip.document_id == Document.id)
+            .all()
+        )
+
+        if not ext_rows and not skip_rows:
+            st.success(
+                "No failed documents. Every downloaded PDF has been "
+                "extracted, and the summariser has nothing flagged for "
+                "permanent skip."
+            )
+            return
+
+        # Group failures per plan
+        by_plan: dict[str, dict] = defaultdict(
+            lambda: {"name": "", "extraction": [], "skip": []}
+        )
+        for plan_id, plan_name, _doc_id, filename in ext_rows:
+            by_plan[plan_id]["name"] = plan_name
+            by_plan[plan_id]["extraction"].append(filename)
+        for plan_id, plan_name, _doc_id, filename, reason, err in skip_rows:
+            by_plan[plan_id]["name"] = plan_name
+            by_plan[plan_id]["skip"].append((filename, reason, err))
+
+        total_ext = len(ext_rows)
+        total_skip = len(skip_rows)
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Plans with failures", len(by_plan))
+        c2.metric("Extraction failures", total_ext)
+        c3.metric("Permanent skips", total_skip)
+
+        # Sort plans by total failure count descending
+        plans_sorted = sorted(
+            by_plan.items(),
+            key=lambda kv: -(len(kv[1]["extraction"]) + len(kv[1]["skip"])),
+        )
+
+        for _plan_id, info in plans_sorted:
+            n = len(info["extraction"]) + len(info["skip"])
+            label = f"{info['name']}  ·  {n} failed"
+            with st.expander(label):
+                if info["extraction"]:
+                    st.markdown(
+                        f"**Extraction failed** ({len(info['extraction'])})"
+                    )
+                    for fn in sorted(info["extraction"]):
+                        st.markdown(
+                            f"&nbsp;&nbsp;• {fn}", unsafe_allow_html=True
+                        )
+                if info["skip"]:
+                    st.markdown(
+                        f"**Permanently skipped** ({len(info['skip'])})"
+                    )
+                    for fn, reason, err in sorted(info["skip"]):
+                        detail = f"{reason}" + (f" — {err}" if err else "")
+                        st.markdown(
+                            f"&nbsp;&nbsp;• {fn} *({detail})*",
+                            unsafe_allow_html=True,
+                        )
+
+        st.info(
+            "**Retry options.**\n\n"
+            "Extraction failures are usually image-only PDFs (no text "
+            "layer). Re-run locally with OCR fallback:\n\n"
+            "`python pipeline.py --retry-failed`\n\n"
+            "Requires Tesseract installed (Windows: see "
+            "github.com/UB-Mannheim/tesseract/wiki). Permanent skips can "
+            "be cleared with `DELETE FROM document_skips WHERE "
+            "document_id = ?` if you want the summariser to retry them."
+        )
+    finally:
+        session.close()
+
+
 def _admin_plan_coverage_df():
     """Build the per-plan coverage table used by the Admin page.
 
@@ -2032,8 +2134,8 @@ def page_rfp(plan_id, plan_label):
 def page_admin():
     """Admin views: pipeline / data-quality diagnostics for the site owner."""
     st.title("Admin")
-    tab_runs, tab_coverage, tab_backlog = st.tabs(
-        ["Recent Runs", "Plan Coverage", "Pipeline Backlog"]
+    tab_runs, tab_coverage, tab_backlog, tab_failed = st.tabs(
+        ["Recent Runs", "Plan Coverage", "Pipeline Backlog", "Failed Docs"]
     )
 
     with tab_runs:
@@ -2123,6 +2225,9 @@ def page_admin():
                     "documents that have already been extracted but not yet "
                     "processed by Claude."
                 )
+
+    with tab_failed:
+        _render_failed_docs()
 
 
 def page_approval_action(raw_token: str, action: str):
