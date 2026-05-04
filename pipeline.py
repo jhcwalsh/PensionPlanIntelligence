@@ -6,14 +6,23 @@ Run this script to process one or more pension plans end-to-end.
 Usage:
     python pipeline.py                         # all plans
     python pipeline.py calpers calstrs         # specific plans
+    python pipeline.py --local-only            # only the WAF-blocked plans (Task Scheduler)
     python pipeline.py --extract-only          # skip fetch, just extract + summarize
     python pipeline.py --summarize-only        # skip fetch + extract, just summarize
+
+Hybrid GHA / local split: when GITHUB_ACTIONS=true is set (auto on hosted
+runners), the plans listed in data/local_only_plans.json are skipped --
+those have Cloudflare/WAF that blocks Azure IPs, so they stay on the
+local Windows Task Scheduler invocation that uses --local-only. Explicit
+positional plan_ids on the CLI bypass both filters.
 """
 
 import argparse
+import json
 import os
 import sys
 from datetime import datetime
+from pathlib import Path
 
 # Force UTF-8 output on Windows — filenames from pension sites can contain
 # characters outside cp1252, which crashes the default Windows console encoder.
@@ -55,6 +64,32 @@ def print_status(session):
                           str(extracted), str(summarized))
 
     console.print(table)
+
+
+LOCAL_ONLY_FILE = Path(__file__).parent / "data" / "local_only_plans.json"
+
+
+def _load_local_only_ids() -> list[str]:
+    with open(LOCAL_ONLY_FILE, encoding="utf-8") as f:
+        return [p["id"] for p in json.load(f)["plans"]]
+
+
+def _resolve_plan_ids(explicit: list[str] | None, local_only: bool) -> list[str] | None:
+    """Determine which plan IDs to actually process.
+
+    Precedence: explicit CLI args > --local-only > GITHUB_ACTIONS env var > all.
+    Returns None to mean "all plans" (the fetcher's default).
+    """
+    if explicit:
+        return explicit
+    if local_only:
+        return _load_local_only_ids()
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        skip = set(_load_local_only_ids())
+        registry = Path(__file__).parent / "data" / "known_plans.json"
+        with open(registry, encoding="utf-8") as f:
+            return [p["id"] for p in json.load(f) if p["id"] not in skip]
+    return None
 
 
 def run_pipeline(
@@ -115,6 +150,10 @@ def main():
                         help="Print new meetings with agenda summaries and material links")
     parser.add_argument("--updates-days", type=int, default=14,
                         help="Lookback window for --updates (default: 14 days)")
+    parser.add_argument("--local-only", action="store_true",
+                        help="Process only the WAF-blocked plans listed in "
+                             "data/local_only_plans.json (use from Windows "
+                             "Task Scheduler in the hybrid GHA/local model)")
     args = parser.parse_args()
 
     if args.status:
@@ -168,7 +207,7 @@ def main():
         do_fetch, do_extract, do_summarize = False, True, False
 
     run_pipeline(
-        plan_ids=args.plan_ids if args.plan_ids else None,
+        plan_ids=_resolve_plan_ids(args.plan_ids, args.local_only),
         do_fetch=do_fetch,
         do_extract=do_extract,
         do_summarize=do_summarize,
