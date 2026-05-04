@@ -431,6 +431,30 @@ class PipelineRun(Base):
     status = Column(String, nullable=False, default="running")  # running|succeeded|failed
 
 
+class FetchRun(Base):
+    """One row per pipeline.py invocation, capturing what was scraped.
+
+    Source distinguishes GHA cron (the 137 GHA-eligible plans) from local
+    Task Scheduler (the 11 WAF-blocked plans in data/local_only_plans.json).
+    new_document_ids is a JSON list of Document.id values inserted between
+    started_at and completed_at.
+    """
+
+    __tablename__ = "fetch_runs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    source = Column(String, nullable=False)                       # 'gha' | 'local'
+    started_at = Column(DateTime, default=_utcnow, nullable=False)
+    completed_at = Column(DateTime)
+    status = Column(String, nullable=False, default="running")    # running | success | failed
+    error_message = Column(Text)                                  # populated when status='failed'
+    new_document_ids = Column(Text, default="[]")                 # JSON list of int Document.id
+
+    __table_args__ = (
+        Index("ix_fetch_runs_started_at", "started_at"),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Init / helpers
 # ---------------------------------------------------------------------------
