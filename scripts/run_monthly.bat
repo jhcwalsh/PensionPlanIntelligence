@@ -1,7 +1,13 @@
 @echo off
 REM ------------------------------------------------------------------------
-REM Monthly local cadence — 1st of month. CAFR refresh + extraction + the
-REM monthly CIO Insights synthesis. Pushes the DB at the end.
+REM Monthly local cadence — 1st of month. CAFR refresh only. Pushes the DB
+REM so the GHA monthly-insights workflow (which fires the same day at
+REM 18:00 UTC) can pull fresh, run extract_cafr_investments.py, and
+REM compose the monthly CIO Insights digest from the new CAFR data.
+REM
+REM Extract + insights moved to GitHub Actions on 2026-05-04
+REM (.github/workflows/monthly-insights.yml). Time the local task so it
+REM completes well before 18:00 UTC -- early morning ET works fine.
 REM ------------------------------------------------------------------------
 
 setlocal
@@ -26,30 +32,16 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [%TIME%] extract_cafr_investments.py >> "%LOG%"
-python extract_cafr_investments.py >> "%LOG%" 2>&1
-if errorlevel 1 (
-    python -m scripts.notify_failure %TASK% extract_cafr "%LOG%" %ERRORLEVEL%
-    exit /b 1
-)
-
-echo [%TIME%] insights.scheduler monthly >> "%LOG%"
-python -m insights.scheduler monthly >> "%LOG%" 2>&1
-if errorlevel 1 (
-    python -m scripts.notify_failure %TASK% insights_monthly "%LOG%" %ERRORLEVEL%
-    exit /b 1
-)
-
-git add db/pension.db notes/ cafr_summaries/ >> "%LOG%" 2>&1
+git add db/pension.db >> "%LOG%" 2>&1
 git diff-index --quiet HEAD
 if errorlevel 1 (
-    git commit -m "Monthly refresh %DATE%" >> "%LOG%" 2>&1
+    git commit -m "Monthly CAFR refresh %DATE%" >> "%LOG%" 2>&1
     git push origin master >> "%LOG%" 2>&1
     if errorlevel 1 (
         python -m scripts.notify_failure %TASK% git_push "%LOG%" %ERRORLEVEL%
         exit /b 1
     )
-    echo [%TIME%] pushed monthly refresh >> "%LOG%"
+    echo [%TIME%] pushed monthly CAFR refresh >> "%LOG%"
 ) else (
     echo [%TIME%] no changes to push >> "%LOG%"
 )
