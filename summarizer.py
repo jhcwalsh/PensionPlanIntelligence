@@ -235,6 +235,13 @@ def call_claude(prompt: str, model: str) -> str:
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": prompt}]
     )
+    if not message.content:
+        raise RuntimeError(
+            f"Claude returned empty content "
+            f"(stop_reason={message.stop_reason}, "
+            f"input_tokens={message.usage.input_tokens}, "
+            f"output_tokens={message.usage.output_tokens})"
+        )
     return message.content[0].text
 
 
