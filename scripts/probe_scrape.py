@@ -209,7 +209,7 @@ def main(argv: list[str] | None = None) -> int:
     with open(repo_root / "data" / "known_plans.json", encoding="utf-8") as f:
         registry = {p["id"]: p for p in json.load(f)}
 
-    if args.all:
+    if args.all or (args.plan_ids and args.plan_ids == ["all"]):
         plan_ids = list(registry.keys())
     elif args.plan_ids:
         plan_ids = args.plan_ids
