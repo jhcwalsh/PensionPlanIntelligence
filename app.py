@@ -22,6 +22,7 @@ from database import (
     CafrPerformance,
     Document,
     DocumentHealth,
+    FetchRun,
     PipelineRun,
     Plan,
     Publication,
@@ -1112,6 +1113,89 @@ def page_document_detail(doc_id: int):
         session.close()
 
 
+RECENT_RUNS_LIMIT = 14   # ~1 week of GHA + local entries
+
+
+def _render_recent_runs():
+    """Render the 'Recent Runs' Admin sub-tab: last N FetchRun entries,
+    each expandable to show plan → filename of every new document."""
+    import json
+    from collections import defaultdict
+    from sqlalchemy import desc
+
+    st.caption(
+        f"The last {RECENT_RUNS_LIMIT} pipeline runs (GHA cron and local "
+        "Task Scheduler combined). Each row expands to show the new "
+        "documents fetched in that run, grouped by plan."
+    )
+
+    session = get_session()
+    try:
+        runs = (
+            session.query(FetchRun)
+            .order_by(desc(FetchRun.started_at))
+            .limit(RECENT_RUNS_LIMIT)
+            .all()
+        )
+        if not runs:
+            st.info("No pipeline runs recorded yet. The next GHA cron or "
+                    "local Task Scheduler invocation will populate this.")
+            return
+
+        for run in runs:
+            doc_ids = json.loads(run.new_document_ids or "[]")
+            if run.status == "failed":
+                marker = "✗"
+                summary = f"failed: {run.error_message or 'no message recorded'}"
+            elif run.status == "running":
+                marker = "⋯"
+                summary = "still running…"
+            else:
+                summary = (
+                    f"{len(doc_ids)} new document{'s' if len(doc_ids) != 1 else ''}"
+                )
+                marker = "✓"
+
+            elapsed_str = ""
+            if run.completed_at and run.started_at:
+                secs = int((run.completed_at - run.started_at).total_seconds())
+                if secs >= 60:
+                    elapsed_str = f" ({secs // 60}m {secs % 60}s)"
+                else:
+                    elapsed_str = f" ({secs}s)"
+
+            label = (
+                f"{marker} {run.started_at.strftime('%Y-%m-%d %H:%M UTC')} "
+                f"· {run.source} · {summary}{elapsed_str}"
+            )
+
+            with st.expander(label, expanded=(run is runs[0] and doc_ids)):
+                if run.status == "failed":
+                    st.error(run.error_message or "No error message captured.")
+                if not doc_ids:
+                    st.write("No new documents in this run.")
+                    continue
+
+                # Group filenames under their plan name
+                rows = (
+                    session.query(Plan.name, Document.filename, Document.downloaded_at)
+                    .join(Document, Document.plan_id == Plan.id)
+                    .filter(Document.id.in_(doc_ids))
+                    .order_by(Document.downloaded_at)
+                    .all()
+                )
+                grouped = defaultdict(list)
+                for plan_name, filename, downloaded_at in rows:
+                    grouped[plan_name].append((filename, downloaded_at))
+
+                for plan_name in sorted(grouped):
+                    st.markdown(f"**{plan_name}**")
+                    for filename, _ in grouped[plan_name]:
+                        st.markdown(f"&nbsp;&nbsp;• {filename}", unsafe_allow_html=True)
+    finally:
+        session.close()
+
+
 def _admin_plan_coverage_df():
     """Build the per-plan coverage table used by the Admin page.
 
@@ -1948,7 +2032,12 @@ def page_rfp(plan_id, plan_label):
 def page_admin():
     """Admin views: pipeline / data-quality diagnostics for the site owner."""
     st.title("Admin")
-    tab_coverage, tab_backlog = st.tabs(["Plan Coverage", "Pipeline Backlog"])
+    tab_runs, tab_coverage, tab_backlog = st.tabs(
+        ["Recent Runs", "Plan Coverage", "Pipeline Backlog"]
+    )
+
+    with tab_runs:
+        _render_recent_runs()
 
     with tab_coverage:
         st.caption(
