@@ -13,8 +13,17 @@ Usage:
     python -m scripts.probe_scrape                          # default 17-plan sample
     python -m scripts.probe_scrape calpers calstrs lacera   # specific plans
     python -m scripts.probe_scrape --all                    # every plan in registry
+    python -m scripts.probe_scrape --cafr --all             # probe CAFR URLs instead
 
-Read-only — does NOT touch the database or download PDFs.
+In default mode, hits each plan's ``materials_url`` (the board-meeting
+page). In ``--cafr`` mode, hits the CAFR PDF URL resolved the same way
+``refresh_cafrs.py`` does it (``cafr_url_template`` rendered with the
+expected fiscal year, or static ``cafr_url`` if its embedded year is
+right). Plans with no CAFR fields are skipped.
+
+Read-only — does NOT touch the database or download full PDFs (CAFR
+mode reads only the first 32 KB of each response to spot WAF challenge
+HTML returned in place of a PDF).
 """
 
 from __future__ import annotations
@@ -138,6 +147,116 @@ def probe_one_requests(url: str) -> dict:
     }
 
 
+def _expected_fiscal_year(today_year: int, today_month: int, today_day: int,
+                          fy_end_md: str) -> int:
+    """Inline copy of refresh_cafrs.expected_fiscal_year — kept here to keep
+    this probe free of database / PDF-parsing imports."""
+    m, d = (int(x) for x in fy_end_md.split("-"))
+    if (today_month, today_day) >= (m, d):
+        return today_year
+    return today_year - 1
+
+
+def _resolve_cafr_url(plan: dict) -> tuple[str | None, str]:
+    """Return (url, source_label) for the CAFR URL we'd try this month.
+
+    Mirrors fetch_cafr.resolve_cafr_url_for_year, but evaluates target_year
+    inline. ``cafr_landing`` is intentionally NOT followed here — none of the
+    148 plans set it in practice, and scraping a landing page would conflate
+    'CAFR PDF blocked' with 'landing page blocked'.
+    """
+    fy_end = plan.get("fiscal_year_end")
+    if fy_end:
+        from datetime import datetime
+        now = datetime.utcnow()
+        target_year = _expected_fiscal_year(now.year, now.month, now.day, fy_end)
+    else:
+        target_year = None
+
+    template = plan.get("cafr_url_template")
+    if template and "{year}" in template and target_year is not None:
+        return template.format(year=target_year), f"template (year={target_year})"
+
+    static = plan.get("cafr_url")
+    if static:
+        return static, "static cafr_url"
+
+    return None, "no CAFR fields"
+
+
+def probe_one_cafr(url: str) -> dict:
+    """Probe a CAFR URL — usually a direct PDF download.
+
+    Streams the response so we don't pull a 20 MB CAFR over the wire just
+    to check whether the host is reachable. Reads only the first ~32 KB,
+    which is enough to spot WAF challenge HTML returned in place of a PDF.
+    """
+    import requests
+
+    t0 = time.time()
+    try:
+        resp = requests.get(
+            url, headers=PROBE_HEADERS, timeout=30,
+            allow_redirects=True, stream=True,
+        )
+    except Exception as exc:
+        return {
+            "ok": False, "status": None, "size": 0, "links": 0,
+            "elapsed_s": time.time() - t0,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+
+    try:
+        # Read up to 32 KB of body — enough to detect WAF HTML or confirm
+        # a PDF magic header (%PDF-1.x) without downloading the full file.
+        chunk = b""
+        for piece in resp.iter_content(chunk_size=8192):
+            chunk += piece
+            if len(chunk) >= 32_768:
+                break
+    except Exception as exc:
+        resp.close()
+        return {
+            "ok": False, "status": resp.status_code, "size": 0, "links": 0,
+            "elapsed_s": time.time() - t0,
+            "error": f"read: {type(exc).__name__}: {exc}",
+        }
+    finally:
+        resp.close()
+
+    elapsed = time.time() - t0
+    body_text = chunk.decode("utf-8", errors="replace")
+    waf = _detect_waf(resp.status_code, dict(resp.headers), body_text)
+    if waf:
+        return {
+            "ok": False, "status": resp.status_code, "size": len(chunk),
+            "links": 0, "elapsed_s": elapsed,
+            "error": f"BLOCKED: {waf}",
+        }
+    if resp.status_code >= 400:
+        return {
+            "ok": False, "status": resp.status_code, "size": len(chunk),
+            "links": 0, "elapsed_s": elapsed,
+            "error": f"HTTP {resp.status_code}",
+        }
+
+    # Sanity: did we actually get a PDF? Magic header is "%PDF-".
+    is_pdf = chunk[:5] == b"%PDF-"
+    content_type = resp.headers.get("content-type", "")
+    if not is_pdf and "pdf" not in content_type.lower():
+        # Reachable but didn't return a PDF — could be HTML 404, redirect
+        # to a search page, etc. Flag as not-ok but distinguish from WAF.
+        return {
+            "ok": False, "status": resp.status_code, "size": len(chunk),
+            "links": 0, "elapsed_s": elapsed,
+            "error": f"not a PDF (content-type={content_type or 'unknown'!r})",
+        }
+    return {
+        "ok": True, "status": resp.status_code, "size": len(chunk),
+        "links": 0, "elapsed_s": elapsed, "error": None,
+    }
+
+
 def probe_one_playwright(url: str, wait_selector: str | None = None) -> dict:
     """Probe a JS-heavy plan. Spawns headless Chromium per plan — slow but
     matches the production fetcher's behaviour exactly."""
@@ -201,6 +320,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="Plan IDs to probe (default: 17-plan sample)")
     parser.add_argument("--all", action="store_true",
                         help="Probe every plan in the registry")
+    parser.add_argument("--cafr", action="store_true",
+                        help="Probe each plan's CAFR PDF URL instead of materials_url")
     args = parser.parse_args(argv)
 
     repo_root = Path(__file__).resolve().parent.parent
@@ -217,8 +338,10 @@ def main(argv: list[str] | None = None) -> int:
         plan_ids = DEFAULT_SAMPLE
 
     is_gha = os.environ.get("GITHUB_ACTIONS") == "true"
-    print(f"Probe scrape — {len(plan_ids)} plans"
-          f"  ({'GitHub Actions' if is_gha else 'local'} environment)\n")
+    mode_label = "CAFR PDF URLs" if args.cafr else "materials_url"
+    print(f"Probe scrape — {len(plan_ids)} plans  "
+          f"[mode: {mode_label}]  "
+          f"({'GitHub Actions' if is_gha else 'local'} environment)\n")
 
     results = []
     for pid in plan_ids:
@@ -227,6 +350,28 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  ✗ {pid:15s} NOT FOUND in registry")
             results.append({"plan_id": pid, "ok": False, "error": "unknown plan"})
             continue
+
+        if args.cafr:
+            url, src = _resolve_cafr_url(plan)
+            if not url:
+                # Skip silently — most non-CAFR plans don't apply here.
+                continue
+            r = probe_one_cafr(url)
+            r["plan_id"] = pid
+            r["abbreviation"] = plan.get("abbreviation", pid)
+            r["state"] = plan.get("state", "?")
+            r["materials_type"] = src
+            mark = "✓" if r["ok"] else "✗"
+            size_kb = r.get("size", 0) // 1024
+            print(
+                f"  {mark} {pid:15s} {r['abbreviation']:12s} {r['state']:3s} "
+                f"{src:28s} HTTP={r.get('status','-')!s:>5s}  "
+                f"{size_kb:5d} KB  {r.get('elapsed_s',0):4.1f}s  "
+                f"{r.get('error') or 'OK'}"
+            )
+            results.append(r)
+            continue
+
         url = plan.get("materials_url")
         if not url:
             print(f"  ✗ {pid:15s} no materials_url")
@@ -261,11 +406,14 @@ def main(argv: list[str] | None = None) -> int:
         if not r.get("ok") and (r.get("error") or "").startswith("BLOCKED:")
     )
     n_other = n - n_ok - n_blocked
+    n_skipped = len(plan_ids) - n if args.cafr else 0
 
     print("\nSummary")
     print(f"  passed:               {n_ok}/{n}")
     print(f"  WAF / IP-blocked:     {n_blocked}/{n}")
     print(f"  other failures:       {n_other}/{n}")
+    if n_skipped:
+        print(f"  skipped (no CAFR):    {n_skipped} plans")
 
     if n_ok == 0:
         print("\nALL plans failed — likely systemic IP block. Investigate before "

@@ -12,6 +12,11 @@ on:
         description: "Comma- or space-separated plan IDs (blank = default 17-plan sample, '--all' = every plan)"
         required: false
         default: ""
+      cafr:
+        description: "Probe CAFR PDF URLs instead of materials_url (skips plans without CAFR fields)"
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   probe:
@@ -32,9 +37,15 @@ jobs:
           pip install -r requirements-pipeline.txt
 
       - name: Install Playwright Chromium with system deps
+        # CAFR probe is requests-only — no need for Chromium.
+        if: ${{ github.event.inputs.cafr != 'true' }}
         run: python -m playwright install --with-deps chromium
 
       - name: Run probe
         run: |
+          CAFR_FLAG=""
+          if [ "${{ github.event.inputs.cafr }}" = "true" ]; then
+            CAFR_FLAG="--cafr"
+          fi
           # Pass any user-supplied plan_ids verbatim so '--all' works too.
-          python -m scripts.probe_scrape ${{ github.event.inputs.plan_ids }}
+          python -m scripts.probe_scrape $CAFR_FLAG ${{ github.event.inputs.plan_ids }}
