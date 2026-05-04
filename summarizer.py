@@ -227,6 +227,16 @@ def _max_tokens(model: str) -> int:
     return 4096 if model == MODEL_HAIKU else 4096
 
 
+def _unwrap(exc: Exception) -> Exception:
+    """Surface the real exception inside a tenacity RetryError wrapper."""
+    if hasattr(exc, "last_attempt"):
+        try:
+            return exc.last_attempt.exception() or exc
+        except Exception:
+            pass
+    return exc
+
+
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=2, min=4, max=30))
 def call_claude(prompt: str, model: str) -> str:
     message = _get_client().messages.create(
@@ -323,10 +333,10 @@ def summarize_document(doc: Document, plan_name: str,
             raw = call_claude(prompt, model)
             data = parse_response(raw)
         except Exception as e2:
-            console.print(f"  [red]Retry failed: {e2}[/red]")
+            console.print(f"  [red]Retry failed: {_unwrap(e2)}[/red]")
             return None
     except Exception as e:
-        console.print(f"  [red]Claude API error: {e}[/red]")
+        console.print(f"  [red]Claude API error: {_unwrap(e)}[/red]")
         return None
 
     summary = Summary(
