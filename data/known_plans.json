@@ -128,7 +128,7 @@
       "board_pack",
       "minutes"
     ],
-    "cafr_url": "https://www.ers.texas.gov/About-ERS/Reports-and-Studies/Reports-on-Overall-ERS-Operations-and-Financial-Management",
+    "cafr_landing": "https://www.ers.texas.gov/About-ERS/Reports-and-Studies/Reports-on-Overall-ERS-Operations-and-Financial-Management",
     "fiscal_year_end": "06-30"
   },
   {
@@ -1588,7 +1588,7 @@
       "board_pack",
       "minutes"
     ],
-    "cafr_url": "https://www.cccera.gov/2024-annual-comprehensive-financial-report",
+    "cafr_landing": "https://www.cccera.gov/2024-annual-comprehensive-financial-report",
     "fiscal_year_end": "06-30"
   },
   {
@@ -1733,7 +1733,7 @@
       "minutes"
     ],
     "notes": "Hosted under nyc.gov/content/nycppf/; nycppf.org does not exist",
-    "cafr_url": "https://comptroller.nyc.gov/reports/annual-comprehensive-financial-reports/",
+    "cafr_landing": "https://comptroller.nyc.gov/reports/annual-comprehensive-financial-reports/",
     "fiscal_year_end": "06-30"
   },
   {
