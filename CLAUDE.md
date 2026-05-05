@@ -95,10 +95,10 @@ Render hosts only two web services now: Streamlit (`pension-plan-intelligence`) 
 | Daily document pipeline (11 WAF-blocked plans) | Task Scheduler | local Windows | `scripts/run_daily.bat` |
 | Weekly Insights composition + email | cron Sundays 11:00 UTC | GHA | `.github/workflows/weekly-insights.yml` |
 | Weekly RFP backfill (`--limit 100`) | cron Sundays 11:30 UTC | GHA | `.github/workflows/weekly-rfp.yml` |
-| Monthly CAFR refresh (~92 plans) | cron 1st of month 15:00 UTC | GHA | `.github/workflows/monthly-cafr-refresh.yml` |
-| Monthly CAFR refresh (5 WAF-blocked plans) | Task Scheduler | local Windows | `scripts/run_monthly.bat` |
+| Monthly CAFR refresh + structured extraction (~92 plans) | cron 1st of month 15:00 UTC | GHA | `.github/workflows/monthly-cafr-refresh.yml` |
+| Monthly CAFR refresh + structured extraction (5 WAF-blocked plans) | Task Scheduler | local Windows | `scripts/run_monthly.bat` |
 | Monthly IPS refresh (all 148 plans, auto-discover + verify via Haiku 4.5) | Task Scheduler | local Windows | `scripts/run_ips.bat` |
-| Monthly CAFR extraction + insights composition + email | cron 1st of month 18:00 UTC | GHA | `.github/workflows/monthly-insights.yml` |
+| Monthly insights composition + email | cron 1st of month 18:00 UTC | GHA | `.github/workflows/monthly-insights.yml` |
 | Quarterly insights composition + email | cron 1st of Jan/Apr/Jul/Oct 19:00 UTC | GHA | `.github/workflows/quarterly-insights.yml` |
 
 GHA secrets that must exist for the cron entries to work: `ANTHROPIC_API_KEY`, `RESEND_API_KEY`, `APPROVAL_EMAIL_RECIPIENT`, `APPROVAL_EMAIL_FROM`. Local cron uses the same names from `.env`. Schedules are UTC; ET drifts one hour between EDT and EST. The 1st-of-month sequence is deliberate: GHA CAFR refresh @ 15:00 UTC → local CAFR refresh runs early ET → GHA monthly-insights @ 18:00 UTC pulls a DB that already has both runs' new CAFRs.

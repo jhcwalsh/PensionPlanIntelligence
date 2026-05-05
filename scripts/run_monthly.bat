@@ -33,6 +33,17 @@ if errorlevel 1 (
     exit /b 1
 )
 
+REM Structured extraction must run in the same job as the refresh so the
+REM PDF binaries (at doc.local_path) are still on disk. PDFs are not
+REM committed to git; if extraction moved to a later run, all freshly
+REM downloaded CAFRs would silently fail with "missing_file".
+echo [%TIME%] extract_cafr_investments.py >> "%LOG%"
+python extract_cafr_investments.py >> "%LOG%" 2>&1
+if errorlevel 1 (
+    python -m scripts.notify_failure %TASK% extract_cafr_investments "%LOG%" %ERRORLEVEL%
+    exit /b 1
+)
+
 git add db/pension.db >> "%LOG%" 2>&1
 git diff-index --quiet HEAD
 if errorlevel 1 (

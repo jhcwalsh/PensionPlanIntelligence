@@ -1907,6 +1907,17 @@ def _cafr_coverage_df():
         ).group_by(CafrPerformance.cafr_extract_id).all()
     )
 
+    # Plan metadata from JSON: cafr_format=aggregator marks a CAFR that
+    # covers a system-of-systems (e.g. NYC Retirement, MN SBI). The
+    # structured extractor intentionally skips these because the
+    # asset-allocation tables don't map to a single plan. Bucket them
+    # separately so they don't sit forever as "Pending extract".
+    from fetcher import load_plans
+    aggregator_ids: set[str] = {
+        meta["id"] for meta in load_plans()
+        if (meta.get("cafr_format") or "").lower() == "aggregator"
+    }
+
     plans = session.query(Plan).order_by(Plan.name).all()
     rows = []
     for p in plans:
@@ -1925,7 +1936,13 @@ def _cafr_coverage_df():
             downloaded = doc.downloaded_at.strftime("%Y-%m-%d") if doc.downloaded_at else ""
             url = doc.url or ""
             ext = extracts.get(doc.id)
-            if ext is None:
+            if p.id in aggregator_ids:
+                status = "Aggregator (skipped)"
+                extracted = "N/A"
+                extract_fy = ""
+                alloc = 0
+                perf = 0
+            elif ext is None:
                 status = "Pending extract"
                 extracted = "No"
                 extract_fy = ""
@@ -2397,17 +2414,21 @@ def page_cafr():
     total = len(df)
     extracted = int((df["Status"] == "Extracted").sum())
     pending = int((df["Status"] == "Pending extract").sum())
+    aggregator = int((df["Status"] == "Aggregator (skipped)").sum())
     missing = int((df["Status"] == "Missing CAFR").sum())
 
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("Plans tracked", total)
     c2.metric("Extracted", extracted)
     c3.metric("Pending extract", pending)
-    c4.metric("Missing CAFR", missing)
+    c4.metric("Aggregator", aggregator,
+              help="System-of-systems CAFRs that don't map to a single plan; "
+                   "skipped by design.")
+    c5.metric("Missing CAFR", missing)
 
     status_filter = st.multiselect(
         "Filter by status",
-        ["Extracted", "Pending extract", "Missing CAFR"],
+        ["Extracted", "Pending extract", "Aggregator (skipped)", "Missing CAFR"],
         default=[],
         key="cafr_status_filter",
     )
