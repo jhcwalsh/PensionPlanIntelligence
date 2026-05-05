@@ -16,7 +16,7 @@ Three-tier PDF strategy:
 import base64
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from rich.console import Console
@@ -237,16 +237,118 @@ DATE_RE = re.compile(
 )
 
 
-def infer_meeting_date(text: str, existing_date: datetime | None) -> datetime | None:
-    """Try to find a meeting date in the first 2000 chars of extracted text."""
-    if existing_date:
+_FILENAME_DATE_PATTERNS = [
+    # 04292026 / 04-29-2026 / 04_29_2026 / 04.29.2026 — concatenated MMDDYYYY
+    # with optional separators. Matches "agenda.board.04292026.pdf",
+    # "Board_Pack_04-29-2026.pdf", etc.
+    (r"(?:^|[^0-9])(\d{2})[\-_.]?(\d{2})[\-_.]?(\d{4})(?:[^0-9]|$)", "MDY"),
+    # M.D.YY or M-D-YY (two-digit year). Matches "IC_Agenda_4.24.26.pdf".
+    # Constrained to . / - separators so we don't snag random number runs.
+    (r"(?:^|[^0-9])(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{2})(?:[^0-9]|$)", "MDY2"),
+    # YYYYMMDD / YYYY-MM-DD / YYYY_MM_DD
+    (r"(?:^|[^0-9])(\d{4})[\-_.]?(\d{2})[\-_.]?(\d{2})(?:[^0-9]|$)", "YMD"),
+    # Month DD YYYY (with various separators)
+    (r"(January|February|March|April|May|June|July|August|September|October|"
+     r"November|December)[\s\-_]+(\d{1,2})[\s\-_,]+(\d{4})", "WORD_MDY"),
+    # Month YYYY only (no day) — fall back to first of month.
+    # Matches "December-2025-Board-Highlights.pdf".
+    (r"(January|February|March|April|May|June|July|August|September|October|"
+     r"November|December)[\s\-_]+(\d{4})", "WORD_MY"),
+]
+
+
+def parse_date_from_filename(filename: str | None) -> datetime | None:
+    """Extract a plausible meeting date from a filename.
+
+    Tries several common shapes (MMDDYYYY without separators, M.D.YY,
+    YYYYMMDD, "Month DD YYYY", "Month YYYY") and returns the first
+    valid result. Returns None if no plausible date is found.
+
+    The fetcher's ``parse_date_from_text`` only handles separator-bearing
+    formats, which misses board-agenda filenames like
+    ``agenda.board.04292026.pdf``. This helper is the second-pass fallback.
+    """
+    if not filename:
+        return None
+    base = re.sub(r"\.[a-zA-Z0-9]+$", "", filename)
+    for pattern, kind in _FILENAME_DATE_PATTERNS:
+        m = re.search(pattern, base, re.IGNORECASE)
+        if not m:
+            continue
+        try:
+            if kind == "MDY":
+                month, day, year = int(m.group(1)), int(m.group(2)), int(m.group(3))
+            elif kind == "MDY2":
+                month, day, year = int(m.group(1)), int(m.group(2)), int(m.group(3))
+                year = year + 2000 if year < 100 else year
+            elif kind == "YMD":
+                year, month, day = int(m.group(1)), int(m.group(2)), int(m.group(3))
+            elif kind == "WORD_MDY":
+                return datetime.strptime(
+                    f"{m.group(1)} {m.group(2)} {m.group(3)}", "%B %d %Y"
+                )
+            elif kind == "WORD_MY":
+                return datetime.strptime(f"{m.group(1)} 1 {m.group(2)}", "%B %d %Y")
+            else:
+                continue
+            if (1 <= month <= 12 and 1 <= day <= 31
+                    and 2000 <= year <= 2035):
+                return datetime(year, month, day)
+        except ValueError:
+            continue
+    return None
+
+
+def _date_is_plausible(d: datetime, downloaded_at: datetime | None) -> bool:
+    """Reject dates that can't possibly be a real meeting given fetch time.
+
+    A meeting date should be within ~60 days after download (forward-scheduled
+    agendas) and within ~5 years before (the longest historical material we
+    routinely fetch). Anything outside that window is almost certainly a
+    parser misread.
+    """
+    if downloaded_at is None:
+        return True
+    if d > downloaded_at + timedelta(days=60):
+        return False
+    if d < downloaded_at - timedelta(days=5 * 365):
+        return False
+    return True
+
+
+def infer_meeting_date(
+    text: str,
+    existing_date: datetime | None,
+    filename: str | None = None,
+    downloaded_at: datetime | None = None,
+) -> datetime | None:
+    """Best-effort meeting date for a Document.
+
+    Priority order:
+      1. ``existing_date`` if already set and plausible (fetcher wins)
+      2. ``parse_date_from_filename`` — strong signal, low false-positive rate
+      3. First Month-DD-YYYY in the first 2000 chars of ``text`` — last resort
+
+    Sanity-checks every candidate against ``downloaded_at`` (when provided):
+    a date >60 days after fetch or >5 years before is treated as a parser
+    error and discarded. Returns None when no plausible date is found —
+    "no date" is preferred over a wrong date.
+    """
+    if existing_date and _date_is_plausible(existing_date, downloaded_at):
         return existing_date
+
+    fname_date = parse_date_from_filename(filename)
+    if fname_date and _date_is_plausible(fname_date, downloaded_at):
+        return fname_date
+
     m = DATE_RE.search(text[:2000])
     if m:
         raw = m.group(0).replace(",", "").strip()
         for fmt in ("%B %d %Y", "%B %d, %Y"):
             try:
-                return datetime.strptime(raw, fmt)
+                d = datetime.strptime(raw, fmt)
+                if _date_is_plausible(d, downloaded_at):
+                    return d
             except ValueError:
                 continue
     return None
@@ -318,7 +420,11 @@ def run_extractor(doc_ids: list[int] = None, retry_failed: bool = False):
 
             # Try to infer meeting date from content if not already set
             if text:
-                doc.meeting_date = infer_meeting_date(text, doc.meeting_date)
+                doc.meeting_date = infer_meeting_date(
+                    text, doc.meeting_date,
+                    filename=doc.filename,
+                    downloaded_at=doc.downloaded_at,
+                )
 
             session.commit()
             status_color = "green" if status == "done" else "red"
