@@ -588,7 +588,7 @@ def _find_latest_insights() -> tuple[Path, str, str] | None:
 
 
 def _find_latest_insights_recent() -> tuple[Path, str, str] | None:
-    """Find the latest Monthly Insights note for the Notes tab.
+    """Find the latest Monthly Insights note for the Insights tab.
 
     Prefers the new approval-flow output (``monthly_cio_insights_<date>.md``
     written by ``insights.publish.publish``) sorted by period date.
@@ -739,7 +739,7 @@ def _find_latest_consultant_rfps() -> tuple[Path, str, str] | None:
     return (path, title, generated_date)
 
 
-def page_notes():
+def page_insights():
     tab_week, tab_insights_monthly, tab_rfps, tab_insights_year = st.tabs([
         "7-Day Highlights",
         "Monthly Insights",
@@ -2631,12 +2631,12 @@ def page_drafts():
                 )
 
 
-def page_insights():
+def page_archive():
     """List approved/published Insights publications with PDF downloads."""
-    st.title("Published Insights")
+    st.title("Insights Archive")
     st.caption(
         "Every Insights publication that has cleared the approval flow. "
-        "The 'Notes' tab still serves the live versions; this view is the "
+        "The 'Insights' tab serves the live versions; this view is the "
         "audit trail."
     )
 
@@ -2700,13 +2700,13 @@ def main():
         return
 
     tabs = st.tabs([
-        "Notes", "Summary", "Updates", "Search", "Browse Recent",
+        "Insights", "Summary", "Updates", "Search", "Browse Recent",
         "Investment Actions", "Managers", "RFPs", "CAFR", "Asset Allocation",
-        "Plans", "Drafts", "Insights", "Admin",
+        "Plans", "Drafts", "Archive", "Admin",
     ])
 
     with tabs[0]:
-        page_notes()
+        page_insights()
     with tabs[1]:
         page_summary_updates(plan_id, plan_label)
     with tabs[2]:
@@ -2730,7 +2730,7 @@ def main():
     with tabs[11]:
         page_drafts()
     with tabs[12]:
-        page_insights()
+        page_archive()
     with tabs[13]:
         page_admin()
 

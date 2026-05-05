@@ -7,7 +7,7 @@ Claude, and writes the resulting markdown to
 
 This is its own briefing — independent of the Insights weekly /
 monthly cycle — so it doesn't go through the Publication approval
-flow. The Notes tab reads ``monthly_consultant_rfps_*.md`` directly.
+flow. The Insights tab reads ``monthly_consultant_rfps_*.md`` directly.
 
 Run:
     python -m scripts.compose_rfp_monthly                   # April 2026

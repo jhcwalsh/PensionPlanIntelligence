@@ -3,7 +3,7 @@ parentheticals into proper ``([source](?doc=N))`` markdown links and
 expand a malformed multi-URL footer link into separate links.
 
 Updates both notes/monthly_cio_insights_2026-04-01.md on disk and
-publication 3's draft_markdown column so the Notes tab and Insights
+publication 3's draft_markdown column so the Insights tab and Archive
 tab stay in sync.
 
 Background: compose_monthly synthesizes from approved weeklies. The
