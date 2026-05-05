@@ -25,11 +25,13 @@ from database import (
     DocumentHealth,
     DocumentSkip,
     FetchRun,
+    IpsDocument,
     PipelineRun,
     Plan,
     Publication,
     RFPRecord,
     Summary,
+    WeeklyRun,
     aggregate_managers,
     count_search_summaries,
     get_new_meetings,
@@ -1612,6 +1614,119 @@ def _admin_plan_coverage_df():
     return df
 
 
+_SEVERITY_BADGE = {"error": "🔴", "warning": "🟡", "info": "🔵"}
+
+
+def _render_admin_report_card():
+    """Render the 'Report Card' Admin sub-tab.
+
+    Single-pane progress + health view. Sourced from admin_report.build_report
+    so the same payload is consumable by tests and AI assistants reading the
+    page (the structured JSON is also exposed in an expander at the bottom).
+    """
+    import json
+    import pandas as pd
+
+    from admin_report import build_report
+
+    st.caption(
+        "Weekly progress and health summary. Two purposes: a human-readable "
+        "snapshot of how many plans we covered each week (and cumulatively), "
+        "and a structured issue list — every problem includes a fix hint so "
+        "an AI assistant pasted into a session can investigate without "
+        "round-tripping through the UI."
+    )
+
+    report = build_report()
+    cum = report["cumulative"]
+    issues = report["issues"]
+
+    # ---- Cumulative headline ------------------------------------------
+    st.subheader("Cumulative coverage")
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("Plans tracked", cum["total_plans"])
+    c2.metric("Plans w/ documents", cum["plans_with_document"])
+    c3.metric("Plans w/ summaries", cum["plans_with_summary"])
+    c4.metric("Plans w/ CAFR", cum["plans_with_cafr"])
+    c5.metric("Plans w/ IPS", cum["plans_with_ips"])
+
+    # ---- This week --------------------------------------------------------
+    st.subheader(
+        f"Latest reportable week — "
+        f"{report['latest_week']['start']} → {report['latest_week']['end']}"
+    )
+    latest = report["weeks"][0]
+    w1, w2, w3, w4 = st.columns(4)
+    w1.metric("Unique plans this week", latest["unique_plans"])
+    w2.metric("New documents", latest["new_documents"])
+    w3.metric("New summaries", latest["new_summaries"])
+    w4.metric(
+        "Weekly Insights",
+        latest["publication_status"] or "missing",
+    )
+
+    # ---- Issues -----------------------------------------------------------
+    st.subheader("Issues")
+    if not issues:
+        st.success("No issues detected.")
+    else:
+        # Severity-sorted: errors first, then warnings, then info
+        order = {"error": 0, "warning": 1, "info": 2}
+        for issue in sorted(issues, key=lambda i: order.get(i["severity"], 9)):
+            badge = _SEVERITY_BADGE.get(issue["severity"], "•")
+            label = (
+                f"{badge} **{issue['severity'].upper()}** · "
+                f"{issue['category']} — {issue['message']}"
+            )
+            with st.expander(label, expanded=(issue["severity"] == "error")):
+                if issue.get("fix_hint"):
+                    st.markdown(f"**Fix:** {issue['fix_hint']}")
+                details = issue.get("details") or []
+                if details:
+                    st.markdown(f"**Details ({len(details)}):**")
+                    # Cap at 50 to avoid runaway expanders; truth is in the JSON below.
+                    for line in details[:50]:
+                        st.markdown(f"&nbsp;&nbsp;• {line}", unsafe_allow_html=True)
+                    if len(details) > 50:
+                        st.caption(f"… and {len(details) - 50} more (see JSON below).")
+
+    # ---- Weekly trend table ----------------------------------------------
+    st.subheader(f"Last {len(report['weeks'])} weeks (Sun→Sat)")
+
+    def _fmt_runs(ok, failed):
+        if ok == 0 and failed == 0:
+            return "—"
+        if failed == 0:
+            return f"{ok}"
+        return f"{ok} ✓ / {failed} ✗"
+
+    df = pd.DataFrame(
+        [
+            {
+                "Week": w["week_start"],
+                "Plans w/ new docs": w["unique_plans"],
+                "New docs": w["new_documents"],
+                "New summaries": w["new_summaries"],
+                "GHA runs": _fmt_runs(w["gha_success"], w["gha_failed"]),
+                "Local runs": _fmt_runs(w["local_success"], w["local_failed"]),
+                "Insights": w["publication_status"] or "—",
+                "Weekly run": w["weekly_run_status"] or "—",
+                "Cumulative plans": w["cumulative_unique_plans"],
+            }
+            for w in report["weeks"]
+        ]
+    )
+    st.dataframe(df, use_container_width=True, hide_index=True)
+
+    # ---- AI / debug payload ----------------------------------------------
+    with st.expander("Diagnostics JSON (for AI assistants)", expanded=False):
+        st.caption(
+            "Same payload as above, structured. Paste into a Claude session "
+            "with `admin_report.build_report()` to act on the issue list."
+        )
+        st.code(json.dumps(report, indent=2, default=str), language="json")
+
+
 @st.cache_data(ttl=300)
 def _cafr_coverage_df():
     """Per-plan CAFR + extraction coverage table.
@@ -2398,11 +2513,14 @@ def page_rfp(plan_id, plan_label):
 def page_admin():
     """Admin views: pipeline / data-quality diagnostics for the site owner."""
     st.title("Admin")
-    (tab_runs, tab_coverage, tab_backlog, tab_failed,
+    (tab_report, tab_runs, tab_coverage, tab_backlog, tab_failed,
      tab_cafr, tab_cafr_refreshes) = st.tabs(
-        ["Recent Runs", "Plan Coverage", "Pipeline Backlog",
+        ["Report Card", "Recent Runs", "Plan Coverage", "Pipeline Backlog",
          "Failed Docs", "CAFR Coverage", "CAFR Refreshes"]
     )
+
+    with tab_report:
+        _render_admin_report_card()
 
     with tab_runs:
         _render_recent_runs()
