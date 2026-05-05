@@ -67,7 +67,7 @@ def _format_payload(cycle: str, period: str, error: BaseException,
     tb = "".join(traceback.format_exception(type(error), error, error.__traceback__))
     context_lines = "\n".join(f"• *{k}:* `{v}`" for k, v in context.items())
     text = (
-        f":rotating_light: *CIO Insights `{cycle}` cycle failed* "
+        f":rotating_light: *Insights `{cycle}` cycle failed* "
         f"(period `{period}`)\n"
         f"*Error:* `{type(error).__name__}: {error}`\n"
         + (context_lines + "\n" if context_lines else "")

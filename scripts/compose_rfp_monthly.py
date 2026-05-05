@@ -5,7 +5,7 @@ joins to Document/Plan for context, hands the structured data to
 Claude, and writes the resulting markdown to
 ``notes/monthly_consultant_rfps_<period_start>.md``.
 
-This is its own briefing — independent of the CIO Insights weekly /
+This is its own briefing — independent of the Insights weekly /
 monthly cycle — so it doesn't go through the Publication approval
 flow. The Notes tab reads ``monthly_consultant_rfps_*.md`` directly.
 

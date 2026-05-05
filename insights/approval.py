@@ -185,11 +185,11 @@ def render_approval_email(publication: Publication,
     period = f"{publication.period_start.isoformat()} – {publication.period_end.isoformat()}"
 
     if is_expiry:
-        subject = f"[Expired] {cadence} CIO Insights ({period})"
+        subject = f"[Expired] {cadence} Insights ({period})"
     elif is_reminder:
-        subject = f"[Reminder — please review] {cadence} CIO Insights ({period})"
+        subject = f"[Reminder — please review] {cadence} Insights ({period})"
     else:
-        subject = f"[Action required] {cadence} CIO Insights ready to publish ({period})"
+        subject = f"[Action required] {cadence} Insights ready to publish ({period})"
 
     approve_url = _approval_url(approve)
     reject_url = _approval_url(reject)
@@ -211,12 +211,12 @@ def render_approval_email(publication: Publication,
         action_buttons_text = ""
     else:
         body_intro = (
-            "<p>The latest CIO Insights draft is ready for your review. "
+            "<p>The latest Insights draft is ready for your review. "
             "Click <strong>Approve and publish</strong> to push it live, "
             "or <strong>Reject</strong> to discard it.</p>"
         )
         text_intro = (
-            "The latest CIO Insights draft is ready for your review.\n"
+            "The latest Insights draft is ready for your review.\n"
             "Click Approve to push it live, or Reject to discard.\n\n"
         )
         action_buttons_html = f"""\

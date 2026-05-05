@@ -163,7 +163,7 @@ def test_render_notice_includes_cadence_period_and_link(session, monkeypatch):
     email = _notice.render_publication_notice(pub)
 
     assert email.subject.startswith("[PensionGraph]")
-    assert "Weekly CIO Insights" in email.subject
+    assert "Weekly Insights" in email.subject
     assert "Apr 26" in email.subject and "May 2" in email.subject
     # HTML body
     assert "https://app.test.local" in email.html
@@ -180,7 +180,7 @@ def test_render_notice_supports_monthly_cadence(session):
         period_start=date(2026, 4, 1), period_end=date(2026, 4, 30),
     )
     email = render_publication_notice(pub)
-    assert "Monthly CIO Insights" in email.subject
+    assert "Monthly Insights" in email.subject
 
 
 # ---------------------------------------------------------------------------
@@ -201,7 +201,7 @@ def test_send_publication_notice_writes_mock_email(session, tmp_path, monkeypatc
     body = eml_files[0].read_text()
     assert "explicit@test.local" in body
     assert "PensionGraph" in body
-    assert "Weekly CIO Insights" in body
+    assert "Weekly Insights" in body
 
 
 def test_send_publication_notice_rejects_non_published_status(session):

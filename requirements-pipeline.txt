@@ -24,7 +24,7 @@ rich==13.9.4
 # Shared utilities (used by both insights and RFP)
 tenacity==9.0.0
 
-# CIO Insights automation
+# Insights automation
 pytest==8.3.3
 freezegun==1.5.1
 

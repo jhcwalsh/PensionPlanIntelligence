@@ -1,6 +1,6 @@
 name: Weekly insights (GHA edition)
 
-# Composes the weekly CIO Insights digest and sends the approve/reject
+# Composes the weekly Insights digest and sends the approve/reject
 # magic-link email to APPROVAL_EMAIL_RECIPIENT. Pure composition --
 # uses documents already in the DB (--skip-scrape). Pushes the resulting
 # db/pension.db + notes/ so the production Streamlit can resolve the

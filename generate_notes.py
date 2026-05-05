@@ -3,7 +3,7 @@ Generate analyst notes from summarized pension plan data.
 
 Checks for latest documents across all plans, then uses Claude to produce:
   - 7-Day Highlights: a weekly briefing of recent board/committee activity
-  - CIO Insights: a strategic thematic analysis of 2026 meeting activity
+  - Insights: a strategic thematic analysis of 2026 meeting activity
 
 Usage:
     python generate_notes.py                    # run pipeline first, then generate notes
@@ -181,7 +181,7 @@ def gather_highlights_data(session, days: int = 7) -> dict:
 
 
 def gather_trends_data(session) -> dict:
-    """Collect all 2026 meeting data for the CIO Insights note."""
+    """Collect all 2026 meeting data for the Insights note."""
     days_since_jan1 = (datetime.utcnow() - datetime(2026, 1, 1)).days + 1
     meetings = get_new_meetings(session, days=days_since_jan1)
 
@@ -220,7 +220,7 @@ def gather_recent_insights_data(session, days: int = 30) -> dict:
     filter inherited from :func:`get_new_meetings`), this gathers by
     true meeting date — meetings that actually happened recently rather
     than documents downloaded recently. Meant for the rolling-window
-    CIO Insights variant.
+    Insights variant.
     """
     cutoff = datetime.utcnow() - timedelta(days=days)
     recent_docs = (
@@ -542,14 +542,14 @@ MEETING DATA:
 
 
 def build_insights_prompt(data: dict) -> str:
-    """Build the Claude prompt for the CIO Insights note."""
+    """Build the Claude prompt for the Insights note."""
     today_str = datetime.utcnow().strftime("%B %d, %Y")
     aum_trillions = data["total_aum"] / 1000
     aum_table = _format_aum_table(data.get("plans") or [])
     meetings_text = format_meetings_for_prompt(data["meetings"])
 
     return f"""\
-Write a CIO Insights briefing synthesizing the most important strategic themes and \
+Write a Insights briefing synthesizing the most important strategic themes and \
 implications from U.S. public pension plan board and investment committee activity in 2026.
 
 Below is structured data from {data['plans_with_activity']} pension plans representing \
@@ -592,7 +592,7 @@ MEETING DATA — but only if you append an "as of <date>" qualifier and use \
 that same value consistently for that plan throughout the rest of the note.
 
 FORMAT REQUIREMENTS:
-- Start with exactly: # CIO Insights: 2026 Institutional Trends
+- Start with exactly: # Insights: 2026 Institutional Trends
 - Second line: *Synthesized from board and investment committee activity across \
 {data['plans_with_activity']} U.S. public pension plans (~${aum_trillions:.1f} trillion AUM)*
 - Third line must be exactly: *Generated: {today_str}*
@@ -648,7 +648,7 @@ MEETING DATA:
 
 
 def build_recent_insights_prompt(data: dict) -> str:
-    """Build the Claude prompt for the rolling-window (e.g. 30-day) CIO Insights note."""
+    """Build the Claude prompt for the rolling-window (e.g. 30-day) Insights note."""
     today_str = datetime.utcnow().strftime("%B %d, %Y")
     aum_trillions = data["total_aum"] / 1000
     aum_table = _format_aum_table(data.get("plans") or [])
@@ -658,7 +658,7 @@ def build_recent_insights_prompt(data: dict) -> str:
     date_range = data.get("date_range_str", window_label)
 
     return f"""\
-Write a CIO Insights briefing synthesizing the most important strategic themes and \
+Write a Insights briefing synthesizing the most important strategic themes and \
 implications from U.S. public pension plan board and investment committee activity \
 over {window_label} ({date_range}).
 
@@ -706,7 +706,7 @@ MEETING DATA — but only if you append an "as of <date>" qualifier and use \
 that same value consistently for that plan throughout the rest of the note.
 
 FORMAT REQUIREMENTS:
-- Start with exactly: # CIO Insights: Past {days} Days
+- Start with exactly: # Insights: Past {days} Days
 - Second line: *Synthesized from board and investment committee activity across \
 {data['plans_with_activity']} U.S. public pension plans (~${aum_trillions:.1f} trillion AUM) \
 — meetings held {date_range}*
@@ -935,7 +935,7 @@ def main():
 
         # Step 3: Generate YTD CIO insights
         if do_insights_ytd:
-            console.rule("[bold blue]Generate CIO Insights (YTD)[/bold blue]")
+            console.rule("[bold blue]Generate Insights (YTD)[/bold blue]")
             data = gather_trends_data(session)
             if not data["meetings"]:
                 console.print("[yellow]No 2026 meetings found. Skipping YTD insights.[/yellow]")
@@ -947,13 +947,13 @@ def main():
                     f"{len(data['meetings'])} meetings)...")
                 content = generate_note(prompt, MAX_TOKENS_INSIGHTS, model=MODEL_OPUS)
                 note_path = write_note(content, "2026_cio_insights.md")
-                _validate_insights_note(note_path, data, "CIO Insights (YTD)")
+                _validate_insights_note(note_path, data, "Insights (YTD)")
 
         # Step 4: Generate rolling 30-day CIO insights
         if do_insights_30day:
             window_days = args.insights_30day_days
             console.rule(
-                f"[bold blue]Generate CIO Insights ({window_days}-day)[/bold blue]"
+                f"[bold blue]Generate Insights ({window_days}-day)[/bold blue]"
             )
             data = gather_recent_insights_data(session, days=window_days)
             if not data["meetings"]:
@@ -970,7 +970,7 @@ def main():
                 content = generate_note(prompt, MAX_TOKENS_INSIGHTS)
                 note_path = write_note(content, f"cio_insights_{window_days}day.md")
                 _validate_insights_note(
-                    note_path, data, f"CIO Insights ({window_days}-day)"
+                    note_path, data, f"Insights ({window_days}-day)"
                 )
 
         console.rule("[bold green]Notes generation complete[/bold green]")

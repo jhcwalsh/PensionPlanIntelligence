@@ -26,9 +26,9 @@ logger = logging.getLogger(__name__)
 
 PREVIEW_CHAR_LIMIT = 700
 CADENCE_LABELS = {
-    "weekly": "Weekly CIO Insights",
-    "monthly": "Monthly CIO Insights",
-    "annual": "Annual CIO Insights",
+    "weekly": "Weekly Insights",
+    "monthly": "Monthly Insights",
+    "annual": "Annual Insights",
 }
 
 

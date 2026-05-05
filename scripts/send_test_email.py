@@ -31,7 +31,7 @@ HTML_TEMPLATE = """\
 <html><body style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 2em auto; line-height: 1.5;">
   <h2 style="color: #2c5282;">Email plumbing test</h2>
   <p>This is an end-to-end check of the Resend → inbox path used by the
-     weekly / monthly / quarterly CIO Insights approval emails.</p>
+     weekly / monthly / quarterly Insights approval emails.</p>
   <p>If you can read this, the following are working:</p>
   <ul>
     <li><code>RESEND_API_KEY</code> secret is valid</li>
@@ -52,7 +52,7 @@ Email plumbing test
 ===================
 
 This is an end-to-end check of the Resend -> inbox path used by the
-weekly / monthly / quarterly CIO Insights approval emails.
+weekly / monthly / quarterly Insights approval emails.
 
 If you can read this, the following are working:
   - RESEND_API_KEY secret is valid

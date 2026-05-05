@@ -95,7 +95,7 @@ def run_annual_cycle(year: Optional[int] = None,
 
         cycle_common.finalize_for_approval(
             session, publication, draft,
-            title_for_pdf=f"CIO Insights: {year} Year in Review",
+            title_for_pdf=f"Insights: {year} Year in Review",
         )
         return cycle_common.detach_for_caller(session, publication)
 

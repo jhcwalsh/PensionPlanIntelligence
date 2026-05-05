@@ -2,7 +2,7 @@
 
 A data platform that aggregates board materials and CAFRs from U.S. public
 pension plans, summarizes them with Claude, and publishes a searchable
-Streamlit site plus scheduled CIO Insights briefings.
+Streamlit site plus scheduled Insights briefings.
 
 ## Architecture in one paragraph
 
@@ -12,7 +12,7 @@ summaries. The **Streamlit app** ([app.py](app.py)) serves a public site at
 [pensionplanintelligence.onrender.com](https://pensionplanintelligence.onrender.com)
 backed by the SQLite DB at `db/pension.db`. The **insights/** package
 ([DECISIONS.md](DECISIONS.md), [insights/scheduler.py](insights/scheduler.py))
-runs scheduled CIO Insights publications — weekly digest, monthly synthesis,
+runs scheduled Insights publications — weekly digest, monthly synthesis,
 annual year-in-review — gated on a magic-link approval email to the founder.
 
 ## Two workflows you need to understand
@@ -23,7 +23,7 @@ in different places:
 | Workflow | Where it runs | What it does | Cadence |
 |---|---|---|---|
 | **Pipeline** (`pipeline.py`) | Your local machine | Fetch new docs → extract text → summarize | Whenever you want fresh data |
-| **Insights cron** (Render) | Render cron services | Compose / email / approve / publish CIO Insights | Sun / 1st-of-month / Jan 5 / daily |
+| **Insights cron** (Render) | Render cron services | Compose / email / approve / publish Insights | Sun / 1st-of-month / Jan 5 / daily |
 
 The insights cron does **not** run the pipeline — it composes from
 whatever is already in `db/pension.db`. So you need to run the pipeline
@@ -66,7 +66,7 @@ on Render).
 
 ## Running the pipeline (local, weekly)
 
-The pipeline is what produces the data the website and CIO Insights
+The pipeline is what produces the data the website and Insights
 briefings draw from. Run it before each Sunday so the weekly digest has
 fresh content.
 
@@ -151,12 +151,12 @@ streamlit run app.py
 ```
 
 Visit http://localhost:8501. Tabs include Notes, Summary, Updates,
-Search, Browse Recent, Investment Actions, Plans, Drafts (CIO Insights
+Search, Browse Recent, Investment Actions, Plans, Drafts (Insights
 awaiting approval), Insights (approved publications), and Admin.
 
 ---
 
-## CIO Insights automation
+## Insights automation
 
 This is fully described in [DECISIONS.md](DECISIONS.md). Short version:
 
@@ -230,7 +230,7 @@ alerting, and existing-component delegation. They all run under
 ├── fetcher.py                   Playwright-driven document downloader
 ├── extractor.py                 PDF/DOCX text extraction
 ├── summarizer.py                Claude per-document summarization
-├── generate_notes.py            Claude analytical briefings (7-day, CIO Insights)
+├── generate_notes.py            Claude analytical briefings (7-day, Insights)
 ├── publish_notes.py             Local: regenerate notes + git push (legacy path)
 ├── fetch_cafr.py                CAFR/ACFR discovery and download
 ├── extract_cafr_investments.py  Structured CAFR investment data extraction
@@ -239,7 +239,7 @@ alerting, and existing-component delegation. They all run under
 ├── data/known_plans.json        ~148 plans with URLs, AUM, fiscal year ends
 ├── db/pension.db                SQLite corpus (committed)
 ├── notes/                       Published markdown briefings
-├── insights/                    CIO Insights publishing automation
+├── insights/                    Insights publishing automation
 │   ├── scheduler.py             python -m insights.scheduler {weekly,monthly,annual,reminders}
 │   ├── weekly.py                Weekly cycle (compose only — scrape is local)
 │   ├── monthly.py               Monthly cycle (composes from approved weeklies)

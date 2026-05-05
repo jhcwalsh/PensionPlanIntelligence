@@ -53,9 +53,9 @@ services:
 #   python refresh_cafrs.py                     # monthly CAFR refresh
 #   python extract_cafr_investments.py          # extract investment data
 #   python -m scripts.run_rfp_extraction        # RFP records
-#   python -m insights.scheduler weekly --skip-scrape   # CIO Insights weekly
-#   python -m insights.scheduler monthly                # CIO Insights monthly
-#   python -m insights.scheduler annual                 # CIO Insights annual
+#   python -m insights.scheduler weekly --skip-scrape   # Insights weekly
+#   python -m insights.scheduler monthly                # Insights monthly
+#   python -m insights.scheduler annual                 # Insights annual
 #   python -m insights.scheduler reminders              # 72h reminders + 7d expiry
 #
 # After running, commit db/pension.db and push — Render redeploys

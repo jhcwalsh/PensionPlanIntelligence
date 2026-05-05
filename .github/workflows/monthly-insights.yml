@@ -1,7 +1,7 @@
 name: Monthly insights (GHA edition)
 
 # Extracts CAFR investment data from already-downloaded CAFRs, then
-# composes the monthly CIO Insights digest and sends the approve/reject
+# composes the monthly Insights digest and sends the approve/reject
 # magic-link email. CAFR fetching itself stays on local Task Scheduler
 # (it's a Playwright scrape with the same WAF risks the daily had) --
 # see scripts/run_monthly.bat.

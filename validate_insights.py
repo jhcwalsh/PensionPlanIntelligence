@@ -1,5 +1,5 @@
 """
-Post-generation validator for the CIO Insights note.
+Post-generation validator for the Insights note.
 
 Extracts specific claims (doc_id citations, $ amounts, percentages, bps,
 vote tallies, bolded entity names) from ``notes/2026_cio_insights.md`` and
@@ -212,7 +212,7 @@ CATEGORY_LABELS = {
 
 def print_report(results: dict) -> int:
     """Print a rich table; return count of unmatched tokens."""
-    summary = Table(title="CIO Insights Fact-Check Summary",
+    summary = Table(title="Insights Fact-Check Summary",
                     show_lines=False)
     summary.add_column("Category", style="bold")
     summary.add_column("Checked", justify="right")
@@ -250,7 +250,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--note", type=Path,
                         default=ROOT / "notes" / "2026_cio_insights.md",
-                        help="Path to the generated CIO Insights markdown file")
+                        help="Path to the generated Insights markdown file")
     parser.add_argument("--strict", action="store_true",
                         help="Exit non-zero if any unmatched tokens are found")
     args = parser.parse_args()

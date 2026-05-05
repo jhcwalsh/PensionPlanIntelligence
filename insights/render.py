@@ -1,4 +1,4 @@
-"""PDF rendering for CIO Insights publications.
+"""PDF rendering for Insights publications.
 
 This module owns ``markdown_to_pdf_bytes`` — the same function that
 previously lived in ``app.py``. It is imported from there so the

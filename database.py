@@ -219,7 +219,7 @@ class CafrPerformance(Base):
 
 
 class Publication(Base):
-    """One row per scheduled CIO Insights publication, regardless of status.
+    """One row per scheduled Insights publication, regardless of status.
 
     Lifecycle: generating → awaiting_approval → (approved | rejected | expired)
                                               ↓ approved

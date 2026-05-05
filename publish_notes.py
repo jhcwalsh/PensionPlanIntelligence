@@ -7,8 +7,8 @@ Typical local workflow:
 
 This script:
     - Regenerates all three notes (7-day highlights, 2026 agenda trends,
-      CIO Insights) using existing DB data (no pipeline run)
-    - Fact-checks the CIO Insights against the source corpus
+      Insights) using existing DB data (no pipeline run)
+    - Fact-checks the Insights against the source corpus
     - Shows a diff summary of the changed note files
     - Commits to the current branch and pushes to origin
 
@@ -17,7 +17,7 @@ auto-deploys after the push.
 
 Flags:
     --yes / -y           Skip the confirmation prompt
-    --strict-validate    Fail if the CIO Insights fact-check flags tokens
+    --strict-validate    Fail if the Insights fact-check flags tokens
     --skip-generate      Don't regenerate; just commit whatever is in notes/
     --message / -m MSG   Custom commit message
 """
@@ -69,7 +69,7 @@ def main():
     parser.add_argument("--skip-generate", action="store_true",
                         help="Don't run generate_notes.py; just commit what's in notes/")
     parser.add_argument("--strict-validate", action="store_true",
-                        help="Fail the publish if the CIO Insights fact-check "
+                        help="Fail the publish if the Insights fact-check "
                              "finds any unmatched tokens")
     parser.add_argument("--message", "-m",
                         help="Custom commit message")
