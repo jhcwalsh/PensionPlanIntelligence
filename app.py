@@ -124,10 +124,21 @@ def load_plans():
 
 
 def load_recent_summaries(plan_id=None, limit=20):
+    """Most recent summarized documents, sorted by meeting_date desc.
+
+    Filters out CAFRs / performance reports and caps meeting_date at
+    today + 60 days so the By-document view of Activity matches the
+    other two views — see ``database.get_new_meetings`` for the same
+    filter rationale.
+    """
     session = get_db_session()
+    future_cap = datetime.utcnow() + timedelta(days=60)
     q = (
         session.query(Document, Summary)
         .join(Summary, Document.id == Summary.document_id)
+        .filter(Document.doc_type.notin_(["cafr", "performance"]))
+        .filter((Document.meeting_date.is_(None)) |
+                (Document.meeting_date <= future_cap))
     )
     if plan_id and plan_id != "All":
         q = q.filter(Document.plan_id == plan_id)
