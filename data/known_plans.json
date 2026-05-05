@@ -660,7 +660,7 @@
       "agenda",
       "minutes"
     ],
-    "cafr_url": "https://www.pers.ms.gov/sites/default/files/Content/CAFR/PERS%20of%20MS%202024%20ACFR.pdf",
+    "cafr_url_template": "https://www.pers.ms.gov/sites/default/files/Content/CAFR/PERS%20of%20MS%20{year}%20ACFR.pdf",
     "fiscal_year_end": "06-30"
   },
   {
@@ -847,7 +847,7 @@
       "agenda",
       "minutes"
     ],
-    "cafr_url": "https://nic.nebraska.gov/sites/default/files/doc/Annual%20Report%202024.pdf",
+    "cafr_url_template": "https://nic.nebraska.gov/sites/default/files/doc/Annual%20Report%20{year}.pdf",
     "fiscal_year_end": "06-30"
   },
   {
@@ -865,7 +865,7 @@
       "minutes"
     ],
     "playwright_wait_selector": "a[href*=\"/bot/\"]",
-    "cafr_url": "https://www.kspers.gov/annualreport2024.pdf",
+    "cafr_url_template": "https://www.kspers.gov/annualreport{year}.pdf",
     "fiscal_year_end": "06-30"
   },
   {
@@ -1445,7 +1445,7 @@
       "minutes"
     ],
     "playwright_wait_selector": "a[href*=\"sites/default/files\"]",
-    "cafr_url": "https://dcrb.dc.gov/sites/default/files/dc/sites/dcrb/(DCRB)%202024%20ACFR_Web.pdf",
+    "cafr_url_template": "https://dcrb.dc.gov/sites/default/files/dc/sites/dcrb/(DCRB)%20{year}%20ACFR_Web.pdf",
     "fiscal_year_end": "06-30"
   },
   {
@@ -1867,7 +1867,7 @@
       "minutes"
     ],
     "notes": "No dedicated fund website for board materials; public meetings hosted on nyc.gov/site/fdny",
-    "cafr_url": "https://www.nyc.gov/assets/actuary/downloads/pdf/FIRE_FY2023_ACFR.pdf",
+    "cafr_url_template": "https://www.nyc.gov/assets/actuary/downloads/pdf/FIRE_FY{year}_ACFR.pdf",
     "fiscal_year_end": "06-30"
   },
   {
@@ -2231,7 +2231,7 @@
       "board_pack",
       "minutes"
     ],
-    "cafr_url": "http://www.mfprsi.org/media/publications/2023_MFPRSI_Annual_Report_final_web.pdf",
+    "cafr_url_template": "http://www.mfprsi.org/media/publications/{year}_MFPRSI_Annual_Report_final_web.pdf",
     "fiscal_year_end": "06-30"
   },
   {
