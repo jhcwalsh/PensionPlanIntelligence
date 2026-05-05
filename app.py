@@ -815,6 +815,16 @@ def _notes_md_to_html(content: str) -> str:
     return "\n".join(parts)
 
 
+def _render_ai_disclaimer():
+    """Standard disclaimer shown above any AI-composed insight surface."""
+    st.warning(
+        "AI-generated summary. Claude composes these briefings from board "
+        "materials and CAFRs; figures, dates, and attributions can be wrong. "
+        "Refer to the source documents (linked throughout) for authoritative "
+        "detail before acting on anything here."
+    )
+
+
 def _render_note_page(md_path: Path, title: str, generated_date: str, pdf_filename: str):
     """Render a markdown note with a date stamp and PDF download button."""
     if not md_path.exists():
@@ -836,6 +846,7 @@ def _render_note_page(md_path: Path, title: str, generated_date: str, pdf_filena
             use_container_width=True,
         )
 
+    _render_ai_disclaimer()
     st.divider()
     html = _notes_md_to_html(content)
     st.markdown(
@@ -898,6 +909,7 @@ def _render_rfp_alerts():
         "incidental (CAFR boilerplate, agenda placeholders, etc.). "
         "Widen the window to scan a longer trailing period."
     )
+    _render_ai_disclaimer()
 
     hours = st.slider("Look-back window (hours)", 12, 168, 24, step=12,
                       key="rfp_alerts_hours")
