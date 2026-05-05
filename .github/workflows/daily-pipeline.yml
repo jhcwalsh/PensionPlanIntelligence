@@ -90,3 +90,18 @@ jobs:
             git commit -m "Pipeline run $(date -u +%Y-%m-%d) [GHA]"
             git push
           fi
+
+      # Email a daily digest summarising the new documents from this run
+      # (and any local-pipeline FetchRun rows from the same 26-hour window).
+      # Reuses the Resend secrets configured for insights approval emails.
+      # `if: success()` avoids spamming on red-flag pipeline failures —
+      # in that case the FetchRun row will be status=failed and the next
+      # day's digest will surface it. Skipped on dry_run dispatches.
+      - name: Send daily digest email
+        if: ${{ success() && github.event.inputs.dry_run != 'true' }}
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          APPROVAL_EMAIL_RECIPIENT: ${{ secrets.APPROVAL_EMAIL_RECIPIENT }}
+          APPROVAL_EMAIL_FROM: ${{ secrets.APPROVAL_EMAIL_FROM }}
+          INSIGHTS_MODE: live
+        run: python -m scripts.send_daily_digest
