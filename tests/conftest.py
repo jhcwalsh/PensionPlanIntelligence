@@ -29,6 +29,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 def _force_mock_llm(monkeypatch):
     """RFP pipeline: all tests run with the LLM mocked."""
     monkeypatch.setenv("LLM_MODE", "mock")
+    # IPS verification (fetch_ips.verify_is_ips) honours its own flag — set
+    # for the same reason: no test should make a real Anthropic call.
+    monkeypatch.setenv("IPS_MODE", "mock")
 
 
 @pytest.fixture(autouse=True)

@@ -74,6 +74,9 @@ The full extracted PDF text is the bulk of the DB by 10× over everything else. 
 ### Test DB isolation does NOT reload the database module
 `tests/conftest.py` rebinds `database.engine` and `database.SessionLocal` per-test using `monkeypatch.setattr`. Reloading the module would orphan the ORM classes and break SQLAlchemy's mapper registry. If you write a new test that needs DB isolation, follow this pattern — use the existing `_isolated_environment` (insights-style) or `tmp_db` (RFP-style) fixture rather than instantiating your own engine.
 
+### IPS pipeline is content-hash versioned (not FY-keyed like CAFRs)
+`refresh_ips.py` runs locally only (Windows Task Scheduler, monthly). Unlike CAFRs which are FY-tagged, IPS is versioned by content hash: `IpsDocument` has `UNIQUE(plan_id, content_hash)`, so a plan accumulates a row each time the board publishes a new IPS, while same-content re-fetches dedupe silently. Discovery is fully automated — no manual URL curation in `known_plans.json` required: `fetch_ips.discover_ips_urls()` mines existing extracted documents for embedded IPS URLs, then site-crawls seed paths under `plan.website`. Each candidate is gated by a Haiku 4.5 verification call (`verify_is_ips()`) so adjacent policy docs (proxy voting, securities lending) don't pollute the table. `IPS_MODE=mock` short-circuits the LLM call for tests; production hits Anthropic at ~$1-2/cycle total.
+
 ### Approval flow is Streamlit-query-param-based
 Magic-link emails contain `?approve=<token>` and `?reject=<token>`. The Streamlit app's `main()` checks `st.query_params` before rendering tabs and dispatches to `page_document_detail`, `page_cafr_plan_detail`, or the approval consumer. Tokens are SHA-256-hashed in `approval_tokens`; raw values exist only in the email body. To add a new deep-link route, follow the same pattern in `app.py`'s `main()`.
 
@@ -94,6 +97,7 @@ Render hosts only two web services now: Streamlit (`pension-plan-intelligence`) 
 | Weekly RFP backfill (`--limit 100`) | cron Sundays 11:30 UTC | GHA | `.github/workflows/weekly-rfp.yml` |
 | Monthly CAFR refresh (~92 plans) | cron 1st of month 15:00 UTC | GHA | `.github/workflows/monthly-cafr-refresh.yml` |
 | Monthly CAFR refresh (5 WAF-blocked plans) | Task Scheduler | local Windows | `scripts/run_monthly.bat` |
+| Monthly IPS refresh (all 148 plans, auto-discover + verify via Haiku 4.5) | Task Scheduler | local Windows | `scripts/run_ips.bat` |
 | Monthly CAFR extraction + insights composition + email | cron 1st of month 18:00 UTC | GHA | `.github/workflows/monthly-insights.yml` |
 | Quarterly insights composition + email | cron 1st of Jan/Apr/Jul/Oct 19:00 UTC | GHA | `.github/workflows/quarterly-insights.yml` |
 

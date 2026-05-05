@@ -94,6 +94,31 @@ $MonthlyFolder.RegisterTaskDefinition(
 ) | Out-Null
 Write-Host "Registered PensionPipeline-Monthly"
 
+# IPS — 1st of every month at 10:00 (2 hours after monthly CAFR refresh,
+# so it runs against a DB that already has any new CAFRs the same day).
+# Uses the same COM-API workaround as the monthly task above.
+$IpsService = New-Object -ComObject "Schedule.Service"
+$IpsService.Connect()
+$IpsFolder = $IpsService.GetFolder("\")
+$IpsDef = $IpsService.NewTask(0)
+$IpsDef.RegistrationInfo.Description = "PensionPipeline monthly IPS refresh (residential IP, all 148 plans)"
+$IpsDef.Settings.StartWhenAvailable = $true
+$IpsDef.Settings.DisallowStartIfOnBatteries = $false
+$IpsDef.Settings.StopIfGoingOnBatteries = $false
+$IpsDef.Settings.RunOnlyIfNetworkAvailable = $true
+$IpsDef.Settings.ExecutionTimeLimit = "PT6H"
+$IpsTrigger = $IpsDef.Triggers.Create(4)  # 4 = monthly
+$IpsTrigger.StartBoundary = (Get-Date -Hour 10 -Minute 0 -Second 0).ToString("s")
+$IpsTrigger.DaysOfMonth = 1
+$IpsTrigger.MonthsOfYear = 4095
+$IpsAction = $IpsDef.Actions.Create(0)
+$IpsAction.Path = "$Repo\scripts\run_ips.bat"
+$IpsAction.WorkingDirectory = $Repo
+$IpsFolder.RegisterTaskDefinition(
+    "PensionPipeline-IPS", $IpsDef, 6, $User, $null, 3
+) | Out-Null
+Write-Host "Registered PensionPipeline-IPS"
+
 # Weekly + Quarterly tasks moved to GitHub Actions on 2026-05-04.
 # See .github/workflows/weekly-rfp.yml and quarterly-insights.yml.
 # The legacy-cleanup loop at the top of this script unregisters those

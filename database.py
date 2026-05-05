@@ -472,6 +472,69 @@ class DocumentSkip(Base):
     error_message = Column(Text)
 
 
+class IpsDocument(Base):
+    """An Investment Policy Statement (IPS) PDF tracked per-plan.
+
+    Versioning is content-hash based: (plan_id, content_hash) is unique, so
+    a plan can have many rows over time as the IPS is updated. The same
+    file served from a different URL still dedupes. Captures from the
+    monthly refresh_ips.py run; older versions are kept for time-series
+    analysis.
+    """
+
+    __tablename__ = "ips_documents"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    plan_id = Column(String, ForeignKey("plans.id"), nullable=False)
+    content_hash = Column(String(64), nullable=False)        # sha256 of the PDF bytes
+    url = Column(String, nullable=False)                     # the URL we fetched it from
+    filename = Column(String)
+    local_path = Column(String)
+    file_size_bytes = Column(Integer)
+    fetched_at = Column(DateTime, default=_utcnow, nullable=False)
+    extracted_text = Column(GzippedText)                     # for downstream scoring
+    extraction_status = Column(String, default="pending")    # pending | done | failed
+    page_count = Column(Integer)
+    # Verification metadata from the LLM gate (Haiku 4.5 yes/no on first page)
+    verification_verdict = Column(String)                    # yes | no | partial
+    verification_confidence = Column(String)                 # high | medium | low
+    verification_notes = Column(Text)
+
+    __table_args__ = (
+        UniqueConstraint("plan_id", "content_hash", name="uq_ips_plan_hash"),
+        Index("ix_ips_plan_id", "plan_id"),
+    )
+
+
+class IpsRefreshLog(Base):
+    """Per-plan outcome from each monthly IPS refresh run.
+
+    Mirrors cafr_refresh_log: one row per plan per refresh_ips.py
+    invocation. Status values:
+      saved             — new IPS version detected and stored
+      already_have      — content_hash already in DB, no change since last cycle
+      no_candidates     — discovery found zero plausible URLs to try
+      verification_failed — downloaded but Claude said this isn't an IPS
+      url_failed        — every candidate URL failed to download
+      validation_failed — file too small or not a real PDF
+      error             — unexpected exception
+    """
+    __tablename__ = "ips_refresh_log"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    plan_id = Column(String, ForeignKey("plans.id"), nullable=False)
+    run_at = Column(DateTime, nullable=False)
+    status = Column(String, nullable=False)
+    url_tried = Column(String)
+    discovery_source = Column(String)        # override | mine_existing | site_crawl
+    document_id = Column(Integer, ForeignKey("ips_documents.id"))   # set when saved
+    notes = Column(Text)
+
+    __table_args__ = (
+        Index("ix_ips_refresh_plan_run", "plan_id", "run_at"),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Init / helpers
 # ---------------------------------------------------------------------------
