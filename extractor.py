@@ -1,10 +1,19 @@
 """
 Text and metadata extraction from PDF and DOCX files.
 
-Uses pdfplumber for structured extraction (tables, layout) and
-pymupdf (fitz) as a fallback for scanned/complex PDFs.
+Three-tier PDF strategy:
+  1. pdfplumber — structured extraction (tables, layout) of the embedded
+     text layer.
+  2. pymupdf (fitz) — secondary text-layer extraction; tolerates a
+     wider range of broken PDFs.
+  3. Claude Sonnet vision — page-by-page transcription for image-only
+     PDFs (scanned minutes, image-export board packs). Better at tables
+     and multi-column layouts than Tesseract; costs ~$0.02–0.05 per
+     multi-page document. Triggered only when both text-layer paths
+     return < 100 chars of real content.
 """
 
+import base64
 import os
 import re
 from datetime import datetime
@@ -18,6 +27,27 @@ console = Console(legacy_windows=False)
 
 # Max characters to store (Claude's context window is large but we want to be economical)
 MAX_TEXT_CHARS = 150_000
+
+# Cap pages sent to vision OCR to bound cost on accidental 500-page agendas.
+# A typical board pack is 5–60 pages; 100 covers the long tail.
+MAX_VISION_OCR_PAGES = 100
+
+# 2x render is roughly 1200x1600 px for letter-size — plenty of resolution for
+# Sonnet vision and only modestly more image tokens than 1x.
+VISION_OCR_RENDER_SCALE = 2
+
+VISION_OCR_SYSTEM_PROMPT = (
+    "You are a precision text transcriber. Output the exact text visible "
+    "on the page provided, verbatim. Rules:\n"
+    "- Preserve all numbers, currency symbols, percent signs, and decimal "
+    "places exactly as shown.\n"
+    "- Render tables using markdown pipe format, one row per line: "
+    "| col1 | col2 | col3 |.\n"
+    "- Preserve line breaks between paragraphs and headings.\n"
+    "- Do not summarize, paraphrase, interpret, or add commentary.\n"
+    "- Do not output preambles like 'Here is the text'.\n"
+    "- If the page is blank or contains no readable text, output nothing."
+)
 
 
 # ---------------------------------------------------------------------------
@@ -68,38 +98,79 @@ def extract_pdf_pymupdf(path: str) -> tuple[str, int]:
 
 
 def extract_pdf_ocr(path: str) -> tuple[str, int]:
-    """OCR fallback using pymupdf to render pages + pytesseract."""
+    """OCR fallback using Claude Sonnet vision.
+
+    Renders each page with pymupdf and asks Sonnet for verbatim
+    transcription. Replaces the prior Tesseract path: better at tables,
+    multi-column layouts, and scanned forms, at a cost of ~$0.02–0.05
+    per multi-page document. Failure on a single page (network blip,
+    transient API error) is logged and skipped — other pages still
+    contribute. The function returns whatever was successfully
+    transcribed; an empty result causes ``extract_document`` to mark
+    the row ``failed`` as before.
+    """
     try:
-        import pytesseract
-        from PIL import Image
-        import fitz
+        import fitz  # pymupdf
     except ImportError as e:
-        console.print(f"  [yellow]OCR skipped: {e}[/yellow]")
+        console.print(f"  [yellow]OCR skipped: pymupdf not installed ({e})[/yellow]")
         return "", 0
-    # Set explicit path for Windows installs not on system PATH
-    import sys
-    if sys.platform == "win32":
-        pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+
     try:
-        pytesseract.get_tesseract_version()
-    except pytesseract.TesseractNotFoundError:
-        console.print("  [yellow]OCR skipped: Tesseract not installed (install from https://github.com/UB-Mannheim/tesseract/wiki)[/yellow]")
+        from summarizer import MODEL_SONNET, _get_client
+    except ImportError as e:
+        console.print(f"  [yellow]OCR skipped: anthropic SDK not available ({e})[/yellow]")
         return "", 0
+
+    try:
+        client = _get_client()
+    except Exception as e:
+        console.print(f"  [yellow]OCR skipped: no Anthropic credentials ({e})[/yellow]")
+        return "", 0
+
     try:
         doc = fitz.open(path)
         page_count = len(doc)
         pages_text = []
-        mat = fitz.Matrix(2, 2)  # 2x zoom improves OCR accuracy
+        mat = fitz.Matrix(VISION_OCR_RENDER_SCALE, VISION_OCR_RENDER_SCALE)
         for i, page in enumerate(doc):
+            if i >= MAX_VISION_OCR_PAGES:
+                console.print(
+                    f"  [yellow]Vision OCR cap reached at page {MAX_VISION_OCR_PAGES}; "
+                    f"skipping remaining {page_count - i} pages[/yellow]"
+                )
+                break
             pix = page.get_pixmap(matrix=mat)
-            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-            text = pytesseract.image_to_string(img)
-            if text.strip():
-                pages_text.append(f"[Page {i + 1}]\n{text}")
+            png_b64 = base64.b64encode(pix.tobytes("png")).decode("ascii")
+            try:
+                msg = client.messages.create(
+                    model=MODEL_SONNET,
+                    max_tokens=4096,
+                    system=VISION_OCR_SYSTEM_PROMPT,
+                    messages=[{
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/png",
+                                    "data": png_b64,
+                                },
+                            },
+                            {"type": "text", "text": f"Transcribe page {i + 1}."},
+                        ],
+                    }],
+                )
+                page_text = msg.content[0].text if msg.content else ""
+            except Exception as e:
+                console.print(f"  [red]Vision OCR failed on page {i + 1}: {e}[/red]")
+                continue
+            if page_text.strip():
+                pages_text.append(f"[Page {i + 1}]\n{page_text}")
         full_text = "\n\n".join(pages_text)
         return full_text[:MAX_TEXT_CHARS], page_count
     except Exception as e:
-        console.print(f"  [red]OCR failed: {e}[/red]")
+        console.print(f"  [red]Vision OCR failed: {e}[/red]")
         return "", 0
 
 
