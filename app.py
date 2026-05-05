@@ -796,16 +796,132 @@ def _find_latest_consultant_rfps() -> tuple[Path, str, str] | None:
     return (path, title, generated_date)
 
 
+_RFP_ALERT_PATTERN = re.compile(
+    r"\b(RFPs?|RFQs?|Requests? for Proposals?|"
+    r"Requests? for Qualifications?|consultants?)\b",
+    re.IGNORECASE,
+)
+
+
+def _extract_rfp_snippet(text: str, max_words: int = 25) -> tuple[str, str] | None:
+    """Find the first RFP/consultant mention; return (keyword, ~25-word window).
+
+    Window is centered on the match: ~half the budget of words before, the rest
+    after (including the keyword). Adds ellipses when the snippet is truncated.
+    Returns None if no match.
+    """
+    if not text:
+        return None
+    match = _RFP_ALERT_PATTERN.search(text)
+    if not match:
+        return None
+    keyword = match.group(0)
+
+    half = max_words // 2
+    pre_words = text[: match.start()].split()
+    post_words = text[match.start():].split()
+
+    pre = pre_words[-half:] if len(pre_words) > half else pre_words
+    post_budget = max_words - len(pre)
+    post = post_words[:post_budget]
+
+    snippet = " ".join(pre + post).strip()
+    snippet = re.sub(r"\s+", " ", snippet)
+    prefix = "… " if len(pre_words) > len(pre) else ""
+    suffix = " …" if len(post_words) > len(post) else ""
+    return keyword, f"{prefix}{snippet}{suffix}"
+
+
+def _find_rfp_alerts(session, hours: int = 24) -> list[dict]:
+    """Documents fetched in the last ``hours`` that mention RFPs or consultants.
+
+    One alert per document (the first match). Pulls only documents whose
+    ``extraction_status='done'`` so empty-text rows aren't scanned.
+    """
+    cutoff = datetime.utcnow() - timedelta(hours=hours)
+    rows = (
+        session.query(Document, Plan)
+        .join(Plan, Plan.id == Document.plan_id)
+        .filter(Document.downloaded_at >= cutoff)
+        .filter(Document.extraction_status == "done")
+        .order_by(Document.downloaded_at.desc())
+        .all()
+    )
+    alerts: list[dict] = []
+    for doc, plan in rows:
+        result = _extract_rfp_snippet(doc.extracted_text or "")
+        if result is None:
+            continue
+        keyword, snippet = result
+        alerts.append({
+            "doc_id": doc.id,
+            "plan_id": plan.id,
+            "plan_name": plan.name or plan.id,
+            "plan_abbrev": plan.abbreviation or plan.id,
+            "filename": doc.filename or f"Document {doc.id}",
+            "doc_type": doc.doc_type or "",
+            "downloaded_at": doc.downloaded_at,
+            "keyword": keyword,
+            "snippet": snippet,
+        })
+    return alerts
+
+
+def _render_rfp_alerts():
+    st.title("RFP Alerts")
+    st.caption(
+        "RFP and consultant references found in materials downloaded "
+        "by the daily pipeline. One alert per document — click through "
+        "to the source for full context. Widen the window to catch up "
+        "after a missed run or to scan a longer trailing period."
+    )
+
+    hours = st.slider("Look-back window (hours)", 12, 168, 24, step=12,
+                      key="rfp_alerts_hours")
+
+    session = get_db_session()
+    alerts = _find_rfp_alerts(session, hours=hours)
+
+    if not alerts:
+        st.info(f"No RFP or consultant references found in materials from the last {hours} hours.")
+        return
+
+    by_plan: dict[tuple, list[dict]] = {}
+    for a in alerts:
+        key = (a["plan_abbrev"], a["plan_name"])
+        by_plan.setdefault(key, []).append(a)
+
+    st.markdown(
+        f"**{len(alerts)} document(s)** across **{len(by_plan)} plan(s)** "
+        f"with RFP / consultant references."
+    )
+
+    for (abbrev, plan_name), plan_alerts in sorted(by_plan.items(), key=lambda kv: kv[0]):
+        label = f"{abbrev} ({plan_name})" if abbrev != plan_name else plan_name
+        with st.expander(f"**{label}** — {len(plan_alerts)} doc(s)", expanded=True):
+            for a in plan_alerts:
+                when = a["downloaded_at"].strftime("%Y-%m-%d %H:%M") if a["downloaded_at"] else "—"
+                st.markdown(
+                    f"[{a['filename']}](?doc={a['doc_id']}) "
+                    f"<span style='color:#888;font-size:0.9em;'>· {a['doc_type']} · {when}</span>",
+                    unsafe_allow_html=True,
+                )
+                st.markdown(f"> {a['snippet']}")
+                st.markdown("")
+
+
 def page_insights():
-    tab_week, tab_insights_monthly, tab_rfps, tab_insights_year = st.tabs([
+    (tab_week, tab_insights_monthly, tab_rfps_monthly,
+     tab_rfp_alerts, tab_insights_year) = st.tabs([
         "Weekly Insights",
         "Monthly Insights",
-        "RFP tracker",
+        "RFP Monthly",
+        "RFP Alerts",
         "Year to date Insights",
     ])
 
-    with tab_rfps:
-        st.title("RFP tracker")
+    with tab_rfps_monthly:
+        st.title("RFP Monthly")
         result = _find_latest_consultant_rfps()
         if result:
             path, title, gen_date = result
@@ -820,6 +936,9 @@ def page_insights():
                 "No consultant RFP brief found yet. "
                 "Run `python -m scripts.compose_rfp_monthly` to generate."
             )
+
+    with tab_rfp_alerts:
+        _render_rfp_alerts()
 
     with tab_insights_monthly:
         st.title("Monthly Insights")
