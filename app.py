@@ -1912,9 +1912,14 @@ def _cafr_coverage_df():
     # structured extractor intentionally skips these because the
     # asset-allocation tables don't map to a single plan. Bucket them
     # separately so they don't sit forever as "Pending extract".
-    from fetcher import load_plans
+    # Read JSON directly (not via fetcher.load_plans) so this module
+    # doesn't drag in the pipeline-side bs4 / Playwright deps that
+    # aren't installed on the Render web service.
+    _plans_meta_path = Path(__file__).parent / "data" / "known_plans.json"
+    with open(_plans_meta_path, encoding="utf-8") as _f:
+        _plans_meta = json.load(_f)
     aggregator_ids: set[str] = {
-        meta["id"] for meta in load_plans()
+        meta["id"] for meta in _plans_meta
         if (meta.get("cafr_format") or "").lower() == "aggregator"
     }
 
