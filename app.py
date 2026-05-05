@@ -1412,14 +1412,18 @@ def _render_cafr_coverage():
             ),
         })
     detail_df = pd.DataFrame(rows)
-    # Sort so gaps surface first: none, then oldest stale, then current
-    status_order = {"none": 0, "stale": 1, "current": 2}
-    detail_df = detail_df.sort_values(
-        by=["Status", "Latest CAFR FY", "Plan"],
-        key=lambda col: col.map(status_order) if col.name == "Status" else col,
-        ascending=[True, True, True],
-        na_position="first",
-    ).reset_index(drop=True)
+    # pandas would coerce int+None to float64 (displays "2024.0"); use the
+    # nullable integer dtype so "Latest CAFR FY" renders as plain integers.
+    detail_df["Latest CAFR FY"] = detail_df["Latest CAFR FY"].astype("Int64")
+    # Sort gaps-first: none → stale → current; within each, oldest FY first.
+    status_rank = {"none": 0, "stale": 1, "current": 2}
+    detail_df = (
+        detail_df
+        .assign(_rank=detail_df["Status"].map(status_rank))
+        .sort_values(by=["_rank", "Latest CAFR FY", "Plan"], na_position="first")
+        .drop(columns=["_rank"])
+        .reset_index(drop=True)
+    )
     st.dataframe(detail_df, hide_index=True, use_container_width=True)
 
 
