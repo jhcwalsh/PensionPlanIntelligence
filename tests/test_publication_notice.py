@@ -8,8 +8,10 @@ import pytest
 
 from database import Publication, get_session
 from insights.notice import (
+    _extract_tldr,
     _make_preview,
     _strip_markdown,
+    _trim_leading_metadata,
     render_publication_notice,
     send_publication_notice,
 )
@@ -102,6 +104,46 @@ def test_preview_truncates_with_ellipsis_at_sentence_boundary():
 def test_preview_keeps_short_markdown_intact():
     md = "A short briefing of less than 700 chars."
     assert _make_preview(md) == md
+
+
+def test_preview_prefers_tldr_block_when_present():
+    out = _make_preview(SAMPLE_MD)
+    # SAMPLE_MD's TL;DR opens with "CalPERS' Investment Committee approved..."
+    assert out.startswith("CalPERS")
+    # Items below TL;DR (e.g. the FY24 ACFR bullet) should NOT appear
+    assert "FY24 ACFR" not in out
+    assert "PSERS publishing" not in out
+
+
+def test_preview_skips_title_and_generated_line_when_no_tldr():
+    md = (
+        "# 7-Day Highlights: April 24 – May 1, 2026\n"
+        "*Generated: May 01, 2026*\n\n"
+        "---\n\n"
+        "## Private Equity & Alternatives Commitments\n\n"
+        "The week's most active deal flow came from KPPA. Lots happened.\n"
+    )
+    out = _make_preview(md)
+    assert out.startswith("Private Equity")
+    assert "Generated:" not in out
+    assert "7-Day Highlights" not in out
+
+
+def test_extract_tldr_is_case_insensitive_and_supports_synonyms():
+    md_summary = "## Summary\n\nThe key point is X.\n\n## Other\n\nignored."
+    assert _extract_tldr(md_summary) == "The key point is X."
+    md_overview = "## overview\n\nQuick take.\n\n## Detail\n\nignored."
+    assert _extract_tldr(md_overview) == "Quick take."
+    md_none = "## Highlights\n\nNo TL;DR header here."
+    assert _extract_tldr(md_none) is None
+
+
+def test_trim_leading_metadata_drops_title_generated_and_rule():
+    md = (
+        "\n# Title line\n*Generated: 2026-05-05*\n---\n\n"
+        "Real content starts here."
+    )
+    assert _trim_leading_metadata(md).strip() == "Real content starts here."
 
 
 # ---------------------------------------------------------------------------
