@@ -2549,6 +2549,26 @@ def page_approval_action(raw_token: str, action: str):
             )
             return
 
+        # Post-publish notice email (currently only for weekly cadence;
+        # extend by removing the gate once monthly/annual want it too).
+        # Failures here don't roll back — the publication is already
+        # live; we just log and surface to the operator.
+        if publication.cadence == "weekly":
+            try:
+                from insights import notice as _notice
+                _notice.send_publication_notice(publication)
+            except Exception as exc:
+                # Don't block the approval-confirmation page on a notice failure.
+                import logging as _logging
+                _logging.getLogger(__name__).warning(
+                    "Publication %s published but notice email failed: %s",
+                    publication.id, exc,
+                )
+                st.warning(
+                    f"Briefing published, but the notice email failed to "
+                    f"send: {exc}. Check Resend logs."
+                )
+
     st.title(f"{action.title()}d")
     st.success(
         f"Publication #{publication.id} ({publication.cadence}, "
