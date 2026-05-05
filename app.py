@@ -884,7 +884,7 @@ def _extract_rfp_snippet(text: str, max_words: int = 25) -> tuple[str, str, str]
     return (
         keyword,
         _window_around(text, match.start(), max_words),
-        _window_around(text, match.start(), 80),
+        _window_around(text, match.start(), 150),
     )
 
 
@@ -917,6 +917,7 @@ def _find_rfp_alerts(session, hours: int = 24) -> list[dict]:
             "filename": doc.filename or f"Document {doc.id}",
             "doc_type": doc.doc_type or "",
             "downloaded_at": doc.downloaded_at,
+            "meeting_date": doc.meeting_date,
             "keyword": keyword,
             "snippet": snippet,
             "polish_context": polish_context,
@@ -929,19 +930,33 @@ You are an analyst tracking RFP and consultant procurement events at U.S. \
 public pension plans.
 
 Given a context window from a board document, write a single-sentence summary \
-(~20 words) that captures: WHO is procuring, WHAT they're procuring \
-(asset class, service, mandate), STATUS (planning, issued, response received, \
-awarded, expiring), and any specific dates, dollar figures, or named vendors \
-that appear in the context.
+(~25 words) that captures:
+- WHO is procuring (plan name)
+- WHAT they're procuring (asset class, service, mandate type)
+- STATUS (planning, issued, responses received, awarded, expiring, renewing)
+- A SPECIFIC DATE anchoring when the action happens — release date, response \
+due date, award date, contract expiration, or board-action / meeting date
+- Any named vendors or dollar figures that appear
 
 Rules:
 - Use ONLY information present in the context. Do not infer.
-- If the context shows the consultant/RFP mention is incidental (routine \
-consultant attendance, listing of professional consultants without \
-procurement action, a generic agenda item like "consultant due diligence \
-education session", a CAFR financial-line listing, a code-of-conduct \
-boilerplate), respond with EXACTLY: NOT_RFP
-- No preamble, no quotes, no markdown — just the summary or NOT_RFP.
+- The summary MUST include at least one specific date. Year alone is fine \
+when only year is available; prefer month/day when present. If the context \
+has no date at all, fall back to the source document's meeting date \
+(provided in the user message). If still no date, append " (date not \
+specified)" so the reader knows.
+- HISTORICAL FILTER: the user message includes today's date and a one-month \
+cutoff. If the only dates referenced in the context are before that cutoff \
+AND the action is described as completed historical background (e.g. "in \
+2023, we awarded …"), respond with EXACTLY: NOT_RFP. Keep the alert if any \
+mentioned date is on/after the cutoff, or if the action is described as \
+ongoing, upcoming, or under board review now.
+- INCIDENTAL FILTER: if the consultant/RFP mention is incidental (routine \
+consultant attendance, a CAFR or financial-statement line item, a listing \
+of professional consultants without procurement action, a generic agenda \
+item like "consultant due diligence education session", a code-of-conduct \
+or governance boilerplate), respond with EXACTLY: NOT_RFP.
+- No preamble, no quotes, no markdown — just the one-sentence summary or NOT_RFP.
 """
 
 _ALERT_HEADLINE_SYSTEM = """\
@@ -965,30 +980,41 @@ def _llm_mock() -> bool:
 
 
 def _polish_alert_snippet(plan_abbrev: str, plan_name: str, filename: str,
-                           keyword: str, polish_context: str) -> str | None:
-    """Send the wide context to Haiku for a clean ~20-word summary.
+                           keyword: str, polish_context: str,
+                           meeting_date_str: str, today_iso: str,
+                           cutoff_iso: str) -> str | None:
+    """Send the wide context to Haiku for a clean ~25-word summary.
 
-    Returns the polished string, or None if Haiku flagged the match as
-    NOT a real procurement event. Falls back to None on any error so the
-    caller can drop the alert rather than show a half-broken card.
+    Includes today's date and a one-month cutoff so Haiku can drop
+    historical-only references with NOT_RFP. Returns the polished string,
+    or None if Haiku flagged the match as historical / incidental.
+    Falls back to None on any error so the caller can drop the alert.
     """
     if _llm_mock():
         return polish_context  # tests / offline dev — bypass Haiku
 
     try:
         from summarizer import MODEL_HAIKU, _get_client
+        meeting_line = (
+            f"Source document meeting date: {meeting_date_str}\n"
+            if meeting_date_str else ""
+        )
         msg = _get_client().messages.create(
             model=MODEL_HAIKU,
-            max_tokens=120,
+            max_tokens=160,
             temperature=0.1,
             system=_ALERT_POLISH_SYSTEM,
             messages=[{
                 "role": "user",
                 "content": (
+                    f"Today: {today_iso}\n"
+                    f"One-month cutoff (drop if all referenced dates are "
+                    f"before this AND no current/upcoming action): {cutoff_iso}\n"
                     f"Plan: {plan_abbrev} ({plan_name})\n"
-                    f"Source document: {filename}\n"
+                    f"Source document filename: {filename}\n"
+                    f"{meeting_line}"
                     f"Matched keyword: {keyword}\n"
-                    f"Context (~80 words):\n{polish_context}"
+                    f"Context (~150 words):\n{polish_context}"
                 ),
             }],
         )
@@ -1031,23 +1057,27 @@ def _build_alert_headline(polished: list[dict]) -> str:
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def _polish_alerts_cached(payload: tuple) -> tuple[list[dict], str]:
+def _polish_alerts_cached(payload: tuple, today_iso: str,
+                           cutoff_iso: str) -> tuple[list[dict], str]:
     """Cache-key wrapper around the Haiku polish + headline pass.
 
     ``payload`` is a tuple of (doc_id, plan_abbrev, plan_name, filename,
-    keyword, polish_context) per alert — hashable and stable per-doc.
+    keyword, polish_context, meeting_date_str) per alert — hashable
+    and stable per-doc. ``today_iso`` and ``cutoff_iso`` participate
+    in the cache key so the cache invalidates as the calendar advances.
     Returns (polished_alerts_list, headline_string).
     """
     if not payload:
         return [], ""
 
     from concurrent.futures import ThreadPoolExecutor
-    raw_by_doc = {row[0]: row for row in payload}
 
     def polish_one(row):
-        doc_id, plan_abbrev, plan_name, filename, keyword, polish_context = row
+        (doc_id, plan_abbrev, plan_name, filename, keyword,
+         polish_context, meeting_date_str) = row
         polished = _polish_alert_snippet(
             plan_abbrev, plan_name, filename, keyword, polish_context,
+            meeting_date_str, today_iso, cutoff_iso,
         )
         return doc_id, polished
 
@@ -1056,7 +1086,8 @@ def _polish_alerts_cached(payload: tuple) -> tuple[list[dict], str]:
 
     out: list[dict] = []
     for row in payload:
-        doc_id, plan_abbrev, plan_name, filename, keyword, polish_context = row
+        (doc_id, plan_abbrev, plan_name, filename, keyword,
+         polish_context, meeting_date_str) = row
         polished = polished_map.get(doc_id)
         if polished is None:
             continue
@@ -1094,13 +1125,18 @@ def _render_rfp_alerts():
         return
 
     # Build a hashable, stable per-doc tuple so st.cache_data keys correctly.
+    today = datetime.utcnow().date()
+    cutoff = today - timedelta(days=30)
+    today_iso = today.isoformat()
+    cutoff_iso = cutoff.isoformat()
     payload = tuple(
         (a["doc_id"], a["plan_abbrev"], a["plan_name"], a["filename"],
-         a["keyword"], a["polish_context"])
+         a["keyword"], a["polish_context"],
+         a["meeting_date"].date().isoformat() if a.get("meeting_date") else "")
         for a in raw_alerts
     )
     with st.spinner(f"Polishing {len(payload)} candidate(s) via Haiku…"):
-        polished, headline = _polish_alerts_cached(payload)
+        polished, headline = _polish_alerts_cached(payload, today_iso, cutoff_iso)
 
     # Re-attach the per-doc fields the polish layer doesn't carry through.
     raw_by_id = {a["doc_id"]: a for a in raw_alerts}
