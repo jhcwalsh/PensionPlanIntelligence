@@ -80,6 +80,9 @@ The full extracted PDF text is the bulk of the DB by 10× over everything else. 
 ### Approval flow is Streamlit-query-param-based
 Magic-link emails contain `?approve=<token>` and `?reject=<token>`. The Streamlit app's `main()` checks `st.query_params` before rendering tabs and dispatches to `page_document_detail`, `page_cafr_plan_detail`, or the approval consumer. Tokens are SHA-256-hashed in `approval_tokens`; raw values exist only in the email body. To add a new deep-link route, follow the same pattern in `app.py`'s `main()`.
 
+### Admin / Drafts password gate
+The Admin and Drafts tabs are gated on the `ADMIN_PASSWORD` env var via `_restricted_gate()` (single shared password, session-state-sticky for the browser tab). Leave the env var unset for local dev (fail-open, no prompt). Set on Render to keep internal tooling and pre-editorial drafts off the public site. Other tabs (Insights, Activity, Search, Plans, etc.) are public — content there is the reader experience.
+
 ### Idempotency keys for cycles
 - `Publication` is unique on `(cadence, period_start)`. `find_or_create_publication()` returns the existing row or creates a new one with `status="generating"`.
 - `finalize_for_approval()` raises if status isn't `"generating"`. So once a publication is `awaiting_approval`, the cycle won't resend its email.
