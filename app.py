@@ -1298,6 +1298,131 @@ def _render_failed_docs():
         session.close()
 
 
+def _render_cafr_coverage():
+    """Render the 'CAFR Coverage' Admin sub-tab: how many plans have a
+    recent ACFR/CAFR in the DB, broken down by latest fiscal year."""
+    from sqlalchemy import func
+
+    st.caption(
+        "Latest CAFR/ACFR fiscal year held per plan. 'FY2024+' is the "
+        "current freshness target — anything older is a backfill gap. "
+        "Plans with no CAFR at all need URL hygiene in known_plans.json."
+    )
+
+    session = get_session()
+    try:
+        # Latest CAFR FY per plan (one row per plan that has any CAFR)
+        latest_rows = (
+            session.query(
+                Document.plan_id,
+                func.max(Document.fiscal_year).label("latest_fy"),
+            )
+            .filter(Document.doc_type == "cafr")
+            .filter(Document.fiscal_year.isnot(None))
+            .group_by(Document.plan_id)
+            .all()
+        )
+        latest_by_plan = {pid: fy for pid, fy in latest_rows}
+
+        # All plans (so we can count "none")
+        plans = session.query(Plan).order_by(Plan.id).all()
+        total_plans = len(plans)
+
+        # CAFR documents by fiscal year (across all plans, not just latest)
+        by_fy_rows = (
+            session.query(
+                Document.fiscal_year,
+                func.count(Document.id).label("n"),
+            )
+            .filter(Document.doc_type == "cafr")
+            .filter(Document.fiscal_year.isnot(None))
+            .group_by(Document.fiscal_year)
+            .order_by(Document.fiscal_year.desc())
+            .all()
+        )
+    finally:
+        session.close()
+
+    if total_plans == 0:
+        st.warning("No plans tracked yet.")
+        return
+
+    # ---------- headline metrics
+    n_2024_plus = sum(1 for fy in latest_by_plan.values() if fy and fy >= 2024)
+    n_2025_plus = sum(1 for fy in latest_by_plan.values() if fy and fy >= 2025)
+    n_gap = total_plans - n_2024_plus
+    pct = round(100 * n_2024_plus / total_plans) if total_plans else 0
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Plans tracked", total_plans)
+    c2.metric("FY2024+ coverage", f"{n_2024_plus} ({pct}%)")
+    c3.metric("FY2025+ coverage", n_2025_plus)
+    c4.metric("Backfill gap", n_gap)
+
+    # ---------- documents by fiscal year
+    st.markdown("##### CAFR documents by fiscal year")
+    if not by_fy_rows:
+        st.info("No CAFR documents in the database yet.")
+    else:
+        import pandas as pd
+        fy_df = pd.DataFrame(
+            [(f"FY{int(fy)}", int(n)) for fy, n in by_fy_rows],
+            columns=["Fiscal year", "CAFRs"],
+        )
+        st.dataframe(fy_df, hide_index=True, use_container_width=False)
+
+    # ---------- plans by latest CAFR (bucketed)
+    st.markdown("##### Plans by latest CAFR fiscal year")
+    from collections import Counter
+    bucket = Counter()
+    for plan in plans:
+        fy = latest_by_plan.get(plan.id)
+        if fy is None:
+            bucket["none"] += 1
+        elif fy >= 2025:
+            bucket["FY2025+"] += 1
+        elif fy == 2024:
+            bucket["FY2024 (only)"] += 1
+        else:
+            bucket[f"FY{int(fy)} (stale)"] += 1
+    # Stable display order
+    order = ["FY2025+", "FY2024 (only)", "FY2023 (stale)", "FY2022 (stale)",
+             "FY2021 (stale)", "FY2020 (stale)", "none"]
+    import pandas as pd
+    bucket_df = pd.DataFrame(
+        [(k, bucket[k]) for k in order if k in bucket],
+        columns=["Bucket", "Plans"],
+    )
+    st.dataframe(bucket_df, hide_index=True, use_container_width=False)
+
+    # ---------- detail: every plan with its latest FY
+    st.markdown("##### Per-plan detail")
+    rows = []
+    for plan in plans:
+        fy = latest_by_plan.get(plan.id)
+        rows.append({
+            "Plan": plan.name or plan.id,
+            "Abbrev": plan.abbreviation or "",
+            "State": plan.state or "",
+            "Latest CAFR FY": int(fy) if fy else None,
+            "Status": (
+                "current" if fy and fy >= 2024
+                else "stale" if fy
+                else "none"
+            ),
+        })
+    detail_df = pd.DataFrame(rows)
+    # Sort so gaps surface first: none, then oldest stale, then current
+    status_order = {"none": 0, "stale": 1, "current": 2}
+    detail_df = detail_df.sort_values(
+        by=["Status", "Latest CAFR FY", "Plan"],
+        key=lambda col: col.map(status_order) if col.name == "Status" else col,
+        ascending=[True, True, True],
+        na_position="first",
+    ).reset_index(drop=True)
+    st.dataframe(detail_df, hide_index=True, use_container_width=True)
+
+
 def _admin_plan_coverage_df():
     """Build the per-plan coverage table used by the Admin page.
 
@@ -2134,8 +2259,9 @@ def page_rfp(plan_id, plan_label):
 def page_admin():
     """Admin views: pipeline / data-quality diagnostics for the site owner."""
     st.title("Admin")
-    tab_runs, tab_coverage, tab_backlog, tab_failed = st.tabs(
-        ["Recent Runs", "Plan Coverage", "Pipeline Backlog", "Failed Docs"]
+    tab_runs, tab_coverage, tab_backlog, tab_failed, tab_cafr = st.tabs(
+        ["Recent Runs", "Plan Coverage", "Pipeline Backlog",
+         "Failed Docs", "CAFR Coverage"]
     )
 
     with tab_runs:
@@ -2228,6 +2354,9 @@ def page_admin():
 
     with tab_failed:
         _render_failed_docs()
+
+    with tab_cafr:
+        _render_cafr_coverage()
 
 
 def page_approval_action(raw_token: str, action: str):
