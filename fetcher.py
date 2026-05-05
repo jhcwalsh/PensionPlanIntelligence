@@ -398,12 +398,35 @@ def discover_document_links(plan: dict) -> list[dict]:
 # Download
 # ---------------------------------------------------------------------------
 
+def _is_valid_pdf(path: Path) -> bool:
+    """Return True iff the file starts with the PDF magic header ``%PDF-``.
+
+    Used to reject HTML error pages (404, 403, "Just a moment...") served
+    with a ``.pdf`` URL. Mirrors the check in ``refresh_cafrs.py``.
+    """
+    try:
+        with open(path, "rb") as f:
+            return f.read(5).startswith(b"%PDF-")
+    except OSError:
+        return False
+
+
 def download_document(url: str, dest_dir: Path, filename: str) -> tuple[Path | None, int]:
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / filename
 
     if dest.exists():
-        return dest, dest.stat().st_size
+        if dest.suffix.lower() == ".pdf" and not _is_valid_pdf(dest):
+            console.print(
+                f"  [yellow]Cached file at {dest.name} isn't a valid PDF; "
+                f"re-downloading[/yellow]"
+            )
+            try:
+                dest.unlink()
+            except OSError:
+                pass
+        else:
+            return dest, dest.stat().st_size
 
     try:
         resp = requests.get(url, headers=HEADERS, timeout=60, stream=True)
@@ -418,6 +441,17 @@ def download_document(url: str, dest_dir: Path, filename: str) -> tuple[Path | N
         with open(dest, "wb") as f:
             for chunk in resp.iter_content(chunk_size=8192):
                 f.write(chunk)
+
+        if dest.suffix.lower() == ".pdf" and not _is_valid_pdf(dest):
+            try:
+                dest.unlink()
+            except OSError:
+                pass
+            console.print(
+                f"  [red]Download for {url} returned non-PDF content "
+                f"(likely HTML error page); rejecting[/red]"
+            )
+            return None, 0
 
         return dest, dest.stat().st_size
 
