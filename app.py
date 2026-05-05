@@ -4,6 +4,7 @@ Streamlit UI — search and browse pension plan meeting documents and summaries.
 Run with: streamlit run app.py
 """
 
+import html as _html
 import io
 import json
 import os
@@ -838,13 +839,33 @@ def _find_consultant_with_context(text: str):
     return None
 
 
-def _extract_rfp_snippet(text: str, max_words: int = 25) -> tuple[str, str] | None:
+def _window_around(text: str, start: int, total_words: int) -> str:
+    """Return ~``total_words`` of text centered on the char position ``start``.
+
+    Used both for the regex-mechanical snippet (25 words) shown as a
+    fallback and the wider polish context (~80 words) sent to Haiku.
+    """
+    half = total_words // 2
+    pre_words = text[: start].split()
+    post_words = text[start:].split()
+    pre = pre_words[-half:] if len(pre_words) > half else pre_words
+    post_budget = total_words - len(pre)
+    post = post_words[:post_budget]
+    snippet = " ".join(pre + post).strip()
+    snippet = re.sub(r"\s+", " ", snippet)
+    prefix = "… " if len(pre_words) > len(pre) else ""
+    suffix = " …" if len(post_words) > len(post) else ""
+    return f"{prefix}{snippet}{suffix}"
+
+
+def _extract_rfp_snippet(text: str, max_words: int = 25) -> tuple[str, str, str] | None:
     """Find the first qualifying RFP/consultant mention.
 
     Always flags RFP / RFQ / Request for Proposal / Request for Qualifications.
     Flags 'consultant' only when an RFP-context action word (search,
     selection, rebid, incumbent, shortlist, award, etc.) appears within
-    ±8 words. Returns (keyword, ~25-word snippet) or None.
+    ±8 words. Returns (keyword, ~25-word snippet, ~80-word polish-context)
+    or None.
     """
     if not text:
         return None
@@ -860,19 +881,11 @@ def _extract_rfp_snippet(text: str, max_words: int = 25) -> tuple[str, str] | No
         return None
     keyword = match.group(0)
 
-    half = max_words // 2
-    pre_words = text[: match.start()].split()
-    post_words = text[match.start():].split()
-
-    pre = pre_words[-half:] if len(pre_words) > half else pre_words
-    post_budget = max_words - len(pre)
-    post = post_words[:post_budget]
-
-    snippet = " ".join(pre + post).strip()
-    snippet = re.sub(r"\s+", " ", snippet)
-    prefix = "… " if len(pre_words) > len(pre) else ""
-    suffix = " …" if len(post_words) > len(post) else ""
-    return keyword, f"{prefix}{snippet}{suffix}"
+    return (
+        keyword,
+        _window_around(text, match.start(), max_words),
+        _window_around(text, match.start(), 80),
+    )
 
 
 def _find_rfp_alerts(session, hours: int = 24) -> list[dict]:
@@ -895,7 +908,7 @@ def _find_rfp_alerts(session, hours: int = 24) -> list[dict]:
         result = _extract_rfp_snippet(doc.extracted_text or "")
         if result is None:
             continue
-        keyword, snippet = result
+        keyword, snippet, polish_context = result
         alerts.append({
             "doc_id": doc.id,
             "plan_id": plan.id,
@@ -906,47 +919,235 @@ def _find_rfp_alerts(session, hours: int = 24) -> list[dict]:
             "downloaded_at": doc.downloaded_at,
             "keyword": keyword,
             "snippet": snippet,
+            "polish_context": polish_context,
         })
     return alerts
+
+
+_ALERT_POLISH_SYSTEM = """\
+You are an analyst tracking RFP and consultant procurement events at U.S. \
+public pension plans.
+
+Given a context window from a board document, write a single-sentence summary \
+(~20 words) that captures: WHO is procuring, WHAT they're procuring \
+(asset class, service, mandate), STATUS (planning, issued, response received, \
+awarded, expiring), and any specific dates, dollar figures, or named vendors \
+that appear in the context.
+
+Rules:
+- Use ONLY information present in the context. Do not infer.
+- If the context shows the consultant/RFP mention is incidental (routine \
+consultant attendance, listing of professional consultants without \
+procurement action, a generic agenda item like "consultant due diligence \
+education session", a CAFR financial-line listing, a code-of-conduct \
+boilerplate), respond with EXACTLY: NOT_RFP
+- No preamble, no quotes, no markdown — just the summary or NOT_RFP.
+"""
+
+_ALERT_HEADLINE_SYSTEM = """\
+You are summarizing today's RFP / consultant alert feed for a busy CIO.
+
+Given the list of alerts below, write a single sentence (max 30 words) that \
+captures: the most consequential events (new RFPs issued, awards announced, \
+incumbent transitions, deadlines), and any pattern (e.g. multiple consultant \
+searches in one asset class).
+
+Rules:
+- Be concrete: name plans and stages.
+- Use ONLY information in the alerts. No preamble, no quotes, no markdown.
+- If only one alert, summarize that one item.
+"""
+
+
+def _llm_mock() -> bool:
+    return os.environ.get("LLM_MODE", "").lower() == "mock" or \
+           os.environ.get("INSIGHTS_MODE", "").lower() == "mock"
+
+
+def _polish_alert_snippet(plan_abbrev: str, plan_name: str, filename: str,
+                           keyword: str, polish_context: str) -> str | None:
+    """Send the wide context to Haiku for a clean ~20-word summary.
+
+    Returns the polished string, or None if Haiku flagged the match as
+    NOT a real procurement event. Falls back to None on any error so the
+    caller can drop the alert rather than show a half-broken card.
+    """
+    if _llm_mock():
+        return polish_context  # tests / offline dev — bypass Haiku
+
+    try:
+        from summarizer import MODEL_HAIKU, _get_client
+        msg = _get_client().messages.create(
+            model=MODEL_HAIKU,
+            max_tokens=120,
+            temperature=0.1,
+            system=_ALERT_POLISH_SYSTEM,
+            messages=[{
+                "role": "user",
+                "content": (
+                    f"Plan: {plan_abbrev} ({plan_name})\n"
+                    f"Source document: {filename}\n"
+                    f"Matched keyword: {keyword}\n"
+                    f"Context (~80 words):\n{polish_context}"
+                ),
+            }],
+        )
+        if not msg.content:
+            return None
+        text = msg.content[0].text.strip()
+        if text.startswith("NOT_RFP"):
+            return None
+        return text
+    except Exception:
+        return None
+
+
+def _build_alert_headline(polished: list[dict]) -> str:
+    """One-sentence (~30 word) tl;dr across the polished alert list."""
+    n = len(polished)
+    if n == 0:
+        return ""
+    if _llm_mock():
+        plans = sorted({a["plan_abbrev"] for a in polished})
+        return f"{n} RFP / consultant event(s) across {len(plans)} plan(s): {', '.join(plans[:6])}."
+
+    try:
+        from summarizer import MODEL_HAIKU, _get_client
+        body = "\n".join(
+            f"- {a['plan_abbrev']}: {a['snippet']}" for a in polished
+        )
+        msg = _get_client().messages.create(
+            model=MODEL_HAIKU,
+            max_tokens=160,
+            temperature=0.1,
+            system=_ALERT_HEADLINE_SYSTEM,
+            messages=[{"role": "user", "content": f"Alerts:\n{body}"}],
+        )
+        if not msg.content:
+            return f"{n} RFP / consultant event(s) in the window."
+        return msg.content[0].text.strip()
+    except Exception:
+        return f"{n} RFP / consultant event(s) in the window."
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _polish_alerts_cached(payload: tuple) -> tuple[list[dict], str]:
+    """Cache-key wrapper around the Haiku polish + headline pass.
+
+    ``payload`` is a tuple of (doc_id, plan_abbrev, plan_name, filename,
+    keyword, polish_context) per alert — hashable and stable per-doc.
+    Returns (polished_alerts_list, headline_string).
+    """
+    if not payload:
+        return [], ""
+
+    from concurrent.futures import ThreadPoolExecutor
+    raw_by_doc = {row[0]: row for row in payload}
+
+    def polish_one(row):
+        doc_id, plan_abbrev, plan_name, filename, keyword, polish_context = row
+        polished = _polish_alert_snippet(
+            plan_abbrev, plan_name, filename, keyword, polish_context,
+        )
+        return doc_id, polished
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        polished_map = dict(pool.map(polish_one, payload))
+
+    out: list[dict] = []
+    for row in payload:
+        doc_id, plan_abbrev, plan_name, filename, keyword, polish_context = row
+        polished = polished_map.get(doc_id)
+        if polished is None:
+            continue
+        out.append({
+            "doc_id": doc_id,
+            "plan_abbrev": plan_abbrev,
+            "plan_name": plan_name,
+            "filename": filename,
+            "keyword": keyword,
+            "snippet": polished,
+        })
+
+    headline = _build_alert_headline(out)
+    return out, headline
 
 
 def _render_rfp_alerts():
     st.title("RFP Alerts")
     st.caption(
         "RFP and consultant references found in materials downloaded "
-        "by the daily pipeline. One alert per document — click through "
-        "to the source for full context. Widen the window to catch up "
-        "after a missed run or to scan a longer trailing period."
+        "by the daily pipeline. Each candidate is polished by Haiku "
+        "into a one-sentence summary and dropped if Haiku judges it "
+        "incidental (CAFR boilerplate, agenda placeholders, etc.). "
+        "Widen the window to scan a longer trailing period."
     )
 
     hours = st.slider("Look-back window (hours)", 12, 168, 24, step=12,
                       key="rfp_alerts_hours")
 
     session = get_db_session()
-    alerts = _find_rfp_alerts(session, hours=hours)
+    raw_alerts = _find_rfp_alerts(session, hours=hours)
 
-    if not alerts:
+    if not raw_alerts:
         st.info(f"No RFP or consultant references found in materials from the last {hours} hours.")
         return
 
+    # Build a hashable, stable per-doc tuple so st.cache_data keys correctly.
+    payload = tuple(
+        (a["doc_id"], a["plan_abbrev"], a["plan_name"], a["filename"],
+         a["keyword"], a["polish_context"])
+        for a in raw_alerts
+    )
+    with st.spinner(f"Polishing {len(payload)} candidate(s) via Haiku…"):
+        polished, headline = _polish_alerts_cached(payload)
+
+    # Re-attach the per-doc fields the polish layer doesn't carry through.
+    raw_by_id = {a["doc_id"]: a for a in raw_alerts}
+    enriched = []
+    for p in polished:
+        meta = raw_by_id.get(p["doc_id"], {})
+        enriched.append({**p,
+                         "doc_type": meta.get("doc_type", ""),
+                         "downloaded_at": meta.get("downloaded_at")})
+
+    dropped = len(raw_alerts) - len(enriched)
     by_plan: dict[tuple, list[dict]] = {}
-    for a in alerts:
+    for a in enriched:
         key = (a["plan_abbrev"], a["plan_name"])
         by_plan.setdefault(key, []).append(a)
 
-    st.markdown(
-        f"**{len(alerts)} document(s)** across **{len(by_plan)} plan(s)** "
-        f"with RFP / consultant references."
-    )
+    if not enriched:
+        st.info(
+            f"{len(raw_alerts)} regex candidate(s) all filtered out by Haiku as "
+            f"incidental mentions in the last {hours} hours."
+        )
+        return
+
+    if headline:
+        st.markdown(
+            f'<div style="padding:12px 16px;background:#f0f4f8;border-left:4px solid #003366;'
+            f'margin:0 0 14px;border-radius:4px;">'
+            f'<b>Headline:</b> {_html.escape(headline)}'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    summary_bits = [
+        f"**{len(enriched)} alert(s)** across **{len(by_plan)} plan(s)**"
+    ]
+    if dropped:
+        summary_bits.append(f"({dropped} regex candidate(s) filtered as incidental)")
+    st.markdown(" ".join(summary_bits))
 
     for (abbrev, plan_name), plan_alerts in sorted(by_plan.items(), key=lambda kv: kv[0]):
         label = f"{abbrev} ({plan_name})" if abbrev != plan_name else plan_name
         with st.expander(f"**{label}** — {len(plan_alerts)} doc(s)", expanded=True):
             for a in plan_alerts:
-                when = a["downloaded_at"].strftime("%Y-%m-%d %H:%M") if a["downloaded_at"] else "—"
+                when = a["downloaded_at"].strftime("%Y-%m-%d %H:%M") if a.get("downloaded_at") else "—"
                 st.markdown(
                     f"[{a['filename']}](?doc={a['doc_id']}) "
-                    f"<span style='color:#888;font-size:0.9em;'>· {a['doc_type']} · {when}</span>",
+                    f"<span style='color:#888;font-size:0.9em;'>· {a.get('doc_type', '')} · {when}</span>",
                     unsafe_allow_html=True,
                 )
                 st.markdown(f"> {a['snippet']}")
