@@ -194,6 +194,32 @@ def refresh_plan(session, plan: dict, run_at: datetime,
                         url_tried=url, notes=f"file only {size} bytes")
             return "validation_failed"
 
+        # PDF magic-header check — landing pages occasionally serve an HTML
+        # download that passes the size threshold but isn't a real PDF (this
+        # is how the `nycppf-cafr-unknown.pdf` junk row got created in 2026-05).
+        try:
+            with open(local_path, "rb") as f:
+                head = f.read(5)
+        except OSError as e:
+            head = b""
+            console.print(f"  [yellow]{abbrev}: could not read downloaded "
+                          f"file ({e}); treating as not-a-PDF[/yellow]")
+        if not head.startswith(b"%PDF-"):
+            try:
+                local_path.unlink()
+            except OSError:
+                pass
+            log_outcome(
+                session, plan_id, run_at, target_year, "validation_failed",
+                url_tried=url,
+                notes=f"not a PDF (header={head!r}); likely HTML masquerading as PDF",
+            )
+            console.print(
+                f"  [yellow]{abbrev}: not a PDF (header {head!r}); not saving[/yellow]"
+            )
+            last_result = "validation_failed"
+            continue
+
         cover_year = fiscal_year_from_pdf(local_path, max_year=run_at.year + 1)
         if cover_year not in acceptable_years:
             log_outcome(
