@@ -3010,8 +3010,8 @@ def main():
     _render_admin_login_sidebar()
 
     # Tabs are built from a (label, render) list so the gated tabs can be
-    # appended only when unlocked. When locked, Drafts and Admin disappear
-    # entirely from the tab strip — visitors don't see them at all.
+    # appended only when unlocked. When locked, Archive, Drafts and Admin
+    # disappear entirely from the tab strip — visitors don't see them at all.
     tab_specs: list[tuple[str, callable]] = [
         ("Insights",            lambda: page_insights()),
         ("Activity",            lambda: page_activity(plan_id, plan_label)),
@@ -3022,11 +3022,11 @@ def main():
         ("CAFR",                lambda: page_cafr()),
         ("Asset Allocation",    lambda: page_asset_allocation()),
         ("Plans",               lambda: page_plans()),
-        ("Archive",             lambda: page_archive()),
     ]
     if _admin_unlocked():
-        tab_specs.append(("Drafts", lambda: page_drafts()))
-        tab_specs.append(("Admin",  lambda: page_admin()))
+        tab_specs.append(("Archive", lambda: page_archive()))
+        tab_specs.append(("Drafts",  lambda: page_drafts()))
+        tab_specs.append(("Admin",   lambda: page_admin()))
 
     tabs = st.tabs([label for label, _ in tab_specs])
     for tab, (_label, render) in zip(tabs, tab_specs):

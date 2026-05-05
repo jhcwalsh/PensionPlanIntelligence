@@ -80,8 +80,8 @@ The full extracted PDF text is the bulk of the DB by 10× over everything else. 
 ### Approval flow is Streamlit-query-param-based
 Magic-link emails contain `?approve=<token>` and `?reject=<token>`. The Streamlit app's `main()` checks `st.query_params` before rendering tabs and dispatches to `page_document_detail`, `page_cafr_plan_detail`, or the approval consumer. Tokens are SHA-256-hashed in `approval_tokens`; raw values exist only in the email body. To add a new deep-link route, follow the same pattern in `app.py`'s `main()`.
 
-### Admin / Drafts password gate
-The Admin and Drafts tabs are hidden from the tab strip entirely until the user enters the password set in the `ADMIN_PASSWORD` env var. The login form is a sidebar expander rendered by `_render_admin_login_sidebar()`; the predicate `_admin_unlocked()` drives whether the two gated tabs are appended to `main()`'s `tab_specs` list. Single shared password, session-state-sticky for the browser tab. Leave the env var unset for local dev (fail-open — tabs always present, no login UI). Set on Render to keep internal tooling and pre-editorial drafts off the public site.
+### Archive / Drafts / Admin password gate
+The Archive, Drafts, and Admin tabs are hidden from the tab strip entirely until the user enters the password set in the `ADMIN_PASSWORD` env var. The login form is a sidebar expander rendered by `_render_admin_login_sidebar()`; the predicate `_admin_unlocked()` drives whether the three gated tabs are appended to `main()`'s `tab_specs` list. Single shared password, session-state-sticky for the browser tab. Leave the env var unset for local dev (fail-open — tabs always present, no login UI). Set on Render to keep internal tooling, pre-editorial drafts, and the back-catalogue archive off the public site.
 
 ### Idempotency keys for cycles
 - `Publication` is unique on `(cadence, period_start)`. `find_or_create_publication()` returns the existing row or creates a new one with `status="generating"`.
