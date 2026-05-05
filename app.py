@@ -377,26 +377,46 @@ def page_activity(plan_id, plan_label):
     control are scoped per view.
     """
     st.title("Recent Activity")
-    view = st.radio(
-        "View",
-        options=["By plan", "By meeting", "By document"],
-        horizontal=True,
-        key="activity_view",
-        label_visibility="collapsed",
-    )
+    col_view, col_sort = st.columns([2, 1])
+    with col_view:
+        view = st.radio(
+            "View",
+            options=["By plan", "By meeting", "By document"],
+            horizontal=True,
+            key="activity_view",
+            label_visibility="collapsed",
+        )
+    with col_sort:
+        sort = st.radio(
+            "Sort",
+            options=["Most recent", "Alphabetical"],
+            horizontal=True,
+            key="activity_sort",
+            label_visibility="collapsed",
+        )
     if view == "By plan":
-        _render_activity_by_plan(plan_id, plan_label)
+        _render_activity_by_plan(plan_id, plan_label, sort)
     elif view == "By meeting":
-        _render_activity_by_meeting(plan_id, plan_label)
+        _render_activity_by_meeting(plan_id, plan_label, sort)
     else:
-        _render_activity_by_document(plan_id, plan_label)
+        _render_activity_by_document(plan_id, plan_label, sort)
 
 
-def _render_activity_by_document(plan_id, plan_label):
-    """Recency-driven document feed — last N docs across the corpus."""
+def _render_activity_by_document(plan_id, plan_label, sort: str = "Most recent"):
+    """Recency-driven document feed — last N docs across the corpus.
+
+    Sort: 'Most recent' (default, by meeting_date desc), or 'Alphabetical'
+    which re-orders the recency-limited result set by plan abbreviation.
+    """
     limit = st.slider("Show last N documents", 5, 100, 20, key="activity_doc_limit")
     results = load_recent_summaries(plan_id=plan_id if plan_label != "All" else None,
                                     limit=limit)
+    if sort == "Alphabetical":
+        results = sorted(
+            results,
+            key=lambda ds: ((ds[0].plan.abbreviation or ds[0].plan_id or "").lower(),
+                            ds[0].meeting_date or datetime.min),
+        )
 
     if not results:
         st.warning("No summarized documents yet. Run the pipeline to fetch and process documents.")
@@ -443,12 +463,13 @@ def _truncate_words(text: str, max_words: int) -> tuple[str, bool]:
     return " ".join(words[:max_words]) + "…", True
 
 
-def _render_activity_by_plan(plan_id, plan_label):
+def _render_activity_by_plan(plan_id, plan_label, sort: str = "Most recent"):
     """Plan-grouped headline view — one snapshot per plan, expand for detail."""
     st.caption("One snapshot per plan — up to 100 words. Expand a plan for the full detail.")
 
     days = st.slider("Look back (days)", 1, 90, 14, key="activity_by_plan_days")
     session = get_db_session()
+    _sort_alpha = sort == "Alphabetical"
     meetings = get_new_meetings(session, days=days)
 
     if plan_id:
@@ -468,9 +489,18 @@ def _render_activity_by_plan(plan_id, plan_label):
     st.caption(f"**{len(by_plan)} plan(s)** with activity in the last {days} days"
                + (f" for {plan_label}" if plan_label != "All" else ""))
 
+    if _sort_alpha:
+        sort_key = lambda kv: (
+            (kv[1][0]["plan"].abbreviation or kv[1][0]["plan"].name or kv[0]).lower()
+            if kv[1][0]["plan"] else kv[0]
+        )
+        sort_reverse = False
+    else:
+        sort_key = lambda kv: kv[1][0]["meeting_date"] or datetime.min
+        sort_reverse = True
     for pid, plan_meetings in sorted(by_plan.items(),
-                                     key=lambda kv: kv[1][0]["meeting_date"] or datetime.min,
-                                     reverse=True):
+                                     key=sort_key,
+                                     reverse=sort_reverse):
         plan = plan_meetings[0]["plan"]
         plan_label_str = (plan.abbreviation or plan.name) if plan else pid.upper()
         latest_date = plan_meetings[0]["meeting_date"]
@@ -522,7 +552,7 @@ def _render_activity_by_plan(plan_id, plan_label):
         st.divider()
 
 
-def _render_activity_by_meeting(plan_id, plan_label):
+def _render_activity_by_meeting(plan_id, plan_label, sort: str = "Most recent"):
     """Per-meeting card view — full agenda summary + materials per meeting."""
     st.caption("New meetings detected since last pipeline run, with agenda summaries and links to materials.")
 
@@ -539,6 +569,15 @@ def _render_activity_by_meeting(plan_id, plan_label):
 
     st.caption(f"**{len(meetings)} new meeting(s)** in the last {days} days"
                + (f" for {plan_label}" if plan_label != "All" else ""))
+
+    if sort == "Alphabetical":
+        meetings = sorted(
+            meetings,
+            key=lambda m: (
+                ((m["plan"].abbreviation or m["plan"].name) if m["plan"] else "").lower(),
+                -(m["meeting_date"].toordinal() if m["meeting_date"] else 0),
+            ),
+        )
 
     for m in meetings:
         plan = m["plan"]
