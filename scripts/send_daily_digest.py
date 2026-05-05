@@ -205,7 +205,7 @@ def main(argv=None) -> int:
 
     html, text, total_docs = render_email(runs_data)
     today = datetime.utcnow().strftime("%Y-%m-%d")
-    subject = (f"[PPI] Daily pipeline — {total_docs} new doc"
+    subject = (f"[PensionGraph] Daily pipeline — {total_docs} new doc"
                f"{'s' if total_docs != 1 else ''} ({today})")
 
     email = ApprovalEmail(

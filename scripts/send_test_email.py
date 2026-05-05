@@ -24,7 +24,7 @@ from insights import config
 from insights.approval import ApprovalEmail, send_email
 
 
-SUBJECT = "[PPI] Email plumbing test"
+SUBJECT = "[PensionGraph] Email plumbing test"
 
 HTML_TEMPLATE = """\
 <!doctype html>
