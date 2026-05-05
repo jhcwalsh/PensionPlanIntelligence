@@ -153,7 +153,7 @@ def gather_highlights_data(session, days: int = 7) -> dict:
 
     if not meetings:
         return {"meetings": [], "date_range": None, "plans_with_activity": 0,
-                "total_aum": 0}
+                "total_aum": 0, "plans": []}
 
     # Enrich with all summaries
     for m in meetings:
@@ -176,6 +176,7 @@ def gather_highlights_data(session, days: int = 7) -> dict:
         "date_range": date_range,
         "plans_with_activity": len(plan_ids),
         "total_aum": total_aum,
+        "plans": plans,
     }
 
 
@@ -186,7 +187,7 @@ def gather_trends_data(session) -> dict:
 
     if not meetings:
         return {"meetings": [], "plans_with_activity": 0, "total_aum": 0,
-                "date_range_str": "2026"}
+                "date_range_str": "2026", "plans": []}
 
     for m in meetings:
         m["all_summaries"] = _enrich_meeting_summaries(session, m)
@@ -208,6 +209,7 @@ def gather_trends_data(session) -> dict:
         "plans_with_activity": len(plan_ids),
         "total_aum": total_aum,
         "date_range_str": date_range_str,
+        "plans": plans,
     }
 
 
@@ -257,7 +259,8 @@ def gather_recent_insights_data(session, days: int = 30) -> dict:
 
     if not meetings:
         return {"meetings": [], "plans_with_activity": 0, "total_aum": 0,
-                "days": days, "date_range_str": f"Last {days} days"}
+                "days": days, "date_range_str": f"Last {days} days",
+                "plans": []}
 
     for m in meetings:
         m["all_summaries"] = _enrich_meeting_summaries(session, m)
@@ -280,6 +283,7 @@ def gather_recent_insights_data(session, days: int = 30) -> dict:
         "total_aum": total_aum,
         "days": days,
         "date_range_str": date_range_str,
+        "plans": plans,
     }
 
 
@@ -288,6 +292,31 @@ def gather_recent_insights_data(session, days: int = 30) -> dict:
 # ---------------------------------------------------------------------------
 
 MAX_PROMPT_CHARS = 500_000  # ~125k tokens — well under Sonnet's 200k context
+
+
+def _format_aum_table(plans: list) -> str:
+    """Render the canonical PLAN AUM TABLE block injected into prompts.
+
+    Sorted by registry AUM descending so the largest plans (which dominate
+    the narrative) are at the top. Plans without a registry AUM are listed
+    as "AUM unknown" so the model knows to source the figure from the
+    meeting data with an as-of-date qualifier.
+    """
+    if not plans:
+        return "(no plans referenced)"
+    sorted_plans = sorted(
+        plans, key=lambda p: -(p.aum_billions or 0)
+    )
+    lines = []
+    for p in sorted_plans:
+        abbr = p.abbreviation or p.name
+        state = p.state or "?"
+        if p.aum_billions:
+            aum_str = f"~${p.aum_billions:.0f}B"
+        else:
+            aum_str = "AUM unknown"
+        lines.append(f"- {abbr} ({state}): {aum_str}")
+    return "\n".join(lines)
 
 
 def format_meetings_for_prompt(meetings: list[dict]) -> str:
@@ -356,19 +385,34 @@ def format_meetings_for_prompt(meetings: list[dict]) -> str:
     return "\n\n".join(parts)
 
 
+def format_weekly_date_range(date_range, days: int) -> str:
+    """Render the human-readable date-range string used in the weekly H1.
+
+    Same logic ``compose_weekly`` uses to validate the model's H1, so the
+    title produced by the prompt and the title verified post-generation
+    cannot drift.
+    """
+    today = datetime.utcnow()
+    if date_range:
+        start_dt, end_dt = date_range[0], date_range[1]
+    else:
+        start_dt, end_dt = today - timedelta(days=days), today
+    start_month = start_dt.strftime("%B")
+    end_month = end_dt.strftime("%B")
+    if start_dt.month == end_dt.month and start_dt.year == end_dt.year:
+        return f"{start_month} {start_dt.day}–{end_dt.day}, {end_dt.year}"
+    return (
+        f"{start_month} {start_dt.day} – "
+        f"{end_month} {end_dt.day}, {end_dt.year}"
+    )
+
+
 def build_highlights_prompt(data: dict, days: int) -> str:
     """Build the Claude prompt for 7-day highlights generation."""
-    today = datetime.utcnow()
-    today_str = today.strftime("%B %d, %Y")
+    today_str = datetime.utcnow().strftime("%B %d, %Y")
+    date_range_title = format_weekly_date_range(data["date_range"], days)
 
-    if data["date_range"]:
-        start_str = data["date_range"][0].strftime("%B %#d")
-        end_str = data["date_range"][1].strftime("%#d, %Y")
-        date_range_title = f"{start_str}–{end_str}"
-    else:
-        start = today - timedelta(days=days)
-        date_range_title = f"{start.strftime('%B %#d')}–{today.strftime('%#d, %Y')}"
-
+    aum_table = _format_aum_table(data.get("plans") or [])
     meetings_text = format_meetings_for_prompt(data["meetings"])
 
     return f"""\
@@ -378,6 +422,35 @@ investment committee activity for the period: {date_range_title}.
 Below is structured data from {data['plans_with_activity']} pension plans that had meetings
 or published materials in this period. Synthesize this into an analytical markdown document.
 
+GROUNDING RULES (non-negotiable):
+- Every specific figure (%, $, vote tally, fee bps, manager name, asset class \
+allocation) MUST appear verbatim in the MEETING DATA below. If a number is not in \
+the data, do not state one — use qualitative language instead ("a meaningful \
+commitment", "increased materially") or omit the point.
+- Do NOT compute new figures from source data. No subtracting a return from its \
+benchmark to produce a basis-points alpha, no dividing counts to produce a \
+percentage, no summing commitments to produce a total. If a derived figure isn't \
+already stated verbatim in MEETING DATA, do not state it.
+- Every manager, fund, or plan name must appear in the MEETING DATA. Do not \
+introduce names from general knowledge.
+- Use only the source's own language for WHY things happened or what they \
+signify. Do not introduce connectives like "driven by", "reflects", "is \
+consistent with", "a notable trend", "suggests", "indicates", or industry \
+jargon ("market appreciation", "flight to quality", "crowding") unless that \
+exact phrase appears in MEETING DATA. When linking two facts, juxtapose them \
+neutrally ("TRS also reported X") rather than asserting a relationship the \
+source does not state.
+- Every claim must be traceable to at least one doc_id in the MEETING DATA. If \
+you cannot cite a doc_id, do not make the claim.
+- Prefer "no observation" over speculation. Better to write 600 well-sourced \
+words than 900 with invented detail.
+- Use the PLAN AUM TABLE below as the canonical AUM for each plan. When you \
+mention a plan's AUM (in parentheses on first mention), use the value from \
+the table. You MAY substitute a more recent or more precise figure from the \
+MEETING DATA — but only if you append an "as of <date>" qualifier (e.g. \
+"~$235.2B as of June 30, 2025") and use that same value consistently for \
+that plan throughout the rest of the note. Do not switch back and forth.
+
 FORMAT REQUIREMENTS:
 - Start with exactly: # 7-Day Highlights: {date_range_title}
 - Second line must be exactly: *Generated: {today_str}*
@@ -386,9 +459,16 @@ FORMAT REQUIREMENTS:
   private equity commitments, manager hires/mandate changes, portfolio strategy,
   governance actions, performance data — but choose themes that fit the data
 - Bold (**) plan names, dollar amounts, and manager names on first mention
-- Include plan AUM in parentheses on first mention of each plan
+- Include plan AUM in parentheses on first mention of each plan (see PLAN AUM TABLE)
+- Every sentence containing a $ figure, %, bps, vote tally, or manager name \
+must end with an inline citation in the form (doc_id=42). The cited doc_id \
+must be the one whose summary contains that specific figure or name verbatim. \
+If a sentence's figures come from two different docs, split the sentence so \
+each cite is unambiguous. The section-level *Sources:* line (see below) \
+remains as a summary.
 - End with ## Upcoming Meetings to Watch (bullet list of what's on deck next)
-- Target 700–900 words total
+- Hard cap 900 words total. If you reach it, drop the weakest-evidenced \
+theme entirely rather than trimming a sentence from each.
 
 SOURCE LINKS:
 Each summary in the data below includes a doc_id (e.g. doc_id=42). At the end of
@@ -398,6 +478,26 @@ section as markdown links. Use this exact format for each link:
 Example: *Sources: [CalPERS — Agenda — April 02, 2026](?doc=42), [LACERA — Board Pack — March 11, 2026](?doc=58)*
 Only cite documents whose content you actually used in that section.
 
+BEFORE FINALISING — scan the draft for these specific patterns and verify each \
+against MEETING DATA. If any item does not match the source, remove it or \
+rewrite the sentence to juxtapose facts neutrally rather than asserting a \
+relationship.
+- bps / basis points figures (especially alpha or excess-return numbers — \
+these are the most common arithmetic-derived hallucinations)
+- multi-year returns (1-year, 3-year, 5-year, 10-year)
+- ratios (Nx, N:1, N-quartile, N% of)
+- list counts ("three plans", "all 11 portfolios", "two managers")
+- the connective phrases: "consistent with", "reflects", "driven by", \
+"a notable", "suggests", "indicates", "underscores"
+- every inline (doc_id=N): the cited doc must contain the specific figure or \
+name in that sentence verbatim, not merely be on the same topic.
+- AUM consistency: each plan should appear with one and only one AUM value \
+throughout the note (the PLAN AUM TABLE value, OR a single override with an \
+"as of <date>" qualifier — never both for the same plan).
+
+PLAN AUM TABLE (canonical reference):
+{aum_table}
+
 MEETING DATA:
 {meetings_text}"""
 
@@ -406,6 +506,7 @@ def build_insights_prompt(data: dict) -> str:
     """Build the Claude prompt for the CIO Insights note."""
     today_str = datetime.utcnow().strftime("%B %d, %Y")
     aum_trillions = data["total_aum"] / 1000
+    aum_table = _format_aum_table(data.get("plans") or [])
     meetings_text = format_meetings_for_prompt(data["meetings"])
 
     return f"""\
@@ -426,14 +527,30 @@ GROUNDING RULES (non-negotiable):
 allocation) MUST appear verbatim in the MEETING DATA below. If a number is not in \
 the data, do not state one — use qualitative language instead ("increased materially", \
 "a meaningful allocation") or omit the point.
+- Do NOT compute new figures from source data. No subtracting a return from its \
+benchmark to produce a basis-points alpha, no dividing counts to produce a \
+percentage, no summing commitments to produce a total. If a derived figure isn't \
+already stated verbatim in MEETING DATA, do not state it.
 - Every manager, fund, or plan name must appear in the MEETING DATA. Do not introduce \
 names from general knowledge.
+- Use only the source's own language for WHY things happened or what they \
+signify. Synthesis prose may use connectives like "driven by", "reflects", \
+"is consistent with", "a notable trend", "suggests", "indicates", or industry \
+jargon ("market appreciation", "flight to quality", "crowding") ONLY when (a) \
+the exact phrase appears in MEETING DATA, OR (b) the connective claim is \
+anchored to ≥2 specific named plans whose evidence in MEETING DATA supports \
+the relationship being asserted. Otherwise juxtapose facts neutrally.
 - Every claim must be traceable to at least one doc_id in the MEETING DATA. If you \
 cannot cite a doc_id, do not make the claim.
 - If a theme is supported by fewer than 3 plans in the data, either drop it or \
 explicitly flag it as "*Emerging signal — limited data*".
 - Prefer "no observation" over speculation. It is better to write 1,200 well-sourced \
 words than 1,800 with invented detail.
+- Use the PLAN AUM TABLE below as the canonical AUM for each plan. When you \
+mention a plan's AUM (in parentheses on first mention), use the value from \
+the table. You MAY substitute a more recent or more precise figure from the \
+MEETING DATA — but only if you append an "as of <date>" qualifier and use \
+that same value consistently for that plan throughout the rest of the note.
 
 FORMAT REQUIREMENTS:
 - Start with exactly: # CIO Insights: 2026 Institutional Trends
@@ -447,10 +564,13 @@ FORMAT REQUIREMENTS:
 - Include specific data (return percentages, commitment sizes, vote tallies, fee rates) \
 ONLY when it appears in MEETING DATA — see GROUNDING RULES above
 - Every sentence containing a $ figure, %, bps, vote tally, or manager name must end \
-with an inline citation in the form (doc_id=42). The section-level *Sources:* line \
-(see below) remains as a summary.
+with an inline citation in the form (doc_id=42). The cited doc_id must be the one \
+whose summary contains that specific figure or name verbatim. If a sentence's \
+figures come from two different docs, split the sentence so each cite is \
+unambiguous. The section-level *Sources:* line (see below) remains as a summary.
 - Do NOT produce a section-by-section recap of each plan — synthesize across plans
-- Target 1,200–1,800 words total. Err on the short side if data is thin.
+- Hard cap 1,800 words total. If you reach it, drop the weakest-evidenced \
+theme entirely rather than trimming a sentence from each.
 
 SOURCE LINKS:
 Each summary in the data below includes a doc_id (e.g. doc_id=42). Immediately before
@@ -461,13 +581,28 @@ Use this exact format for each link:
 Example: *Sources: [CalPERS — Agenda — April 02, 2026](?doc=42), [LACERA — Board Pack — March 11, 2026](?doc=58)*
 Only cite documents whose content you actually used in that section.
 
-BEFORE FINALISING:
-- Re-read your draft. For every number, manager name, and vote tally, confirm it \
-appears in MEETING DATA. Remove or soften any that don't.
-- For every theme (##), confirm you named at least 2 plans with supporting evidence \
-from the data. If not, drop or soften the theme.
-- Confirm every inline (doc_id=N) matches a doc_id that actually appears in MEETING \
-DATA.
+BEFORE FINALISING — scan the draft for these specific patterns and verify each \
+against MEETING DATA. If any item does not match the source, remove it or \
+rewrite the sentence to juxtapose facts neutrally.
+- bps / basis points figures (especially alpha or excess-return numbers — \
+these are the most common arithmetic-derived hallucinations)
+- multi-year returns (1-year, 3-year, 5-year, 10-year)
+- ratios (Nx, N:1, N-quartile, N% of)
+- list counts ("three plans", "all 11 portfolios", "two managers")
+- the connective phrases: "consistent with", "reflects", "driven by", \
+"a notable", "suggests", "indicates", "underscores" — each must either appear \
+verbatim in MEETING DATA or be anchored to ≥2 specific named plans whose \
+evidence supports the relationship
+- every theme (##): at least 2 plans named with supporting evidence; if not, \
+drop or soften
+- every inline (doc_id=N): the cited doc must contain the specific figure or \
+name in that sentence verbatim, not merely be on the same topic.
+- AUM consistency: each plan should appear with one and only one AUM value \
+throughout the note (the PLAN AUM TABLE value, OR a single override with an \
+"as of <date>" qualifier — never both for the same plan).
+
+PLAN AUM TABLE (canonical reference):
+{aum_table}
 
 MEETING DATA:
 {meetings_text}"""
@@ -477,6 +612,7 @@ def build_recent_insights_prompt(data: dict) -> str:
     """Build the Claude prompt for the rolling-window (e.g. 30-day) CIO Insights note."""
     today_str = datetime.utcnow().strftime("%B %d, %Y")
     aum_trillions = data["total_aum"] / 1000
+    aum_table = _format_aum_table(data.get("plans") or [])
     meetings_text = format_meetings_for_prompt(data["meetings"])
     days = data.get("days", 30)
     window_label = f"the past {days} days"
@@ -504,8 +640,19 @@ GROUNDING RULES (non-negotiable):
 allocation) MUST appear verbatim in the MEETING DATA below. If a number is not in \
 the data, do not state one — use qualitative language instead ("increased materially", \
 "a meaningful allocation") or omit the point.
+- Do NOT compute new figures from source data. No subtracting a return from its \
+benchmark to produce a basis-points alpha, no dividing counts to produce a \
+percentage, no summing commitments to produce a total. If a derived figure isn't \
+already stated verbatim in MEETING DATA, do not state it.
 - Every manager, fund, or plan name must appear in the MEETING DATA. Do not introduce \
 names from general knowledge.
+- Use only the source's own language for WHY things happened or what they \
+signify. Synthesis prose may use connectives like "driven by", "reflects", \
+"is consistent with", "a notable trend", "suggests", "indicates", or industry \
+jargon ("market appreciation", "flight to quality", "crowding") ONLY when (a) \
+the exact phrase appears in MEETING DATA, OR (b) the connective claim is \
+anchored to ≥2 specific named plans whose evidence in MEETING DATA supports \
+the relationship being asserted. Otherwise juxtapose facts neutrally.
 - Every claim must be traceable to at least one doc_id in the MEETING DATA. If you \
 cannot cite a doc_id, do not make the claim.
 - If a theme is supported by fewer than 2 plans in the data, either drop it or \
@@ -513,6 +660,11 @@ explicitly flag it as "*Emerging signal — limited data*". (Threshold relaxed f
 to 2 because of the smaller window.)
 - Prefer "no observation" over speculation. It is better to write 800 well-sourced \
 words than 1,400 with invented detail.
+- Use the PLAN AUM TABLE below as the canonical AUM for each plan. When you \
+mention a plan's AUM (in parentheses on first mention), use the value from \
+the table. You MAY substitute a more recent or more precise figure from the \
+MEETING DATA — but only if you append an "as of <date>" qualifier and use \
+that same value consistently for that plan throughout the rest of the note.
 
 FORMAT REQUIREMENTS:
 - Start with exactly: # CIO Insights: Past {days} Days
@@ -528,10 +680,13 @@ data is thin.
 - Include specific data (return percentages, commitment sizes, vote tallies, fee rates) \
 ONLY when it appears in MEETING DATA — see GROUNDING RULES above
 - Every sentence containing a $ figure, %, bps, vote tally, or manager name must end \
-with an inline citation in the form (doc_id=42). The section-level *Sources:* line \
-(see below) remains as a summary.
+with an inline citation in the form (doc_id=42). The cited doc_id must be the one \
+whose summary contains that specific figure or name verbatim. If a sentence's \
+figures come from two different docs, split the sentence so each cite is \
+unambiguous. The section-level *Sources:* line (see below) remains as a summary.
 - Do NOT produce a section-by-section recap of each plan — synthesize across plans
-- Target 800–1,400 words total. Err on the short side if data is thin.
+- Hard cap 1,400 words total. If you reach it, drop the weakest-evidenced \
+theme entirely rather than trimming a sentence from each.
 
 SOURCE LINKS:
 Each summary in the data below includes a doc_id (e.g. doc_id=42). Immediately before
@@ -542,13 +697,28 @@ Use this exact format for each link:
 Example: *Sources: [CalPERS — Agenda — April 02, 2026](?doc=42), [LACERA — Board Pack — March 11, 2026](?doc=58)*
 Only cite documents whose content you actually used in that section.
 
-BEFORE FINALISING:
-- Re-read your draft. For every number, manager name, and vote tally, confirm it \
-appears in MEETING DATA. Remove or soften any that don't.
-- For every theme (##), confirm you named at least 2 plans with supporting evidence \
-from the data. If not, drop or soften the theme.
-- Confirm every inline (doc_id=N) matches a doc_id that actually appears in MEETING \
-DATA.
+BEFORE FINALISING — scan the draft for these specific patterns and verify each \
+against MEETING DATA. If any item does not match the source, remove it or \
+rewrite the sentence to juxtapose facts neutrally.
+- bps / basis points figures (especially alpha or excess-return numbers — \
+these are the most common arithmetic-derived hallucinations)
+- multi-year returns (1-year, 3-year, 5-year, 10-year)
+- ratios (Nx, N:1, N-quartile, N% of)
+- list counts ("three plans", "all 11 portfolios", "two managers")
+- the connective phrases: "consistent with", "reflects", "driven by", \
+"a notable", "suggests", "indicates", "underscores" — each must either appear \
+verbatim in MEETING DATA or be anchored to ≥2 specific named plans whose \
+evidence supports the relationship
+- every theme (##): at least 2 plans named with supporting evidence; if not, \
+drop or soften
+- every inline (doc_id=N): the cited doc must contain the specific figure or \
+name in that sentence verbatim, not merely be on the same topic.
+- AUM consistency: each plan should appear with one and only one AUM value \
+throughout the note (the PLAN AUM TABLE value, OR a single override with an \
+"as of <date>" qualifier — never both for the same plan).
+
+PLAN AUM TABLE (canonical reference):
+{aum_table}
 
 MEETING DATA:
 {meetings_text}"""

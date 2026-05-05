@@ -6,14 +6,23 @@ Run this script to process one or more pension plans end-to-end.
 Usage:
     python pipeline.py                         # all plans
     python pipeline.py calpers calstrs         # specific plans
+    python pipeline.py --local-only            # only the WAF-blocked plans (Task Scheduler)
     python pipeline.py --extract-only          # skip fetch, just extract + summarize
     python pipeline.py --summarize-only        # skip fetch + extract, just summarize
+
+Hybrid GHA / local split: when GITHUB_ACTIONS=true is set (auto on hosted
+runners), the plans listed in data/local_only_plans.json are skipped --
+those have Cloudflare/WAF that blocks Azure IPs, so they stay on the
+local Windows Task Scheduler invocation that uses --local-only. Explicit
+positional plan_ids on the CLI bypass both filters.
 """
 
 import argparse
+import json
 import os
 import sys
 from datetime import datetime
+from pathlib import Path
 
 # Force UTF-8 output on Windows — filenames from pension sites can contain
 # characters outside cp1252, which crashes the default Windows console encoder.
@@ -25,7 +34,7 @@ from dotenv import load_dotenv
 from rich.console import Console
 from rich.table import Table
 
-from database import Document, Plan, Summary, get_session, init_db
+from database import Document, FetchRun, Plan, Summary, get_session, init_db
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 console = Console(legacy_windows=False)
@@ -57,6 +66,32 @@ def print_status(session):
     console.print(table)
 
 
+LOCAL_ONLY_FILE = Path(__file__).parent / "data" / "local_only_plans.json"
+
+
+def _load_local_only_ids() -> list[str]:
+    with open(LOCAL_ONLY_FILE, encoding="utf-8") as f:
+        return [p["id"] for p in json.load(f)["plans"]]
+
+
+def _resolve_plan_ids(explicit: list[str] | None, local_only: bool) -> list[str] | None:
+    """Determine which plan IDs to actually process.
+
+    Precedence: explicit CLI args > --local-only > GITHUB_ACTIONS env var > all.
+    Returns None to mean "all plans" (the fetcher's default).
+    """
+    if explicit:
+        return explicit
+    if local_only:
+        return _load_local_only_ids()
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        skip = set(_load_local_only_ids())
+        registry = Path(__file__).parent / "data" / "known_plans.json"
+        with open(registry, encoding="utf-8") as f:
+            return [p["id"] for p in json.load(f) if p["id"] not in skip]
+    return None
+
+
 def run_pipeline(
     plan_ids: list[str] = None,
     do_fetch: bool = True,
@@ -68,30 +103,62 @@ def run_pipeline(
 ):
     init_db()
     start = datetime.utcnow()
+    source = "gha" if os.environ.get("GITHUB_ACTIONS") == "true" else "local"
     console.rule("[bold blue]Pension Plan Intelligence Pipeline[/bold blue]")
 
-    if do_fetch:
-        console.rule("[bold]Step 1: Fetch Documents[/bold]")
-        import fetcher as _fetcher
-        from fetcher import run_fetcher
-        _fetcher.MIN_DATE = datetime(min_year, 1, 1)
-        run_fetcher(plan_ids=plan_ids, max_docs_per_plan=max_docs_per_plan)
+    # Open one row in fetch_runs so the Admin tab (and the eventual email
+    # digest) can show what this invocation did. Status starts as 'running'
+    # and is finalized in the try/finally below.
+    log_session = get_session()
+    fetch_run = FetchRun(source=source, started_at=start, status="running")
+    log_session.add(fetch_run)
+    log_session.commit()
+    fetch_run_id = fetch_run.id
 
-    if do_extract:
-        console.rule("[bold]Step 2: Extract Text[/bold]")
-        from extractor import run_extractor
-        run_extractor(retry_failed=retry_failed)
+    try:
+        if do_fetch:
+            console.rule("[bold]Step 1: Fetch Documents[/bold]")
+            import fetcher as _fetcher
+            from fetcher import run_fetcher
+            _fetcher.MIN_DATE = datetime(min_year, 1, 1)
+            run_fetcher(plan_ids=plan_ids, max_docs_per_plan=max_docs_per_plan)
 
-    if do_summarize:
-        console.rule("[bold]Step 3: Summarize with Claude[/bold]")
-        from summarizer import run_summarizer
-        run_summarizer()
+        if do_extract:
+            console.rule("[bold]Step 2: Extract Text[/bold]")
+            from extractor import run_extractor
+            run_extractor(retry_failed=retry_failed)
+
+        if do_summarize:
+            console.rule("[bold]Step 3: Summarize with Claude[/bold]")
+            from summarizer import run_summarizer
+            run_summarizer()
+    except Exception as exc:
+        run = log_session.get(FetchRun, fetch_run_id)
+        run.status = "failed"
+        run.error_message = f"{type(exc).__name__}: {exc}"
+        run.completed_at = datetime.utcnow()
+        log_session.commit()
+        log_session.close()
+        raise
+
+    # Success path: capture document IDs created during this run window.
+    new_doc_ids = [
+        d.id for d in log_session.query(Document.id)
+        .filter(Document.downloaded_at >= start)
+        .all()
+    ]
+    run = log_session.get(FetchRun, fetch_run_id)
+    run.status = "success"
+    run.completed_at = datetime.utcnow()
+    run.new_document_ids = json.dumps(new_doc_ids)
+    log_session.commit()
+    log_session.close()
 
     session = get_session()
     try:
         console.rule("[bold]Pipeline Complete[/bold]")
         elapsed = (datetime.utcnow() - start).seconds
-        console.print(f"Total time: {elapsed}s\n")
+        console.print(f"Total time: {elapsed}s ({len(new_doc_ids)} new documents)\n")
         print_status(session)
     finally:
         session.close()
@@ -115,6 +182,10 @@ def main():
                         help="Print new meetings with agenda summaries and material links")
     parser.add_argument("--updates-days", type=int, default=14,
                         help="Lookback window for --updates (default: 14 days)")
+    parser.add_argument("--local-only", action="store_true",
+                        help="Process only the WAF-blocked plans listed in "
+                             "data/local_only_plans.json (use from Windows "
+                             "Task Scheduler in the hybrid GHA/local model)")
     args = parser.parse_args()
 
     if args.status:
@@ -168,7 +239,7 @@ def main():
         do_fetch, do_extract, do_summarize = False, True, False
 
     run_pipeline(
-        plan_ids=args.plan_ids if args.plan_ids else None,
+        plan_ids=_resolve_plan_ids(args.plan_ids, args.local_only),
         do_fetch=do_fetch,
         do_extract=do_extract,
         do_summarize=do_summarize,

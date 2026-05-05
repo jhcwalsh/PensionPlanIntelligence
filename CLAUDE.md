@@ -6,9 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Three layered systems sharing one SQLite database (`db/pension.db`, ~42 MB, tracked in git):
 
-1. **Meeting-document pipeline** (`pipeline.py`, `fetcher.py`, `extractor.py`, `summarizer.py`) — fetches board materials and CAFRs from ~148 U.S. public pension plans, extracts text, summarizes with Claude per-document. Local-only.
-2. **CIO Insights automation** (`insights/` package) — composes weekly / monthly / annual editorial briefings from the existing summaries, gated on a magic-link approval email to the founder. Render cron-triggered.
-3. **RFP alerts pipeline** (`rfp/`, `lib/`, `api/`, `scripts/`) — structured extraction of RFP records from already-fetched documents into `rfp_records` / `document_health` / `pipeline_runs`, served via FastAPI. Render cron-triggered.
+1. **Meeting-document pipeline** (`pipeline.py`, `fetcher.py`, `extractor.py`, `summarizer.py`) — fetches board materials and CAFRs from ~148 U.S. public pension plans, extracts text, summarizes with Claude per-document. Hybrid: GHA cron handles 137 of 148 plans daily; local Windows Task Scheduler handles the 11 WAF-blocked plans (see `data/local_only_plans.json`).
+2. **CIO Insights automation** (`insights/` package) — composes weekly / monthly / annual editorial briefings from the existing summaries, gated on a magic-link approval email to the founder. GHA cron-triggered (weekly Sundays 11:00 UTC, monthly 1st of month 18:00 UTC).
+3. **RFP alerts pipeline** (`rfp/`, `lib/`, `api/`, `scripts/`) — structured extraction of RFP records from already-fetched documents into `rfp_records` / `document_health` / `pipeline_runs`, served via FastAPI. RFP backfill runs locally via Windows Task Scheduler weekly; FastAPI lives on Render.
 
 The Streamlit app (`app.py`) reads from the same DB and surfaces all three layers as tabs.
 
@@ -50,7 +50,12 @@ uvicorn api.main:app --reload --port 8000
 ## Architecture you have to internalize before editing
 
 ### The DB IS the deploy mechanism for data
-`db/pension.db` is committed. Pushing to `master` is how new data lands on Render. The Render cron services and Streamlit web service mount the same persistent disk at `/data`, but read from the deployed `db/pension.db` until something writes back. The pipeline only runs locally, so the data flow is: local pipeline → `db/pension.db` → `git push` → Render deploys → cron services consume. This is intentional — Playwright + Chromium doesn't work well on Render's Native Python runtime, hence `--skip-scrape` on every Render cron.
+`db/pension.db` is committed. Pushing to `master` is how new data lands on Render. The Streamlit web service and FastAPI service on Render mount the persistent disk at `/data` but read from the deployed `db/pension.db` until something writes back. Three things now write back to master:
+1. **GHA daily-pipeline** (~11:00 UTC) — fetches/extracts/summarizes 137 plans, commits the DB.
+2. **Local Windows Task Scheduler daily** — same pipeline scoped to the 11 WAF-blocked plans via `--local-only`, commits the DB.
+3. **GHA weekly-insights** (Sundays 11:00 UTC) and **GHA monthly-insights** (1st of month 18:00 UTC) — compose digests, send approval email, commit the DB + `notes/` (+ `cafr_summaries/` for monthly).
+
+Local Task Scheduler still owns the WAF-blocked subset of monthly CAFR refresh (5 plans via `--local-only`) — a `git push`-back operation on the same master branch. Each writer runs at a distinct time; conflicts haven't been observed but a `git pull --rebase` would be the next defensive step if they appear.
 
 GitHub's hard 100 MB single-file limit is the ceiling on this model. The DB started bumping into it once `documents.extracted_text` accumulated, which forced the gzip wrapper (next section). When the DB approaches ~80 MB again, plan a real fix (Git LFS, or moving the DB out of git onto Render's persistent disk via a separate sync) rather than another column-level workaround.
 
@@ -69,6 +74,9 @@ The full extracted PDF text is the bulk of the DB by 10× over everything else. 
 ### Test DB isolation does NOT reload the database module
 `tests/conftest.py` rebinds `database.engine` and `database.SessionLocal` per-test using `monkeypatch.setattr`. Reloading the module would orphan the ORM classes and break SQLAlchemy's mapper registry. If you write a new test that needs DB isolation, follow this pattern — use the existing `_isolated_environment` (insights-style) or `tmp_db` (RFP-style) fixture rather than instantiating your own engine.
 
+### IPS pipeline is content-hash versioned (not FY-keyed like CAFRs)
+`refresh_ips.py` runs locally only (Windows Task Scheduler, monthly). Unlike CAFRs which are FY-tagged, IPS is versioned by content hash: `IpsDocument` has `UNIQUE(plan_id, content_hash)`, so a plan accumulates a row each time the board publishes a new IPS, while same-content re-fetches dedupe silently. Discovery is fully automated — no manual URL curation in `known_plans.json` required: `fetch_ips.discover_ips_urls()` mines existing extracted documents for embedded IPS URLs, then site-crawls seed paths under `plan.website`. Each candidate is gated by a Haiku 4.5 verification call (`verify_is_ips()`) so adjacent policy docs (proxy voting, securities lending) don't pollute the table. `IPS_MODE=mock` short-circuits the LLM call for tests; production hits Anthropic at ~$1-2/cycle total.
+
 ### Approval flow is Streamlit-query-param-based
 Magic-link emails contain `?approve=<token>` and `?reject=<token>`. The Streamlit app's `main()` checks `st.query_params` before rendering tabs and dispatches to `page_document_detail`, `page_cafr_plan_detail`, or the approval consumer. Tokens are SHA-256-hashed in `approval_tokens`; raw values exist only in the email body. To add a new deep-link route, follow the same pattern in `app.py`'s `main()`.
 
@@ -78,8 +86,22 @@ Magic-link emails contain `?approve=<token>` and `?reject=<token>`. The Streamli
 - To force a re-send, expire the existing publication first (or use `--force` on the scheduler CLI). Setting it back to `"generating"` directly works but bypasses the audit trail.
 - The same idempotency pattern applies to `WeeklyRun` (unique on `period_start`) and the RFP `rfp_id` (deterministic from `sha256(plan_id + doc_id + chunk_id + record_index)`).
 
-### Render = 7 services, one repo
-`render.yaml` defines: the Streamlit web service (`pension-plan-intelligence`), 4 insights cron services (weekly/monthly/annual/reminders), the FastAPI web service (`pension-rfp-api`), and the RFP cron service (`pension-rfp-pipeline`). All share the same persistent disk `pension-db` at `/data`. Env vars marked `sync: false` in `render.yaml` (API keys, Slack webhook) must be set in the Render dashboard per-service. Schedules are UTC; comments in `render.yaml` show the ET equivalents (which drift one hour between EDT and EST).
+### Where each cadence runs
+Render hosts only two web services now: Streamlit (`pension-plan-intelligence`) and FastAPI (`pension-rfp-api`), both mounting the persistent disk `pension-db` at `/data`. All cron-style work moved off Render — partly to GHA, partly to local Windows Task Scheduler:
+
+| Cadence | Trigger | Where | Workflow / .bat |
+|---|---|---|---|
+| Daily document pipeline (137 plans) | cron 11:00 UTC | GHA | `.github/workflows/daily-pipeline.yml` |
+| Daily document pipeline (11 WAF-blocked plans) | Task Scheduler | local Windows | `scripts/run_daily.bat` |
+| Weekly CIO Insights composition + email | cron Sundays 11:00 UTC | GHA | `.github/workflows/weekly-insights.yml` |
+| Weekly RFP backfill (`--limit 100`) | cron Sundays 11:30 UTC | GHA | `.github/workflows/weekly-rfp.yml` |
+| Monthly CAFR refresh (~92 plans) | cron 1st of month 15:00 UTC | GHA | `.github/workflows/monthly-cafr-refresh.yml` |
+| Monthly CAFR refresh (5 WAF-blocked plans) | Task Scheduler | local Windows | `scripts/run_monthly.bat` |
+| Monthly IPS refresh (all 148 plans, auto-discover + verify via Haiku 4.5) | Task Scheduler | local Windows | `scripts/run_ips.bat` |
+| Monthly CAFR extraction + insights composition + email | cron 1st of month 18:00 UTC | GHA | `.github/workflows/monthly-insights.yml` |
+| Quarterly insights composition + email | cron 1st of Jan/Apr/Jul/Oct 19:00 UTC | GHA | `.github/workflows/quarterly-insights.yml` |
+
+GHA secrets that must exist for the cron entries to work: `ANTHROPIC_API_KEY`, `RESEND_API_KEY`, `APPROVAL_EMAIL_RECIPIENT`, `APPROVAL_EMAIL_FROM`. Local cron uses the same names from `.env`. Schedules are UTC; ET drifts one hour between EDT and EST. The 1st-of-month sequence is deliberate: GHA CAFR refresh @ 15:00 UTC → local CAFR refresh runs early ET → GHA monthly-insights @ 18:00 UTC pulls a DB that already has both runs' new CAFRs.
 
 ## Conventions worth knowing
 

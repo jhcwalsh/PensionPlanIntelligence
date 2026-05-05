@@ -1,0 +1,92 @@
+name: Daily pipeline (GHA edition)
+
+# Fetch + extract + summarize for the GHA-eligible plans (137 of 148;
+# the WAF-blocked 11 stay on local Task Scheduler -- see
+# data/local_only_plans.json). Runs daily at 11:00 UTC (~7 AM EDT /
+# 6 AM EST) and on manual dispatch.
+#
+# Manual dispatch defaults to actually pushing the resulting db/pension.db.
+# Tick "Skip the final commit/push" for a debug run that exercises
+# fetch/extract/summarize without committing the result.
+
+on:
+  schedule:
+    - cron: "0 11 * * *"   # 11:00 UTC daily = 7 AM EDT / 6 AM EST
+  workflow_dispatch:
+    inputs:
+      plan_ids:
+        description: "Optional plan IDs (space-separated). Blank = all GHA-eligible plans."
+        required: false
+        default: ""
+      dry_run:
+        description: "Skip the final commit/push of db/pension.db"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+# Prevent overlap between a scheduled run and a manual one. Queue rather
+# than cancel -- losing a partial pipeline run could leave half-extracted
+# documents in the DB.
+concurrency:
+  group: daily-pipeline
+  cancel-in-progress: false
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Verify ANTHROPIC_API_KEY is set
+        env:
+          KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::error::ANTHROPIC_API_KEY repository secret is empty or unset."
+            echo "Fix: Settings → Secrets and variables → Actions → Repository secrets."
+            echo "The name must be exactly ANTHROPIC_API_KEY (case-sensitive)."
+            exit 1
+          fi
+          echo "ANTHROPIC_API_KEY is present (length: ${#KEY} chars)"
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-pipeline.txt
+
+      - name: Install Playwright Chromium with system deps
+        run: python -m playwright install --with-deps chromium
+
+      - name: Run pipeline
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python pipeline.py ${{ github.event.inputs.plan_ids }}
+
+      - name: Pipeline status
+        run: python pipeline.py --status
+
+      # Skip only when the manual dispatch explicitly checks "dry_run".
+      # Scheduled runs have no inputs (dry_run is empty/null), so this
+      # condition is true for cron and for unchecked manual runs.
+      - name: Commit DB changes
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add db/pension.db
+          if git diff --staged --quiet; then
+            echo "No DB changes to commit."
+          else
+            git commit -m "Pipeline run $(date -u +%Y-%m-%d) [GHA]"
+            git push
+          fi

@@ -1,0 +1,75 @@
+name: Monthly CAFR refresh (GHA edition)
+
+# Pulls each plan's most-recently-closed-FY ACFR into the DB. Idempotent:
+# already_have rows are no-ops, so re-runs are cheap. The 5 WAF-blocked
+# CAFR sources stay on local Task Scheduler (data/local_only_cafr_plans.json);
+# the rest run from GHA.
+#
+# Runs the 1st of every month at 15:00 UTC (~11 AM EDT / 10 AM EST).
+# Deliberately scheduled BEFORE monthly-insights (1st @ 18:00 UTC) so any
+# new CAFRs land in the DB before insights composes its monthly digest.
+
+on:
+  schedule:
+    - cron: "0 15 1 * *"   # 1st of every month at 15:00 UTC
+  workflow_dispatch:
+    inputs:
+      plan_ids:
+        description: "Optional plan IDs (space-separated). Blank = all GHA-eligible plans."
+        required: false
+        default: ""
+      year:
+        description: "Override target fiscal year (default: computed per plan)"
+        required: false
+        default: ""
+      dry_run:
+        description: "Skip the final commit/push of db/pension.db"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: monthly-cafr-refresh
+  cancel-in-progress: false
+
+jobs:
+  cafr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-pipeline.txt
+
+      - name: Run CAFR refresh
+        run: |
+          YEAR_FLAG=""
+          if [ -n "${{ github.event.inputs.year }}" ]; then
+            YEAR_FLAG="--year ${{ github.event.inputs.year }}"
+          fi
+          python refresh_cafrs.py $YEAR_FLAG ${{ github.event.inputs.plan_ids }}
+
+      - name: Commit DB changes
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add db/pension.db
+          if git diff --staged --quiet; then
+            echo "No DB changes to commit."
+          else
+            git commit -m "Monthly CAFR refresh $(date -u +%Y-%m-%d) [GHA]"
+            git push
+          fi

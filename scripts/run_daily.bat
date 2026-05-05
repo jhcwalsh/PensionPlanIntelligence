@@ -1,6 +1,8 @@
 @echo off
 REM ------------------------------------------------------------------------
-REM Daily local cadence — fetch new docs, extract RFPs, run insights reminders.
+REM Daily local cadence — process the WAF-blocked plans only (the rest run
+REM on GitHub Actions; see .github/workflows/daily-pipeline.yml and
+REM data/local_only_plans.json). Also runs insights reminders.
 REM Auto-commits db/pension.db and pushes if anything changed.
 REM Sends a failure email to APPROVAL_EMAIL_RECIPIENT on any non-zero exit.
 REM Triggered by Windows Task Scheduler — see scripts\register_tasks.ps1.
@@ -21,8 +23,8 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [%TIME%] pipeline.py >> "%LOG%"
-python pipeline.py >> "%LOG%" 2>&1
+echo [%TIME%] pipeline.py --local-only >> "%LOG%"
+python pipeline.py --local-only >> "%LOG%" 2>&1
 if errorlevel 1 (
     python -m scripts.notify_failure %TASK% pipeline "%LOG%" %ERRORLEVEL%
     exit /b 1

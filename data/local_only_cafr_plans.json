@@ -1,0 +1,11 @@
+{
+  "_doc": "Plans whose CAFR PDF URL is fronted by Cloudflare/Akamai/etc. and blocks GitHub Actions Azure datacenter IPs. These run on local Windows Task Scheduler; the GHA monthly-cafr-refresh workflow skips them. Anything outside this list runs from GHA. Verified by `python -m scripts.probe_scrape --cafr --all` from a hosted runner on 2026-05-05 (SHA 4bd08c0). Distinct from local_only_plans.json because the materials_url and CAFR-URL block lists differ — pbpr_pa, fwerf_tx, acrs_pa block CAFRs but not materials.",
+  "_how_it_works": "refresh_cafrs.py loads this file and consults it in two ways: (1) when GITHUB_ACTIONS=true, the listed plan IDs are excluded from the default plan set; (2) when --local-only is passed, ONLY the listed plan IDs are processed. Explicit positional plan_ids on the CLI bypass both filters.",
+  "plans": [
+    {"id": "asrs",      "reason": "Cloudflare 'Just a moment' challenge"},
+    {"id": "strs_ohio", "reason": "Cloudflare 'Just a moment' challenge"},
+    {"id": "pbpr_pa",   "reason": "Generic HTTP 403 access-denied"},
+    {"id": "fwerf_tx",  "reason": "Generic HTTP 403 access-denied"},
+    {"id": "acrs_pa",   "reason": "Generic HTTP 403 access-denied"}
+  ]
+}

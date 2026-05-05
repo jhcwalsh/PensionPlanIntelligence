@@ -431,6 +431,110 @@ class PipelineRun(Base):
     status = Column(String, nullable=False, default="running")  # running|succeeded|failed
 
 
+class FetchRun(Base):
+    """One row per pipeline.py invocation, capturing what was scraped.
+
+    Source distinguishes GHA cron (the 137 GHA-eligible plans) from local
+    Task Scheduler (the 11 WAF-blocked plans in data/local_only_plans.json).
+    new_document_ids is a JSON list of Document.id values inserted between
+    started_at and completed_at.
+    """
+
+    __tablename__ = "fetch_runs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    source = Column(String, nullable=False)                       # 'gha' | 'local'
+    started_at = Column(DateTime, default=_utcnow, nullable=False)
+    completed_at = Column(DateTime)
+    status = Column(String, nullable=False, default="running")    # running | success | failed
+    error_message = Column(Text)                                  # populated when status='failed'
+    new_document_ids = Column(Text, default="[]")                 # JSON list of int Document.id
+
+    __table_args__ = (
+        Index("ix_fetch_runs_started_at", "started_at"),
+    )
+
+
+class DocumentSkip(Base):
+    """Documents the summarizer should permanently skip.
+
+    Currently used only for Claude content-policy refusals (stop_reason
+    ='refusal'), which are deterministic — retrying them just costs money.
+    The reason field is open-ended for future cases (broken text, OCR-only
+    PDFs, etc.). To un-skip a document, delete its row.
+    """
+
+    __tablename__ = "document_skips"
+
+    document_id = Column(Integer, ForeignKey("documents.id"), primary_key=True)
+    reason = Column(String, nullable=False)                       # e.g. 'refusal'
+    detected_at = Column(DateTime, default=_utcnow, nullable=False)
+    error_message = Column(Text)
+
+
+class IpsDocument(Base):
+    """An Investment Policy Statement (IPS) PDF tracked per-plan.
+
+    Versioning is content-hash based: (plan_id, content_hash) is unique, so
+    a plan can have many rows over time as the IPS is updated. The same
+    file served from a different URL still dedupes. Captures from the
+    monthly refresh_ips.py run; older versions are kept for time-series
+    analysis.
+    """
+
+    __tablename__ = "ips_documents"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    plan_id = Column(String, ForeignKey("plans.id"), nullable=False)
+    content_hash = Column(String(64), nullable=False)        # sha256 of the PDF bytes
+    url = Column(String, nullable=False)                     # the URL we fetched it from
+    filename = Column(String)
+    local_path = Column(String)
+    file_size_bytes = Column(Integer)
+    fetched_at = Column(DateTime, default=_utcnow, nullable=False)
+    extracted_text = Column(GzippedText)                     # for downstream scoring
+    extraction_status = Column(String, default="pending")    # pending | done | failed
+    page_count = Column(Integer)
+    # Verification metadata from the LLM gate (Haiku 4.5 yes/no on first page)
+    verification_verdict = Column(String)                    # yes | no | partial
+    verification_confidence = Column(String)                 # high | medium | low
+    verification_notes = Column(Text)
+
+    __table_args__ = (
+        UniqueConstraint("plan_id", "content_hash", name="uq_ips_plan_hash"),
+        Index("ix_ips_plan_id", "plan_id"),
+    )
+
+
+class IpsRefreshLog(Base):
+    """Per-plan outcome from each monthly IPS refresh run.
+
+    Mirrors cafr_refresh_log: one row per plan per refresh_ips.py
+    invocation. Status values:
+      saved             — new IPS version detected and stored
+      already_have      — content_hash already in DB, no change since last cycle
+      no_candidates     — discovery found zero plausible URLs to try
+      verification_failed — downloaded but Claude said this isn't an IPS
+      url_failed        — every candidate URL failed to download
+      validation_failed — file too small or not a real PDF
+      error             — unexpected exception
+    """
+    __tablename__ = "ips_refresh_log"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    plan_id = Column(String, ForeignKey("plans.id"), nullable=False)
+    run_at = Column(DateTime, nullable=False)
+    status = Column(String, nullable=False)
+    url_tried = Column(String)
+    discovery_source = Column(String)        # override | mine_existing | site_crawl
+    document_id = Column(Integer, ForeignKey("ips_documents.id"))   # set when saved
+    notes = Column(Text)
+
+    __table_args__ = (
+        Index("ix_ips_refresh_plan_run", "plan_id", "run_at"),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Init / helpers
 # ---------------------------------------------------------------------------
@@ -487,6 +591,9 @@ def get_unsummarized_documents(session: Session) -> list[Document]:
         .filter(Document.extraction_status == "done")
         .filter(~Document.id.in_(
             session.query(Summary.document_id)
+        ))
+        .filter(~Document.id.in_(
+            session.query(DocumentSkip.document_id)
         ))
         .all()
     )
@@ -553,6 +660,98 @@ def search_summaries(session: Session, query: str, plan_id: str = None,
     if plan_id:
         q = q.filter(Document.plan_id == plan_id)
     return q.order_by(Document.meeting_date.desc()).limit(limit).all()
+
+
+def count_search_summaries(session: Session, query: str,
+                           plan_id: str = None) -> int:
+    """Total matching documents for a search query, ignoring the row limit.
+
+    Mirrors ``search_summaries``'s WHERE clause exactly so the count and the
+    paged results stay consistent.
+    """
+    q = (
+        session.query(Document.id)
+        .join(Summary, Document.id == Summary.document_id)
+        .filter(Summary.summary_text.ilike(f"%{query}%") |
+                Summary.key_topics.ilike(f"%{query}%") |
+                Summary.investment_actions.ilike(f"%{query}%"))
+    )
+    if plan_id:
+        q = q.filter(Document.plan_id == plan_id)
+    return q.count()
+
+
+def aggregate_managers(session: Session) -> list[dict]:
+    """Aggregate manager mentions across every Summary's investment_actions.
+
+    Returns one dict per distinct raw manager string, with mention count,
+    distinct plan count, action-type breakdown, first/latest meeting date,
+    and the doc_ids it appeared in. Sorted by mention_count descending.
+
+    Bad inputs (empty manager strings, malformed JSON) are silently
+    skipped — the consumer shouldn't have to defensive-code around them.
+    """
+    import json
+    from collections import defaultdict
+
+    by_name: dict[str, dict] = defaultdict(
+        lambda: {
+            "raw_name": "",
+            "mention_count": 0,
+            "plan_ids": set(),
+            "doc_ids": set(),
+            "action_types": defaultdict(int),
+            "first_meeting": None,
+            "latest_meeting": None,
+        }
+    )
+
+    rows = (
+        session.query(Summary, Document)
+        .join(Document, Summary.document_id == Document.id)
+        .filter(Summary.investment_actions.isnot(None))
+        .all()
+    )
+    for sm, doc in rows:
+        try:
+            actions = json.loads(sm.investment_actions or "[]")
+        except (ValueError, TypeError):
+            continue
+        if not actions:
+            continue
+        for a in actions:
+            raw = (a.get("manager") or "").strip()
+            if not raw:
+                continue
+            entry = by_name[raw]
+            entry["raw_name"] = raw
+            entry["mention_count"] += 1
+            entry["plan_ids"].add(doc.plan_id)
+            entry["doc_ids"].add(doc.id)
+            action_type = (a.get("action") or "other").lower()
+            entry["action_types"][action_type] += 1
+            md = doc.meeting_date
+            if md:
+                if entry["first_meeting"] is None or md < entry["first_meeting"]:
+                    entry["first_meeting"] = md
+                if entry["latest_meeting"] is None or md > entry["latest_meeting"]:
+                    entry["latest_meeting"] = md
+
+    # Convert sets to sorted lists / counts for stable output
+    out = []
+    for entry in by_name.values():
+        out.append({
+            "raw_name": entry["raw_name"],
+            "mention_count": entry["mention_count"],
+            "plan_count": len(entry["plan_ids"]),
+            "plan_ids": sorted(entry["plan_ids"]),
+            "doc_ids": sorted(entry["doc_ids"]),
+            "action_types": dict(entry["action_types"]),
+            "first_meeting": entry["first_meeting"],
+            "latest_meeting": entry["latest_meeting"],
+        })
+    out.sort(key=lambda r: -r["mention_count"])
+    return out
 
 
 def get_documents_pending_rfp_extraction(

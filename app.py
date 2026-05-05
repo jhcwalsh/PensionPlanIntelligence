@@ -20,13 +20,18 @@ from database import (
     CafrAllocation,
     CafrExtract,
     CafrPerformance,
+    CafrRefreshLog,
     Document,
     DocumentHealth,
+    DocumentSkip,
+    FetchRun,
     PipelineRun,
     Plan,
     Publication,
     RFPRecord,
     Summary,
+    aggregate_managers,
+    count_search_summaries,
     get_new_meetings,
     get_session,
     init_db,
@@ -73,6 +78,36 @@ st.markdown("""
 
 
 # ---------------------------------------------------------------------------
+# Analytics
+# ---------------------------------------------------------------------------
+#
+# Privacy-friendly Plausible tracker. st.html renders inline (not in an
+# iframe), so the script runs in the host page context and Plausible sees
+# the real app URL and query params (?doc=N, ?cafr_plan=…). The dedupe
+# flag prevents Streamlit reruns from stacking duplicate <script> tags.
+
+st.html(
+    """
+    <script>
+    if (!window.__plausible_injected__) {
+        window.__plausible_injected__ = true;
+        const tracker = document.createElement('script');
+        tracker.async = true;
+        tracker.src = 'https://plausible.io/js/pa-v_mYvog2AxtbRj85Cu_EP.js';
+        document.head.appendChild(tracker);
+        window.plausible = window.plausible || function() {
+            (plausible.q = plausible.q || []).push(arguments);
+        };
+        plausible.init = plausible.init || function(i) { plausible.o = i || {}; };
+        plausible.init();
+    }
+    </script>
+    """,
+    unsafe_allow_javascript=True,
+)
+
+
+# ---------------------------------------------------------------------------
 # Session / DB helpers
 # ---------------------------------------------------------------------------
 
@@ -98,12 +133,6 @@ def load_recent_summaries(plan_id=None, limit=20):
     return q.order_by(Document.meeting_date.desc()).limit(limit).all()
 
 
-def do_search(query, plan_id=None):
-    session = get_db_session()
-    pid = plan_id if plan_id and plan_id != "All" else None
-    return search_summaries(session, query, plan_id=pid, limit=30)
-
-
 def get_stats():
     session = get_db_session()
     plans = session.query(Plan).count()
@@ -126,6 +155,19 @@ def parse_json_field(val):
 def _safe_md(text: str) -> str:
     """Escape $ so Streamlit doesn't treat them as LaTeX delimiters."""
     return text.replace("$", r"\$")
+
+
+def _highlight(text: str, query: str | None) -> str:
+    """Wrap case-insensitive matches of ``query`` in <mark> tags.
+
+    Preserves the original casing of the matched substring. Caller must
+    render with ``unsafe_allow_html=True`` for the tags to take effect.
+    Safe against regex-special characters in the query via re.escape.
+    """
+    if not query or not text:
+        return text
+    pattern = re.compile(re.escape(query), re.IGNORECASE)
+    return pattern.sub(lambda m: f"<mark>{m.group(0)}</mark>", text)
 
 
 DOWNLOADS_DIR = Path(os.environ.get("DOWNLOADS_DIR") or (Path(__file__).parent / "downloads"))
@@ -205,10 +247,14 @@ def render_summary_card(doc: Document, summary: Summary, highlight: str = None):
     performance = parse_json_field(summary.performance_data)
 
     with st.expander(f"**{plan_name}** — {doc_type} — {date_str}", expanded=False):
-        st.markdown(f"**Summary**\n\n{_safe_md(summary.summary_text)}")
+        summary_md = _highlight(_safe_md(summary.summary_text or ""), highlight)
+        st.markdown(f"**Summary**\n\n{summary_md}", unsafe_allow_html=True)
 
         if key_topics:
-            tags_html = " ".join(f'<span class="tag">{t}</span>' for t in key_topics[:8])
+            tags_html = " ".join(
+                f'<span class="tag">{_highlight(t, highlight)}</span>'
+                for t in key_topics[:8]
+            )
             st.markdown(f"**Topics:** {tags_html}", unsafe_allow_html=True)
 
         col1, col2 = st.columns(2)
@@ -221,14 +267,22 @@ def render_summary_card(doc: Document, summary: Summary, highlight: str = None):
                     amt = action.get("amount_millions")
                     amt_str = f" (${amt:,.0f}M)" if amt else ""
                     ac = action.get("asset_class", "")
-                    st.markdown(f"- {desc}{amt_str}" + (f" — *{ac}*" if ac else ""))
+                    line = (
+                        f"- {_highlight(_safe_md(desc), highlight)}{amt_str}"
+                        + (f" — *{_highlight(ac, highlight)}*" if ac else "")
+                    )
+                    st.markdown(line, unsafe_allow_html=True)
 
             if decisions:
                 st.markdown("**Decisions**")
                 for d in decisions[:5]:
                     vote = d.get("vote", "")
                     vote_str = f" [{vote}]" if vote else ""
-                    st.markdown(f"- {d.get('description', '')}{vote_str}")
+                    desc = d.get("description", "")
+                    st.markdown(
+                        f"- {_highlight(_safe_md(desc), highlight)}{vote_str}",
+                        unsafe_allow_html=True,
+                    )
 
         with col2:
             if performance:
@@ -250,23 +304,56 @@ def render_summary_card(doc: Document, summary: Summary, highlight: str = None):
 # Main pages
 # ---------------------------------------------------------------------------
 
+_SEARCH_PAGE_SIZE = 30
+
+
 def page_search(plan_id, plan_label):
     st.title("Search Meeting Documents")
 
-    query = st.text_input("Search summaries, topics, investment actions...",
-                          placeholder='e.g. "infrastructure" or "private equity mandate" or "BlackRock"')
+    # Form gate: search runs on Enter / Search button, not per-keystroke.
+    # Each ILIKE scan is 100–1100 ms on this corpus; debouncing via the form
+    # avoids running it on every typed character.
+    with st.form("search_form", clear_on_submit=False):
+        query = st.text_input(
+            "Search summaries, topics, investment actions...",
+            placeholder='e.g. "infrastructure" or "private equity mandate" or "BlackRock"',
+        )
+        st.form_submit_button("Search")
 
-    if query:
-        results = do_search(query, plan_id=plan_id)
-        st.caption(f"{len(results)} results for **{query}**"
-                   + (f" in {plan_label}" if plan_label != "All" else ""))
+    if not query:
+        st.info("Enter a search term above and press Enter (or click Search).")
+        return
 
-        if not results:
-            st.info("No results found. Try different search terms.")
-        for doc, summary in results:
-            render_summary_card(doc, summary, highlight=query)
-    else:
-        st.info("Enter a search term above to find relevant meeting content.")
+    session = get_db_session()
+    pid = plan_id if plan_id and plan_id != "All" else None
+
+    # Per-query growing limit. The key includes plan scope so switching plans
+    # resets the pagination state for the same query.
+    limit_key = f"_search_limit::{query}::{pid or 'all'}"
+    limit = st.session_state.setdefault(limit_key, _SEARCH_PAGE_SIZE)
+
+    total = count_search_summaries(session, query, plan_id=pid)
+    plan_suffix = f" in {plan_label}" if plan_label != "All" else ""
+
+    if total == 0:
+        st.info(f"No results for **{query}**{plan_suffix}. Try different search terms.")
+        return
+
+    results = search_summaries(session, query, plan_id=pid, limit=limit)
+    st.caption(
+        f"Showing **{len(results)}** of **{total:,}** results for "
+        f"**{query}**{plan_suffix}"
+    )
+
+    for doc, summary in results:
+        render_summary_card(doc, summary, highlight=query)
+
+    if len(results) < total:
+        remaining = total - len(results)
+        next_batch = min(_SEARCH_PAGE_SIZE, remaining)
+        if st.button(f"Show {next_batch} more ({remaining:,} remaining)"):
+            st.session_state[limit_key] = limit + _SEARCH_PAGE_SIZE
+            st.rerun()
 
 
 def page_browse(plan_id, plan_label):
@@ -449,13 +536,16 @@ NOTES_DIR = Path(__file__).parent / "notes"
 
 
 def _find_all_highlights() -> list[tuple[Path, str, str]]:
-    """Find all 7-day highlights files, sorted newest first.
+    """Find all 7-day highlights files, sorted newest first by Generated date.
 
-    Returns list of (path, title, generated_date) tuples.
+    Returns list of (path, title, generated_date) tuples. Sorting by the
+    ``*Generated: ...*`` line rather than the filename matters because
+    filenames embed ``period_start`` while the actual content window is
+    set by ``compose_weekly``'s now()-7d gather, so a filename-sorted
+    list can put a stale note ahead of the most recently generated one.
     """
-    candidates = sorted(NOTES_DIR.glob("7day_highlights_*.md"), reverse=True)
     results = []
-    for path in candidates:
+    for path in NOTES_DIR.glob("7day_highlights_*.md"):
         content = path.read_text(encoding="utf-8")
         # Extract title from first H1 line
         first_line = content.split("\n")[0] if content else ""
@@ -474,8 +564,16 @@ def _find_all_highlights() -> list[tuple[Path, str, str]]:
             else:
                 generated_date = "Unknown"
 
-        results.append((path, title, generated_date))
-    return results
+        try:
+            sort_key = datetime.strptime(generated_date, "%B %d, %Y")
+        except ValueError:
+            sort_key = datetime.min
+
+        results.append((sort_key, path, title, generated_date))
+
+    # Newest Generated date first; filename as deterministic tie-break.
+    results.sort(key=lambda r: (r[0], r[1].name), reverse=True)
+    return [(path, title, gen) for _, path, title, gen in results]
 
 
 def _find_latest_insights() -> tuple[Path, str, str] | None:
@@ -777,6 +875,163 @@ def page_investment_actions(plan_id, plan_label):
 
 
 # ---------------------------------------------------------------------------
+# Managers tab
+# ---------------------------------------------------------------------------
+
+MANAGER_MAPPINGS_PATH = Path(__file__).parent / "data" / "manager_mappings.json"
+
+
+@st.cache_data(ttl=300)
+def _load_manager_mappings() -> dict:
+    """Load the LLM-classified manager-name mappings.
+
+    Returns ``{}`` if the file is missing — page falls back to raw names.
+    Refreshed via ``python -m scripts.normalize_managers``.
+    """
+    if not MANAGER_MAPPINGS_PATH.exists():
+        return {}
+    return json.loads(MANAGER_MAPPINGS_PATH.read_text())
+
+
+@st.cache_data(ttl=300)
+def _aggregate_canonical_managers() -> tuple[list[dict], int]:
+    """Aggregate raw mentions, then collapse by canonical name from the mapping.
+
+    Each output row represents one canonical manager and merges every raw
+    variant's mention count, plan count, doc IDs, and date range. Rows
+    classified as ``is_manager: false`` (placeholders, plan names, etc.)
+    are excluded from the output but counted in the returned excluded
+    count for transparency.
+    """
+    session = get_db_session()
+    raw = aggregate_managers(session)
+    mappings = _load_manager_mappings()
+
+    canonical: dict[str, dict] = {}
+    excluded = 0
+    for row in raw:
+        m = mappings.get(row["raw_name"])
+        if m is None:
+            # Unmapped → fall back to using the raw name as canonical
+            canon = row["raw_name"]
+            is_mgr = True
+        elif not m.get("is_manager"):
+            excluded += row["mention_count"]
+            continue
+        else:
+            canon = m.get("canonical") or row["raw_name"]
+            is_mgr = True
+
+        existing = canonical.setdefault(canon, {
+            "canonical": canon,
+            "variants": [],
+            "mention_count": 0,
+            "plan_ids": set(),
+            "doc_ids": set(),
+            "first_meeting": None,
+            "latest_meeting": None,
+        })
+        existing["variants"].append(row["raw_name"])
+        existing["mention_count"] += row["mention_count"]
+        existing["plan_ids"].update(row["plan_ids"])
+        existing["doc_ids"].update(row["doc_ids"])
+        for fld in ("first_meeting", "latest_meeting"):
+            v = row[fld]
+            if v is None:
+                continue
+            if existing[fld] is None or (fld == "first_meeting" and v < existing[fld]) \
+                    or (fld == "latest_meeting" and v > existing[fld]):
+                existing[fld] = v
+
+    out = []
+    for entry in canonical.values():
+        out.append({
+            "canonical": entry["canonical"],
+            "variants": sorted(entry["variants"]),
+            "mention_count": entry["mention_count"],
+            "plan_count": len(entry["plan_ids"]),
+            "doc_ids": sorted(entry["doc_ids"]),
+            "first_meeting": entry["first_meeting"],
+            "latest_meeting": entry["latest_meeting"],
+        })
+    out.sort(key=lambda r: -r["mention_count"])
+    return out, excluded
+
+
+def page_managers():
+    st.title("Managers")
+    st.caption(
+        "Investment managers, consultants, custodians, and advisors mentioned in "
+        "the structured `investment_actions` extracted from board materials. "
+        "Canonical names produced by `scripts/normalize_managers.py`."
+    )
+
+    rows, excluded_mentions = _aggregate_canonical_managers()
+    if not rows:
+        st.info("No manager mentions found yet. Run the pipeline to summarize documents.")
+        return
+
+    total_mentions = sum(r["mention_count"] for r in rows)
+    st.markdown(
+        f"**{len(rows):,} distinct managers** across **{total_mentions:,} mentions**"
+        + (f" — {excluded_mentions:,} additional mentions excluded "
+           "(placeholders, plan names, compound listings)" if excluded_mentions else "")
+    )
+
+    col_a, col_b = st.columns([2, 1])
+    with col_a:
+        query = st.text_input(
+            "Filter by name", placeholder="e.g. BlackRock, Meketa, Albourne",
+            key="manager_filter",
+        )
+    with col_b:
+        min_mentions = st.number_input(
+            "Min. mentions", min_value=1, max_value=100, value=1, step=1,
+            key="manager_min_mentions",
+        )
+
+    filtered = [
+        r for r in rows
+        if r["mention_count"] >= min_mentions
+        and (not query or query.lower() in r["canonical"].lower()
+             or any(query.lower() in v.lower() for v in r["variants"]))
+    ]
+    st.caption(f"Showing {len(filtered):,} of {len(rows):,} managers")
+
+    for r in filtered[:200]:
+        first = r["first_meeting"].strftime("%Y-%m-%d") if r["first_meeting"] else "—"
+        latest = r["latest_meeting"].strftime("%Y-%m-%d") if r["latest_meeting"] else "—"
+        header = (
+            f"**{r['canonical']}** — {r['mention_count']} mentions, "
+            f"{r['plan_count']} plans · {first} → {latest}"
+        )
+        with st.expander(header):
+            if len(r["variants"]) > 1:
+                variants_str = " · ".join(f"`{v}`" for v in r["variants"])
+                st.markdown(f"**Raw variants ({len(r['variants'])}):** {variants_str}")
+
+            session = get_db_session()
+            docs = (
+                session.query(Document)
+                .filter(Document.id.in_(r["doc_ids"]))
+                .order_by(Document.meeting_date.desc())
+                .limit(20)
+                .all()
+            )
+            st.markdown(f"**Recent documents ({min(len(docs), 20)} of {len(r['doc_ids'])}):**")
+            for d in docs:
+                date_str = d.meeting_date.strftime("%Y-%m-%d") if d.meeting_date else "—"
+                doc_type = (d.doc_type or "document").replace("_", " ").title()
+                st.markdown(
+                    f"- {date_str} · **{d.plan_id.upper()}** · {doc_type} "
+                    f"[→ open](?doc={d.id})"
+                )
+
+    if len(filtered) > 200:
+        st.caption(f"… {len(filtered) - 200:,} more matches not shown — refine the filter to narrow.")
+
+
+# ---------------------------------------------------------------------------
 # App entry
 # ---------------------------------------------------------------------------
 
@@ -858,6 +1113,453 @@ def page_document_detail(doc_id: int):
         st.caption(f"Original source (may break over time): {doc.url}")
     finally:
         session.close()
+
+
+RECENT_RUNS_LIMIT = 14   # ~1 week of GHA + local entries
+
+
+def _render_recent_runs():
+    """Render the 'Recent Runs' Admin sub-tab: last N FetchRun entries,
+    each expandable to show plan → filename of every new document."""
+    import json
+    from collections import defaultdict
+    from sqlalchemy import desc
+
+    st.caption(
+        f"The last {RECENT_RUNS_LIMIT} pipeline runs (GHA cron and local "
+        "Task Scheduler combined). Each row expands to show the new "
+        "documents fetched in that run, grouped by plan."
+    )
+
+    session = get_session()
+    try:
+        runs = (
+            session.query(FetchRun)
+            .order_by(desc(FetchRun.started_at))
+            .limit(RECENT_RUNS_LIMIT)
+            .all()
+        )
+        if not runs:
+            st.info("No pipeline runs recorded yet. The next GHA cron or "
+                    "local Task Scheduler invocation will populate this.")
+            return
+
+        for run in runs:
+            doc_ids = json.loads(run.new_document_ids or "[]")
+            if run.status == "failed":
+                marker = "✗"
+                summary = f"failed: {run.error_message or 'no message recorded'}"
+            elif run.status == "running":
+                marker = "⋯"
+                summary = "still running…"
+            else:
+                summary = (
+                    f"{len(doc_ids)} new document{'s' if len(doc_ids) != 1 else ''}"
+                )
+                marker = "✓"
+
+            elapsed_str = ""
+            if run.completed_at and run.started_at:
+                secs = int((run.completed_at - run.started_at).total_seconds())
+                if secs >= 60:
+                    elapsed_str = f" ({secs // 60}m {secs % 60}s)"
+                else:
+                    elapsed_str = f" ({secs}s)"
+
+            label = (
+                f"{marker} {run.started_at.strftime('%Y-%m-%d %H:%M UTC')} "
+                f"· {run.source} · {summary}{elapsed_str}"
+            )
+
+            with st.expander(label, expanded=(run is runs[0] and bool(doc_ids))):
+                if run.status == "failed":
+                    st.error(run.error_message or "No error message captured.")
+                if not doc_ids:
+                    st.write("No new documents in this run.")
+                    continue
+
+                # Group filenames under their plan name
+                rows = (
+                    session.query(Plan.name, Document.filename, Document.downloaded_at)
+                    .join(Document, Document.plan_id == Plan.id)
+                    .filter(Document.id.in_(doc_ids))
+                    .order_by(Document.downloaded_at)
+                    .all()
+                )
+                grouped = defaultdict(list)
+                for plan_name, filename, downloaded_at in rows:
+                    grouped[plan_name].append((filename, downloaded_at))
+
+                for plan_name in sorted(grouped):
+                    st.markdown(f"**{plan_name}**")
+                    for filename, _ in grouped[plan_name]:
+                        st.markdown(f"&nbsp;&nbsp;• {filename}", unsafe_allow_html=True)
+    finally:
+        session.close()
+
+
+def _render_failed_docs():
+    """Render the 'Failed Docs' Admin sub-tab: per-plan list of documents
+    that won't get summarised — either because text extraction failed, or
+    because they're recorded in the DocumentSkip table (Claude refusals)."""
+    from collections import defaultdict
+    from sqlalchemy import desc
+
+    st.caption(
+        "Plans with at least one document the pipeline cannot process. "
+        "Two failure modes: PDF text extraction failed (PyMuPDF couldn't "
+        "read the file), or the summariser was permanently skipped "
+        "(currently only Claude content-policy refusals)."
+    )
+
+    session = get_session()
+    try:
+        # Two queries, then merge by plan
+        ext_rows = (
+            session.query(Plan.id, Plan.name, Document.id, Document.filename)
+            .join(Document, Document.plan_id == Plan.id)
+            .filter(Document.extraction_status == "failed")
+            .all()
+        )
+        skip_rows = (
+            session.query(Plan.id, Plan.name, Document.id, Document.filename,
+                          DocumentSkip.reason, DocumentSkip.error_message)
+            .join(Document, Document.plan_id == Plan.id)
+            .join(DocumentSkip, DocumentSkip.document_id == Document.id)
+            .all()
+        )
+
+        if not ext_rows and not skip_rows:
+            st.success(
+                "No failed documents. Every downloaded PDF has been "
+                "extracted, and the summariser has nothing flagged for "
+                "permanent skip."
+            )
+            return
+
+        # Group failures per plan
+        by_plan: dict[str, dict] = defaultdict(
+            lambda: {"name": "", "extraction": [], "skip": []}
+        )
+        for plan_id, plan_name, _doc_id, filename in ext_rows:
+            by_plan[plan_id]["name"] = plan_name
+            by_plan[plan_id]["extraction"].append(filename)
+        for plan_id, plan_name, _doc_id, filename, reason, err in skip_rows:
+            by_plan[plan_id]["name"] = plan_name
+            by_plan[plan_id]["skip"].append((filename, reason, err))
+
+        total_ext = len(ext_rows)
+        total_skip = len(skip_rows)
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Plans with failures", len(by_plan))
+        c2.metric("Extraction failures", total_ext)
+        c3.metric("Permanent skips", total_skip)
+
+        # Sort plans by total failure count descending
+        plans_sorted = sorted(
+            by_plan.items(),
+            key=lambda kv: -(len(kv[1]["extraction"]) + len(kv[1]["skip"])),
+        )
+
+        for _plan_id, info in plans_sorted:
+            n = len(info["extraction"]) + len(info["skip"])
+            label = f"{info['name']}  ·  {n} failed"
+            with st.expander(label):
+                if info["extraction"]:
+                    st.markdown(
+                        f"**Extraction failed** ({len(info['extraction'])})"
+                    )
+                    for fn in sorted(info["extraction"]):
+                        st.markdown(
+                            f"&nbsp;&nbsp;• {fn}", unsafe_allow_html=True
+                        )
+                if info["skip"]:
+                    st.markdown(
+                        f"**Permanently skipped** ({len(info['skip'])})"
+                    )
+                    for fn, reason, err in sorted(info["skip"]):
+                        detail = f"{reason}" + (f" — {err}" if err else "")
+                        st.markdown(
+                            f"&nbsp;&nbsp;• {fn} *({detail})*",
+                            unsafe_allow_html=True,
+                        )
+
+        st.info(
+            "**Retry options.**\n\n"
+            "Extraction failures are usually image-only PDFs (no text "
+            "layer). Re-run locally with OCR fallback:\n\n"
+            "`python pipeline.py --retry-failed`\n\n"
+            "Requires Tesseract installed (Windows: see "
+            "github.com/UB-Mannheim/tesseract/wiki). Permanent skips can "
+            "be cleared with `DELETE FROM document_skips WHERE "
+            "document_id = ?` if you want the summariser to retry them."
+        )
+    finally:
+        session.close()
+
+
+def _render_cafr_coverage():
+    """Render the 'CAFR Coverage' Admin sub-tab: how many plans have a
+    recent ACFR/CAFR in the DB, broken down by latest fiscal year."""
+    from sqlalchemy import func
+
+    st.caption(
+        "Latest CAFR/ACFR fiscal year held per plan. 'FY2024+' is the "
+        "current freshness target — anything older is a backfill gap. "
+        "Plans with no CAFR at all need URL hygiene in known_plans.json."
+    )
+
+    session = get_session()
+    try:
+        # Latest CAFR FY per plan (one row per plan that has any CAFR)
+        latest_rows = (
+            session.query(
+                Document.plan_id,
+                func.max(Document.fiscal_year).label("latest_fy"),
+            )
+            .filter(Document.doc_type == "cafr")
+            .filter(Document.fiscal_year.isnot(None))
+            .group_by(Document.plan_id)
+            .all()
+        )
+        latest_by_plan = {pid: fy for pid, fy in latest_rows}
+
+        # All plans (so we can count "none")
+        plans = session.query(Plan).order_by(Plan.id).all()
+        total_plans = len(plans)
+
+        # CAFR documents by fiscal year (across all plans, not just latest)
+        by_fy_rows = (
+            session.query(
+                Document.fiscal_year,
+                func.count(Document.id).label("n"),
+            )
+            .filter(Document.doc_type == "cafr")
+            .filter(Document.fiscal_year.isnot(None))
+            .group_by(Document.fiscal_year)
+            .order_by(Document.fiscal_year.desc())
+            .all()
+        )
+    finally:
+        session.close()
+
+    if total_plans == 0:
+        st.warning("No plans tracked yet.")
+        return
+
+    # ---------- headline metrics
+    n_2024_plus = sum(1 for fy in latest_by_plan.values() if fy and fy >= 2024)
+    n_2025_plus = sum(1 for fy in latest_by_plan.values() if fy and fy >= 2025)
+    n_gap = total_plans - n_2024_plus
+    pct = round(100 * n_2024_plus / total_plans) if total_plans else 0
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Plans tracked", total_plans)
+    c2.metric("FY2024+ coverage", f"{n_2024_plus} ({pct}%)")
+    c3.metric("FY2025+ coverage", n_2025_plus)
+    c4.metric("Backfill gap", n_gap)
+
+    # ---------- documents by fiscal year
+    st.markdown("##### CAFR documents by fiscal year")
+    if not by_fy_rows:
+        st.info("No CAFR documents in the database yet.")
+    else:
+        import pandas as pd
+        fy_df = pd.DataFrame(
+            [(f"FY{int(fy)}", int(n)) for fy, n in by_fy_rows],
+            columns=["Fiscal year", "CAFRs"],
+        )
+        st.dataframe(fy_df, hide_index=True, use_container_width=False)
+
+    # ---------- plans by latest CAFR (bucketed)
+    st.markdown("##### Plans by latest CAFR fiscal year")
+    from collections import Counter
+    bucket = Counter()
+    for plan in plans:
+        fy = latest_by_plan.get(plan.id)
+        if fy is None:
+            bucket["none"] += 1
+        elif fy >= 2025:
+            bucket["FY2025+"] += 1
+        elif fy == 2024:
+            bucket["FY2024 (only)"] += 1
+        else:
+            bucket[f"FY{int(fy)} (stale)"] += 1
+    # Stable display order
+    order = ["FY2025+", "FY2024 (only)", "FY2023 (stale)", "FY2022 (stale)",
+             "FY2021 (stale)", "FY2020 (stale)", "none"]
+    import pandas as pd
+    bucket_df = pd.DataFrame(
+        [(k, bucket[k]) for k in order if k in bucket],
+        columns=["Bucket", "Plans"],
+    )
+    st.dataframe(bucket_df, hide_index=True, use_container_width=False)
+
+    # ---------- detail: every plan with its latest FY
+    st.markdown("##### Per-plan detail")
+    rows = []
+    for plan in plans:
+        fy = latest_by_plan.get(plan.id)
+        rows.append({
+            "Plan": plan.name or plan.id,
+            "Abbrev": plan.abbreviation or "",
+            "State": plan.state or "",
+            "Latest CAFR FY": int(fy) if fy else None,
+            "Status": (
+                "current" if fy and fy >= 2024
+                else "stale" if fy
+                else "none"
+            ),
+        })
+    detail_df = pd.DataFrame(rows)
+    # pandas would coerce int+None to float64 (displays "2024.0"); use the
+    # nullable integer dtype so "Latest CAFR FY" renders as plain integers.
+    detail_df["Latest CAFR FY"] = detail_df["Latest CAFR FY"].astype("Int64")
+    # Sort gaps-first: none → stale → current; within each, oldest FY first.
+    status_rank = {"none": 0, "stale": 1, "current": 2}
+    detail_df = (
+        detail_df
+        .assign(_rank=detail_df["Status"].map(status_rank))
+        .sort_values(by=["_rank", "Latest CAFR FY", "Plan"], na_position="first")
+        .drop(columns=["_rank"])
+        .reset_index(drop=True)
+    )
+    st.dataframe(detail_df, hide_index=True, use_container_width=True)
+
+
+CAFR_REFRESH_LIMIT = 10  # how many distinct refresh runs to surface
+
+
+def _render_cafr_refreshes():
+    """Render the 'CAFR Refreshes' Admin sub-tab: per-run breakdown of
+    refresh_cafrs.py outcomes (saved / already_have / no_strategy / etc.),
+    last N runs, each expandable to per-plan status."""
+    from collections import defaultdict, Counter
+    from sqlalchemy import desc
+
+    st.caption(
+        f"Last {CAFR_REFRESH_LIMIT} CAFR refresh runs (GHA monthly + local "
+        "Task Scheduler). Each run produces one row per CAFR-having plan in "
+        "the cafr_refresh_log table. Status legend: saved = new CAFR saved; "
+        "already_have = nothing to do; no_strategy = no URL produced a "
+        "candidate (template/landing/static all returned None); url_failed "
+        "= download failed; validation_failed = file < min size or magic "
+        "header / cover-year mismatch."
+    )
+
+    session = get_session()
+    try:
+        # Distinct run timestamps, newest first
+        recent_run_ats = [
+            row[0] for row in
+            session.query(CafrRefreshLog.run_at)
+            .distinct()
+            .order_by(desc(CafrRefreshLog.run_at))
+            .limit(CAFR_REFRESH_LIMIT)
+            .all()
+        ]
+        if not recent_run_ats:
+            st.info(
+                "No CAFR refresh runs recorded yet. The next monthly cron "
+                "(GHA + local Task Scheduler) will populate this tab."
+            )
+            return
+
+        # Pull every row for those run_ats in one query
+        rows = (
+            session.query(
+                CafrRefreshLog.run_at,
+                CafrRefreshLog.plan_id,
+                CafrRefreshLog.expected_year,
+                CafrRefreshLog.status,
+                CafrRefreshLog.url_tried,
+                CafrRefreshLog.notes,
+            )
+            .filter(CafrRefreshLog.run_at.in_(recent_run_ats))
+            .order_by(desc(CafrRefreshLog.run_at), CafrRefreshLog.plan_id)
+            .all()
+        )
+        # Plan abbreviations for display
+        plans = {p.id: (p.abbreviation or p.id, p.name or p.id)
+                 for p in session.query(Plan).all()}
+    finally:
+        session.close()
+
+    # Group rows by run_at
+    by_run: dict = defaultdict(list)
+    for r in rows:
+        by_run[r.run_at].append(r)
+
+    # ---------- headline metrics across the most recent run
+    latest = recent_run_ats[0]
+    latest_rows = by_run[latest]
+    latest_counts = Counter(r.status for r in latest_rows)
+    n_total = len(latest_rows)
+    n_saved = latest_counts.get("saved", 0)
+    n_already = latest_counts.get("already_have", 0)
+    n_failed = (latest_counts.get("no_strategy", 0)
+                + latest_counts.get("url_failed", 0)
+                + latest_counts.get("validation_failed", 0)
+                + latest_counts.get("error", 0))
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Latest run", latest.strftime("%Y-%m-%d %H:%M"))
+    c2.metric("Plans processed", n_total)
+    c3.metric("Saved + already-have",
+              f"{n_saved + n_already} ({(n_saved + n_already) * 100 // n_total}%)"
+              if n_total else "0")
+    c4.metric("Failed", n_failed)
+
+    # ---------- per-run expanders, newest first
+    for run_at in recent_run_ats:
+        run_rows = by_run[run_at]
+        counts = Counter(r.status for r in run_rows)
+        # Build a one-line summary from the count breakdown
+        order = ["saved", "already_have", "no_strategy",
+                 "url_failed", "validation_failed", "error"]
+        summary_parts = [f"{counts[s]} {s}" for s in order if counts.get(s)]
+        label = (f"{run_at.strftime('%Y-%m-%d %H:%M UTC')}  ·  "
+                 f"{len(run_rows)} plans  ·  " + ", ".join(summary_parts))
+        # Expand only the most-recent run by default
+        with st.expander(label, expanded=(run_at == latest)):
+            # Group plans within the run by status for readability
+            by_status: dict = defaultdict(list)
+            for r in run_rows:
+                abbrev, name = plans.get(r.plan_id, (r.plan_id, r.plan_id))
+                by_status[r.status].append({
+                    "plan_id": r.plan_id,
+                    "abbrev": abbrev,
+                    "name": name,
+                    "expected_year": r.expected_year,
+                    "url_tried": r.url_tried,
+                    "notes": r.notes,
+                })
+            for status in order:
+                items = by_status.get(status, [])
+                if not items:
+                    continue
+                st.markdown(f"**{status}** ({len(items)})")
+                # 'saved' and 'already_have' are routine — show as one-liners
+                if status in ("saved", "already_have"):
+                    for it in items:
+                        line = f"&nbsp;&nbsp;• {it['abbrev']}"
+                        if it['expected_year']:
+                            line += f" — FY{it['expected_year']}"
+                        if it['notes']:
+                            line += f"  *({it['notes']})*"
+                        st.markdown(line, unsafe_allow_html=True)
+                else:
+                    # Failures get a richer view: include url + notes
+                    for it in items:
+                        line = (f"&nbsp;&nbsp;• **{it['abbrev']}** "
+                                f"(target FY{it['expected_year']})")
+                        if it['notes']:
+                            line += f"  — {it['notes']}"
+                        if it['url_tried']:
+                            line += (f"  [`{it['url_tried'][:80]}`"
+                                     f"{'…' if len(it['url_tried']) > 80 else ''}`]")
+                        st.markdown(line, unsafe_allow_html=True)
 
 
 def _admin_plan_coverage_df():
@@ -1696,7 +2398,14 @@ def page_rfp(plan_id, plan_label):
 def page_admin():
     """Admin views: pipeline / data-quality diagnostics for the site owner."""
     st.title("Admin")
-    tab_coverage, tab_backlog = st.tabs(["Plan Coverage", "Pipeline Backlog"])
+    (tab_runs, tab_coverage, tab_backlog, tab_failed,
+     tab_cafr, tab_cafr_refreshes) = st.tabs(
+        ["Recent Runs", "Plan Coverage", "Pipeline Backlog",
+         "Failed Docs", "CAFR Coverage", "CAFR Refreshes"]
+    )
+
+    with tab_runs:
+        _render_recent_runs()
 
     with tab_coverage:
         st.caption(
@@ -1782,6 +2491,15 @@ def page_admin():
                     "documents that have already been extracted but not yet "
                     "processed by Claude."
                 )
+
+    with tab_failed:
+        _render_failed_docs()
+
+    with tab_cafr:
+        _render_cafr_coverage()
+
+    with tab_cafr_refreshes:
+        _render_cafr_refreshes()
 
 
 def page_approval_action(raw_token: str, action: str):
@@ -1963,7 +2681,7 @@ def main():
 
     tabs = st.tabs([
         "Notes", "Summary", "Updates", "Search", "Browse Recent",
-        "Investment Actions", "RFPs", "CAFR", "Asset Allocation",
+        "Investment Actions", "Managers", "RFPs", "CAFR", "Asset Allocation",
         "Plans", "Drafts", "Insights", "Admin",
     ])
 
@@ -1980,18 +2698,20 @@ def main():
     with tabs[5]:
         page_investment_actions(plan_id, plan_label)
     with tabs[6]:
-        page_rfp(plan_id, plan_label)
+        page_managers()
     with tabs[7]:
-        page_cafr()
+        page_rfp(plan_id, plan_label)
     with tabs[8]:
-        page_asset_allocation()
+        page_cafr()
     with tabs[9]:
-        page_plans()
+        page_asset_allocation()
     with tabs[10]:
-        page_drafts()
+        page_plans()
     with tabs[11]:
-        page_insights()
+        page_drafts()
     with tabs[12]:
+        page_insights()
+    with tabs[13]:
         page_admin()
 
 

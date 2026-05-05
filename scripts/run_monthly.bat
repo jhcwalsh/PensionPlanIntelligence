@@ -1,7 +1,14 @@
 @echo off
 REM ------------------------------------------------------------------------
-REM Monthly local cadence — 1st of month. CAFR refresh + extraction + the
-REM monthly CIO Insights synthesis. Pushes the DB at the end.
+REM Monthly local cadence — 1st of month. CAFR refresh, scoped to the 5
+REM WAF-blocked plans only (data/local_only_cafr_plans.json). The other
+REM ~92 CAFR-having plans run on .github/workflows/monthly-cafr-refresh.yml
+REM at 15:00 UTC the same day; this local task completes well before
+REM monthly-insights (18:00 UTC) pulls fresh.
+REM
+REM CAFR migration to GHA landed 2026-05-05 (probe SHA 4bd08c0). Extract
+REM + insights moved earlier on 2026-05-04
+REM (.github/workflows/monthly-insights.yml).
 REM ------------------------------------------------------------------------
 
 setlocal
@@ -19,37 +26,23 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [%TIME%] refresh_cafrs.py >> "%LOG%"
-python refresh_cafrs.py >> "%LOG%" 2>&1
+echo [%TIME%] refresh_cafrs.py --local-only >> "%LOG%"
+python refresh_cafrs.py --local-only >> "%LOG%" 2>&1
 if errorlevel 1 (
     python -m scripts.notify_failure %TASK% refresh_cafrs "%LOG%" %ERRORLEVEL%
     exit /b 1
 )
 
-echo [%TIME%] extract_cafr_investments.py >> "%LOG%"
-python extract_cafr_investments.py >> "%LOG%" 2>&1
-if errorlevel 1 (
-    python -m scripts.notify_failure %TASK% extract_cafr "%LOG%" %ERRORLEVEL%
-    exit /b 1
-)
-
-echo [%TIME%] insights.scheduler monthly >> "%LOG%"
-python -m insights.scheduler monthly >> "%LOG%" 2>&1
-if errorlevel 1 (
-    python -m scripts.notify_failure %TASK% insights_monthly "%LOG%" %ERRORLEVEL%
-    exit /b 1
-)
-
-git add db/pension.db notes/ cafr_summaries/ >> "%LOG%" 2>&1
+git add db/pension.db >> "%LOG%" 2>&1
 git diff-index --quiet HEAD
 if errorlevel 1 (
-    git commit -m "Monthly refresh %DATE%" >> "%LOG%" 2>&1
+    git commit -m "Monthly CAFR refresh %DATE%" >> "%LOG%" 2>&1
     git push origin master >> "%LOG%" 2>&1
     if errorlevel 1 (
         python -m scripts.notify_failure %TASK% git_push "%LOG%" %ERRORLEVEL%
         exit /b 1
     )
-    echo [%TIME%] pushed monthly refresh >> "%LOG%"
+    echo [%TIME%] pushed monthly CAFR refresh >> "%LOG%"
 ) else (
     echo [%TIME%] no changes to push >> "%LOG%"
 )
