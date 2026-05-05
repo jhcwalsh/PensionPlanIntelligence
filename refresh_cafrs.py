@@ -125,7 +125,14 @@ def log_outcome(session, plan_id: str, run_at: datetime, expected_year: int,
 
 def refresh_plan(session, plan: dict, run_at: datetime,
                  force_year: int | None = None) -> str:
-    """Process one plan; return the status string."""
+    """Process one plan; return the status string.
+
+    Tries `expected_fiscal_year` first, then falls back to the prior FY
+    (since ACFRs typically lag FY-close by 4-9 months and the most recent
+    FY may not be published yet). The cover-year check also accepts any
+    year in the try-set, so a static URL still pointing at last year's
+    PDF resolves cleanly. --year overrides skip the fallback.
+    """
     plan_id = plan["id"]
     abbrev = plan.get("abbreviation", plan_id)
     fy_end = plan.get("fiscal_year_end")
@@ -135,92 +142,101 @@ def refresh_plan(session, plan: dict, run_at: datetime,
                     notes="missing fiscal_year_end")
         return "no_strategy"
 
-    target_year = force_year if force_year is not None else \
-                  expected_fiscal_year(run_at, fy_end)
+    initial_target = force_year if force_year is not None else \
+                     expected_fiscal_year(run_at, fy_end)
 
-    # Skip if we already have it
-    existing = already_have_cafr_for_year(session, plan_id, target_year)
-    if existing is not None:
-        console.print(f"  [dim]{abbrev}: FY{target_year} already saved (doc {existing.id})[/dim]")
-        log_outcome(session, plan_id, run_at, target_year, "already_have",
-                    document_id=existing.id)
-        return "already_have"
+    years_to_try = [initial_target]
+    if force_year is None:
+        years_to_try.append(initial_target - 1)
+    acceptable_years = set(years_to_try)
 
-    # Resolve a URL guess for the target year
-    url = resolve_cafr_url_for_year(plan, target_year)
-    if not url:
-        console.print(f"  [yellow]{abbrev}: no URL resolves for FY{target_year}[/yellow]")
-        log_outcome(session, plan_id, run_at, target_year, "no_strategy",
-                    notes="no template/landing/static URL produced a candidate")
-        return "no_strategy"
+    last_result = "no_strategy"
+    for target_year in years_to_try:
+        existing = already_have_cafr_for_year(session, plan_id, target_year)
+        if existing is not None:
+            console.print(f"  [dim]{abbrev}: FY{target_year} already saved (doc {existing.id})[/dim]")
+            log_outcome(session, plan_id, run_at, target_year, "already_have",
+                        document_id=existing.id)
+            return "already_have"
 
-    if document_exists(session, url):
-        existing = session.query(Document).filter_by(url=url).first()
-        # Same URL was previously saved (perhaps with a different year tag) —
-        # don't re-download.
-        log_outcome(session, plan_id, run_at, target_year, "already_have",
-                    url_tried=url, document_id=existing.id if existing else None,
-                    notes="URL already in DB under another fiscal_year")
-        return "already_have"
+        url = resolve_cafr_url_for_year(plan, target_year)
+        if not url:
+            console.print(f"  [yellow]{abbrev}: no URL resolves for FY{target_year}[/yellow]")
+            log_outcome(session, plan_id, run_at, target_year, "no_strategy",
+                        notes="no template/landing/static URL produced a candidate")
+            last_result = "no_strategy"
+            continue
 
-    # Download
-    plan_dir = Path(DOWNLOADS_DIR) / plan_id / "cafr"
-    plan_dir.mkdir(parents=True, exist_ok=True)
-    filename = make_cafr_filename(url, abbrev)
+        if document_exists(session, url):
+            existing = session.query(Document).filter_by(url=url).first()
+            log_outcome(session, plan_id, run_at, target_year, "already_have",
+                        url_tried=url, document_id=existing.id if existing else None,
+                        notes="URL already in DB under another fiscal_year")
+            return "already_have"
 
-    console.print(f"  [cyan]{abbrev}: trying {url}[/cyan]")
-    local_path, size = download_document(url, plan_dir, filename)
-    if not local_path:
-        log_outcome(session, plan_id, run_at, target_year, "url_failed",
-                    url_tried=url, notes="download_document returned no file")
-        return "url_failed"
+        plan_dir = Path(DOWNLOADS_DIR) / plan_id / "cafr"
+        plan_dir.mkdir(parents=True, exist_ok=True)
+        filename = make_cafr_filename(url, abbrev)
 
-    if size < MIN_PDF_BYTES:
-        try:
-            local_path.unlink()
-        except OSError:
-            pass
-        log_outcome(session, plan_id, run_at, target_year, "validation_failed",
-                    url_tried=url, notes=f"file only {size} bytes")
-        return "validation_failed"
+        console.print(f"  [cyan]{abbrev}: trying FY{target_year} {url}[/cyan]")
+        local_path, size = download_document(url, plan_dir, filename)
+        if not local_path:
+            log_outcome(session, plan_id, run_at, target_year, "url_failed",
+                        url_tried=url, notes="download_document returned no file")
+            return "url_failed"
 
-    # Cover-page year check
-    cover_year = fiscal_year_from_pdf(local_path, max_year=run_at.year + 1)
-    if cover_year != target_year:
-        # Could be: (a) plan re-posted last year's, (b) cover unreadable,
-        # (c) URL pointed to wrong file. Don't save — keep the file for
-        # human review and log the mismatch.
+        if size < MIN_PDF_BYTES:
+            try:
+                local_path.unlink()
+            except OSError:
+                pass
+            log_outcome(session, plan_id, run_at, target_year, "validation_failed",
+                        url_tried=url, notes=f"file only {size} bytes")
+            return "validation_failed"
+
+        cover_year = fiscal_year_from_pdf(local_path, max_year=run_at.year + 1)
+        if cover_year not in acceptable_years:
+            log_outcome(
+                session, plan_id, run_at, target_year, "validation_failed",
+                url_tried=url,
+                notes=(f"cover_year={cover_year}, acceptable="
+                       f"{sorted(acceptable_years, reverse=True)}; "
+                       f"file kept at {local_path} for review"),
+            )
+            console.print(
+                f"  [yellow]{abbrev}: cover year {cover_year} not in "
+                f"{sorted(acceptable_years, reverse=True)}; not saving[/yellow]"
+            )
+            last_result = "validation_failed"
+            continue
+
+        # Save with the actual cover year — may equal target_year or be
+        # the fallback. already_have_cafr_for_year on the next loop
+        # iteration will catch any duplicate.
+        doc = Document(
+            plan_id=plan_id,
+            url=url,
+            filename=filename,
+            doc_type="cafr",
+            local_path=str(local_path),
+            file_size_bytes=size,
+            downloaded_at=run_at,
+            extraction_status="pending",
+            fiscal_year=cover_year,
+        )
+        session.add(doc)
+        session.commit()
         log_outcome(
-            session, plan_id, run_at, target_year, "validation_failed",
-            url_tried=url,
-            notes=(f"cover_year={cover_year}, expected={target_year}; "
-                   f"file kept at {local_path} for review"),
+            session, plan_id, run_at, target_year, "saved",
+            url_tried=url, document_id=doc.id,
+            notes=None if cover_year == target_year else
+                  f"saved as FY{cover_year} (target was FY{target_year})",
         )
-        console.print(
-            f"  [yellow]{abbrev}: cover year {cover_year} != expected {target_year}; "
-            f"not saving[/yellow]"
-        )
-        return "validation_failed"
+        console.print(f"  [green]{abbrev}: saved FY{cover_year} CAFR (doc {doc.id})[/green]")
+        time.sleep(0.5)
+        return "saved"
 
-    # Save
-    doc = Document(
-        plan_id=plan_id,
-        url=url,
-        filename=filename,
-        doc_type="cafr",
-        local_path=str(local_path),
-        file_size_bytes=size,
-        downloaded_at=run_at,
-        extraction_status="pending",
-        fiscal_year=cover_year,
-    )
-    session.add(doc)
-    session.commit()
-    log_outcome(session, plan_id, run_at, target_year, "saved",
-                url_tried=url, document_id=doc.id)
-    console.print(f"  [green]{abbrev}: saved FY{cover_year} CAFR (doc {doc.id})[/green]")
-    time.sleep(0.5)
-    return "saved"
+    return last_result
 
 
 def run_refresh(plan_ids: list[str] | None = None,
