@@ -466,7 +466,18 @@ must be the one whose summary contains that specific figure or name verbatim. \
 If a sentence's figures come from two different docs, split the sentence so \
 each cite is unambiguous. The section-level *Sources:* line (see below) \
 remains as a summary.
-- End with ## Upcoming Meetings to Watch (bullet list of what's on deck next)
+- End with ## Upcoming Meetings to Watch. Today is {today_str}. Each bullet \
+must include a dated trigger that has not yet ended as of {today_str}. \
+"Has not yet ended" means: a specific calendar date strictly after \
+{today_str}; a month whose last day is after {today_str}; a quarter whose \
+last day is after {today_str}; or a half-year / "by year-end <YYYY>" whose \
+end date is after {today_str}. Omit any bullet whose dated trigger has \
+already passed. Omit bullets that reference only a past meeting with no \
+forward-looking date — do not invent one. Omit open-ended items ("ongoing", \
+"underway", "TBD", "in progress") that have no forward-dated trigger at all. \
+If nothing qualifies, write a single bullet: \
+"- _No forward-dated meetings or deadlines were identified in the source \
+materials._"
 - Hard cap 900 words total. If you reach it, drop the weakest-evidenced \
 theme entirely rather than trimming a sentence from each.
 
@@ -494,6 +505,13 @@ name in that sentence verbatim, not merely be on the same topic.
 - AUM consistency: each plan should appear with one and only one AUM value \
 throughout the note (the PLAN AUM TABLE value, OR a single override with an \
 "as of <date>" qualifier — never both for the same plan).
+- ## Upcoming Meetings to Watch: re-read every bullet. Today is {today_str}. \
+Delete any bullet whose dated trigger has already ended on or before \
+{today_str} (a calendar date, month, or quarter whose end is in the past). \
+Delete any bullet that has no forward-dated trigger at all (pure "ongoing", \
+"underway", "TBD", "in progress"). If this empties the section, emit the \
+single "_No forward-dated meetings or deadlines were identified in the \
+source materials._" bullet instead.
 
 PLAN AUM TABLE (canonical reference):
 {aum_table}
