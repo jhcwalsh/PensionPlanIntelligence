@@ -14,12 +14,22 @@ Strategy per plan:
   6. Log the outcome to `cafr_refresh_log`.
 
 Usage:
-    python refresh_cafrs.py                    # all plans
-    python refresh_cafrs.py calpers nystrs     # specific plans
+    python refresh_cafrs.py                    # all plans (GHA-skip applies)
+    python refresh_cafrs.py calpers nystrs     # specific plans (overrides filters)
     python refresh_cafrs.py --year 2025        # force a target year
+    python refresh_cafrs.py --local-only       # only the WAF-blocked plans (Task Scheduler)
+
+When run from a hosted GitHub Actions runner ($GITHUB_ACTIONS=true on Azure
+runners), the plans listed in data/local_only_cafr_plans.json are skipped --
+their CAFR sources are fronted by Cloudflare/Akamai bot mitigation that
+blocks cloud datacenter IPs. Those plans are picked up by the parallel
+local Windows Task Scheduler invocation that uses --local-only. Explicit
+plan_ids on the CLI bypass both filters.
 """
 
 import argparse
+import json
+import os
 import sys
 import time
 from datetime import datetime
@@ -45,6 +55,32 @@ from fetch_cafr import (
 from fetcher import download_document, load_plans
 
 console = Console(legacy_windows=False)
+
+
+LOCAL_ONLY_FILE = Path(__file__).parent / "data" / "local_only_cafr_plans.json"
+
+
+def _load_local_only_ids() -> list[str]:
+    with open(LOCAL_ONLY_FILE, encoding="utf-8") as f:
+        return [p["id"] for p in json.load(f)["plans"]]
+
+
+def _resolve_plan_ids(explicit: list[str] | None, local_only: bool) -> list[str] | None:
+    """Determine which plan IDs to actually process.
+
+    Precedence: explicit CLI args > --local-only > GITHUB_ACTIONS env var > all.
+    Returns None to mean "all plans" (run_refresh's default).
+    """
+    if explicit:
+        return explicit
+    if local_only:
+        return _load_local_only_ids()
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        skip = set(_load_local_only_ids())
+        registry = Path(__file__).parent / "data" / "known_plans.json"
+        with open(registry, encoding="utf-8") as f:
+            return [p["id"] for p in json.load(f) if p["id"] not in skip]
+    return None
 
 
 def expected_fiscal_year(today: datetime, fy_end_md: str) -> int:
@@ -224,13 +260,21 @@ def main():
     parser = argparse.ArgumentParser(
         description="Monthly CAFR refresh: pull next year's ACFR per plan.")
     parser.add_argument("plan_ids", nargs="*",
-                        help="Plan IDs to process (default: all).")
+                        help="Plan IDs to process (default: all, with GHA-"
+                             "skip filter applied when running on a hosted "
+                             "runner).")
     parser.add_argument("--year", type=int,
                         help="Force a specific target fiscal year (default: "
                              "computed from each plan's fiscal_year_end).")
+    parser.add_argument("--local-only", action="store_true",
+                        help="Process only the plans listed in "
+                             "data/local_only_cafr_plans.json (use from "
+                             "Windows Task Scheduler — those plans' CAFR "
+                             "sources block cloud datacenter IPs).")
     args = parser.parse_args()
 
-    counts = run_refresh(plan_ids=args.plan_ids or None, force_year=args.year)
+    plan_ids = _resolve_plan_ids(args.plan_ids or None, args.local_only)
+    counts = run_refresh(plan_ids=plan_ids, force_year=args.year)
     sys.exit(0 if counts.get("error", 0) == 0 else 1)
 
 

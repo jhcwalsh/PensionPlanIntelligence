@@ -55,7 +55,7 @@ uvicorn api.main:app --reload --port 8000
 2. **Local Windows Task Scheduler daily** — same pipeline scoped to the 11 WAF-blocked plans via `--local-only`, commits the DB.
 3. **GHA weekly-insights** (Sundays 11:00 UTC) and **GHA monthly-insights** (1st of month 18:00 UTC) — compose digests, send approval email, commit the DB + `notes/` (+ `cafr_summaries/` for monthly).
 
-Local Task Scheduler also still owns weekly RFP backfill and monthly CAFR refresh — both are `git push`-back operations on the same master branch. Each writer runs at a distinct time; conflicts haven't been observed but a `git pull --rebase` would be the next defensive step if they appear.
+Local Task Scheduler still owns the WAF-blocked subset of monthly CAFR refresh (5 plans via `--local-only`) — a `git push`-back operation on the same master branch. Each writer runs at a distinct time; conflicts haven't been observed but a `git pull --rebase` would be the next defensive step if they appear.
 
 GitHub's hard 100 MB single-file limit is the ceiling on this model. The DB started bumping into it once `documents.extracted_text` accumulated, which forced the gzip wrapper (next section). When the DB approaches ~80 MB again, plan a real fix (Git LFS, or moving the DB out of git onto Render's persistent disk via a separate sync) rather than another column-level workaround.
 
@@ -92,11 +92,12 @@ Render hosts only two web services now: Streamlit (`pension-plan-intelligence`) 
 | Daily document pipeline (11 WAF-blocked plans) | Task Scheduler | local Windows | `scripts/run_daily.bat` |
 | Weekly CIO Insights composition + email | cron Sundays 11:00 UTC | GHA | `.github/workflows/weekly-insights.yml` |
 | Weekly RFP backfill (`--limit 100`) | cron Sundays 11:30 UTC | GHA | `.github/workflows/weekly-rfp.yml` |
-| Monthly CAFR refresh | Task Scheduler | local Windows | `scripts/run_monthly.bat` |
+| Monthly CAFR refresh (~92 plans) | cron 1st of month 15:00 UTC | GHA | `.github/workflows/monthly-cafr-refresh.yml` |
+| Monthly CAFR refresh (5 WAF-blocked plans) | Task Scheduler | local Windows | `scripts/run_monthly.bat` |
 | Monthly CAFR extraction + insights composition + email | cron 1st of month 18:00 UTC | GHA | `.github/workflows/monthly-insights.yml` |
 | Quarterly insights composition + email | cron 1st of Jan/Apr/Jul/Oct 19:00 UTC | GHA | `.github/workflows/quarterly-insights.yml` |
 
-GHA secrets that must exist for the cron entries to work: `ANTHROPIC_API_KEY`, `RESEND_API_KEY`, `APPROVAL_EMAIL_RECIPIENT`, `APPROVAL_EMAIL_FROM`. Local cron uses the same names from `.env`. Schedules are UTC; ET drifts one hour between EDT and EST. The 18:00 UTC monthly-insights time is deliberately late so the local CAFR refresh on the 1st has time to push before GHA pulls fresh.
+GHA secrets that must exist for the cron entries to work: `ANTHROPIC_API_KEY`, `RESEND_API_KEY`, `APPROVAL_EMAIL_RECIPIENT`, `APPROVAL_EMAIL_FROM`. Local cron uses the same names from `.env`. Schedules are UTC; ET drifts one hour between EDT and EST. The 1st-of-month sequence is deliberate: GHA CAFR refresh @ 15:00 UTC → local CAFR refresh runs early ET → GHA monthly-insights @ 18:00 UTC pulls a DB that already has both runs' new CAFRs.
 
 ## Conventions worth knowing
 

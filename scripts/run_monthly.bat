@@ -1,13 +1,14 @@
 @echo off
 REM ------------------------------------------------------------------------
-REM Monthly local cadence — 1st of month. CAFR refresh only. Pushes the DB
-REM so the GHA monthly-insights workflow (which fires the same day at
-REM 18:00 UTC) can pull fresh, run extract_cafr_investments.py, and
-REM compose the monthly CIO Insights digest from the new CAFR data.
+REM Monthly local cadence — 1st of month. CAFR refresh, scoped to the 5
+REM WAF-blocked plans only (data/local_only_cafr_plans.json). The other
+REM ~92 CAFR-having plans run on .github/workflows/monthly-cafr-refresh.yml
+REM at 15:00 UTC the same day; this local task completes well before
+REM monthly-insights (18:00 UTC) pulls fresh.
 REM
-REM Extract + insights moved to GitHub Actions on 2026-05-04
-REM (.github/workflows/monthly-insights.yml). Time the local task so it
-REM completes well before 18:00 UTC -- early morning ET works fine.
+REM CAFR migration to GHA landed 2026-05-05 (probe SHA 4bd08c0). Extract
+REM + insights moved earlier on 2026-05-04
+REM (.github/workflows/monthly-insights.yml).
 REM ------------------------------------------------------------------------
 
 setlocal
@@ -25,8 +26,8 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [%TIME%] refresh_cafrs.py >> "%LOG%"
-python refresh_cafrs.py >> "%LOG%" 2>&1
+echo [%TIME%] refresh_cafrs.py --local-only >> "%LOG%"
+python refresh_cafrs.py --local-only >> "%LOG%" 2>&1
 if errorlevel 1 (
     python -m scripts.notify_failure %TASK% refresh_cafrs "%LOG%" %ERRORLEVEL%
     exit /b 1
