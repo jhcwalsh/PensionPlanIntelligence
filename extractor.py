@@ -40,7 +40,8 @@ def extract_pdf_pdfplumber(path: str) -> tuple[str, int]:
                         row_text = " | ".join(str(cell or "").strip() for cell in row)
                         if row_text.strip():
                             text += "\n" + row_text
-                pages_text.append(f"[Page {i + 1}]\n{text}")
+                if text.strip():
+                    pages_text.append(f"[Page {i + 1}]\n{text}")
         full_text = "\n\n".join(pages_text)
         return full_text[:MAX_TEXT_CHARS], page_count
     except Exception as e:
@@ -57,7 +58,8 @@ def extract_pdf_pymupdf(path: str) -> tuple[str, int]:
         pages_text = []
         for i, page in enumerate(doc):
             text = page.get_text("text")
-            pages_text.append(f"[Page {i + 1}]\n{text}")
+            if text.strip():
+                pages_text.append(f"[Page {i + 1}]\n{text}")
         full_text = "\n\n".join(pages_text)
         return full_text[:MAX_TEXT_CHARS], page_count
     except Exception as e:
