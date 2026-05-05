@@ -645,9 +645,21 @@ def _notes_md_to_html(content: str) -> str:
         text = re.sub(r'\*(.+?)\*', r'<em>\1</em>', text)
         return text
 
+    def split_row(s: str) -> list[str]:
+        # Markdown tables wrap rows in optional leading/trailing pipes.
+        inner = s.strip().strip("|")
+        return [c.strip() for c in inner.split("|")]
+
+    def is_table_separator(s: str) -> bool:
+        # `| --- | :---: | ---: |` — at least one column of dashes per cell.
+        if "|" not in s:
+            return False
+        return all(re.fullmatch(r":?-{3,}:?", c) for c in split_row(s) if c)
+
     lines = content.splitlines()
     parts: list[str] = []
     para: list[str] = []
+    i = 0
 
     def flush():
         if para:
@@ -656,19 +668,63 @@ def _notes_md_to_html(content: str) -> str:
             )
             para.clear()
 
-    for line in lines:
+    while i < len(lines):
+        line = lines[i]
         s = line.strip()
+
+        # Markdown table: header row, separator row, then data rows.
+        if (
+            "|" in s
+            and i + 1 < len(lines)
+            and is_table_separator(lines[i + 1])
+        ):
+            flush()
+            headers = split_row(s)
+            i += 2  # past header + separator
+            rows: list[list[str]] = []
+            while i < len(lines) and "|" in lines[i] and lines[i].strip():
+                rows.append(split_row(lines[i]))
+                i += 1
+            thead = "".join(
+                f'<th style="text-align:left;padding:6px 10px;border-bottom:2px solid #888;'
+                f'font-weight:600;">{inline(h)}</th>'
+                for h in headers
+            )
+            tbody_rows = []
+            for row in rows:
+                cells = "".join(
+                    f'<td style="padding:6px 10px;border-bottom:1px solid #444;'
+                    f'vertical-align:top;">{inline(c)}</td>'
+                    for c in row
+                )
+                tbody_rows.append(f"<tr>{cells}</tr>")
+            parts.append(
+                '<div style="overflow-x:auto;margin:0 0 14px;">'
+                '<table style="border-collapse:collapse;width:100%;font-size:0.95em;'
+                'line-height:1.45;">'
+                f'<thead><tr>{thead}</tr></thead>'
+                f'<tbody>{"".join(tbody_rows)}</tbody>'
+                '</table></div>'
+            )
+            continue
+
         if s.startswith("## "):
             flush()
             parts.append(
                 f'<h2 style="margin:28px 0 8px;font-size:1.25em;font-weight:600;">'
                 f'{inline(s[3:])}</h2>'
             )
+        elif s.startswith("### "):
+            flush()
+            parts.append(
+                f'<h3 style="margin:20px 0 6px;font-size:1.1em;font-weight:600;">'
+                f'{inline(s[4:])}</h3>'
+            )
         elif s == "---":
             flush()
             parts.append('<hr style="margin:16px 0;border:none;border-top:1px solid #555;">')
         elif s.startswith("# "):
-            continue  # skip H1 — shown via st.title
+            pass  # skip H1 — shown via st.title
         elif s.startswith("- ") or s.startswith("* "):
             flush()
             parts.append(
@@ -679,6 +735,7 @@ def _notes_md_to_html(content: str) -> str:
             flush()
         else:
             para.append(s)
+        i += 1
 
     flush()
     return "\n".join(parts)

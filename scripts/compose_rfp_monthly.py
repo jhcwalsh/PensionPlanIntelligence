@@ -48,7 +48,37 @@ Style:
 Output clean markdown only. No code fences, no JSON, no commentary."""
 
 
-def _gather_consultant_rfps() -> list[dict]:
+def _parse_iso(s: str | None) -> date | None:
+    if not s:
+        return None
+    try:
+        return date.fromisoformat(s[:10])
+    except (ValueError, TypeError):
+        return None
+
+
+def _is_in_period(rec: dict, start: date, end: date) -> bool:
+    """True if the RFP relates to [start, end].
+
+    Includes the record if any of release/due/award dates fall in the
+    window. Falls back to ``extracted_at`` when none of the explicit
+    dates are present, so newly-discovered RFPs without firm timing
+    aren't dropped just because the source doc didn't list dates yet.
+    """
+    explicit = [
+        _parse_iso(rec.get("release_date")),
+        _parse_iso(rec.get("response_due_date")),
+        _parse_iso(rec.get("award_date")),
+    ]
+    explicit = [d for d in explicit if d is not None]
+    if explicit:
+        return any(start <= d <= end for d in explicit)
+    extracted = _parse_iso(rec.get("extracted_at"))
+    return extracted is not None and start <= extracted <= end
+
+
+def _gather_consultant_rfps(period_start: date | None = None,
+                            period_end: date | None = None) -> list[dict]:
     session = get_session()
     try:
         rows = (
@@ -84,6 +114,8 @@ def _gather_consultant_rfps() -> list[dict]:
                 "doc_filename": doc.filename,
                 "extracted_at": r.extracted_at.isoformat() if r.extracted_at else "",
             })
+        if period_start and period_end:
+            out = [rec for rec in out if _is_in_period(rec, period_start, period_end)]
         return out
     finally:
         session.close()
@@ -97,8 +129,10 @@ def _build_user_prompt(records: list[dict],
 
     return f"""\
 Write a Monthly Consultant RFP Brief for {month_label} summarizing the
-{len(records)} consultant-type RFP records extracted from board materials
-during the period.
+{len(records)} consultant-type RFP records with activity in {month_label}
+(records have at least one of release_date / response_due_date /
+award_date in the period, OR were newly extracted during it without
+firm dates yet).
 
 GROUNDING RULES (non-negotiable):
 - Every plan name, RFP title, status, date, dollar figure, and vendor
@@ -117,7 +151,7 @@ GROUNDING RULES (non-negotiable):
 
 FORMAT REQUIREMENTS:
 - Start with exactly: # Monthly Consultant RFP Brief: {month_label}
-- Second line: *Compiled from board materials extracted during \
+- Second line: *RFP activity during \
 {period_start.isoformat()} – {period_end.isoformat()}*
 - Third line: *Generated: {today_str}*
 - Then a --- horizontal rule.
@@ -205,7 +239,7 @@ def main(argv: list[str] | None = None) -> int:
 
     period_start, period_end = _period_for(args.period)
 
-    records = _gather_consultant_rfps()
+    records = _gather_consultant_rfps(period_start, period_end)
     print(f"consultant RFP records: {len(records)}")
     print(f"period: {period_start} to {period_end}")
 
