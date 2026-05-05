@@ -741,14 +741,14 @@ def _find_latest_consultant_rfps() -> tuple[Path, str, str] | None:
 
 def page_insights():
     tab_week, tab_insights_monthly, tab_rfps, tab_insights_year = st.tabs([
-        "7-Day Highlights",
+        "Weekly Insights",
         "Monthly Insights",
-        "Consultant RFPs",
-        "2026 Insights",
+        "RFP tracker",
+        "Year to date Insights",
     ])
 
     with tab_rfps:
-        st.title("Monthly Consultant RFP Brief")
+        st.title("RFP tracker")
         result = _find_latest_consultant_rfps()
         if result:
             path, title, gen_date = result
@@ -782,7 +782,7 @@ def page_insights():
             )
 
     with tab_insights_year:
-        st.title("2026 Insights")
+        st.title("Year to date Insights")
         result = _find_latest_insights()
         if result:
             path, title, gen_date = result
@@ -796,7 +796,7 @@ def page_insights():
             st.info("No 2026 insights document found. Run `python generate_notes.py --insights-ytd-only` to generate.")
 
     with tab_week:
-        st.title("7-Day Highlights")
+        st.title("Weekly Insights")
         all_highlights = _find_all_highlights()
         if not all_highlights:
             st.info("No highlights found. Run `python generate_notes.py` to generate.")
