@@ -32,6 +32,7 @@ from datetime import datetime, timedelta
 from insights import config
 from insights.approval import ApprovalEmail, send_email
 from database import Document, FetchRun, Plan, get_session
+from lib.rfp_alerts import find_alerts, polish_alerts
 
 
 DEFAULT_HOURS = 26
@@ -185,6 +186,72 @@ def render_email(runs_data: list[dict]) -> tuple[str, str, int]:
     return "\n".join(html_parts), "\n".join(text_parts), total_docs
 
 
+def render_rfp_section(polished: list[dict], headline: str) -> tuple[str, str]:
+    """Build (html, text) blocks for the RFP Alerts section of the digest."""
+    if not polished:
+        return "", ""
+
+    by_plan: dict[str, list[dict]] = {}
+    for a in polished:
+        by_plan.setdefault(a["plan_abbrev"], []).append(a)
+
+    html_parts = [
+        '<h2 style="margin:1.8em 0 0.3em;color:#003366;'
+        'border-top:2px solid #003366;padding-top:1em;">RFP Alerts</h2>',
+    ]
+    if headline:
+        html_parts.append(
+            f'<p style="background:#f0f4f8;padding:10px 14px;'
+            f'border-left:4px solid #003366;border-radius:3px;'
+            f'margin:0 0 1em;"><b>Headline:</b> {_html.escape(headline)}</p>'
+        )
+    html_parts.append(
+        f'<p style="color:#555;">{len(polished)} RFP / consultant event'
+        f'{"s" if len(polished) != 1 else ""} across '
+        f'{len(by_plan)} plan{"s" if len(by_plan) != 1 else ""} '
+        f'in this window.</p>'
+    )
+
+    text_parts = [
+        "",
+        "RFP ALERTS",
+        "=" * 40,
+    ]
+    if headline:
+        text_parts.extend([f"Headline: {headline}", ""])
+    text_parts.append(
+        f"{len(polished)} RFP / consultant event(s) across {len(by_plan)} plan(s).\n"
+    )
+
+    base_url = (config.APPROVAL_BASE_URL or "").rstrip("/")
+    for plan_abbrev in sorted(by_plan):
+        items = by_plan[plan_abbrev]
+        plan_name = items[0]["plan_name"]
+        label = (f"{plan_abbrev} ({plan_name})"
+                 if plan_abbrev != plan_name else plan_name)
+        html_parts.append(
+            f'<h3 style="margin-top:1.2em;color:#003366;">{_html.escape(label)}</h3>'
+            '<ul style="padding-left:1.5em;">'
+        )
+        text_parts.append(label)
+        text_parts.append("-" * len(label))
+        for a in items:
+            doc_url = f"{base_url}/?doc={a['doc_id']}" if base_url else f"?doc={a['doc_id']}"
+            html_parts.append(
+                f'<li style="margin-bottom:0.6em;line-height:1.45;">'
+                f'<a href="{doc_url}" style="color:#4A90D9;">'
+                f'{_html.escape(a["filename"])}</a><br>'
+                f'<span style="color:#444;">{_html.escape(a["snippet"])}</span></li>'
+            )
+            text_parts.append(f"  • {a['filename']}")
+            text_parts.append(f"    {a['snippet']}")
+            text_parts.append(f"    {doc_url}")
+        html_parts.append("</ul>")
+        text_parts.append("")
+
+    return "\n".join(html_parts), "\n".join(text_parts)
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="scripts.send_daily_digest")
     parser.add_argument(
@@ -200,13 +267,26 @@ def main(argv=None) -> int:
     session = get_session()
     try:
         runs_data = collect_recent_runs(session, args.hours)
+        raw_alerts = find_alerts(session, hours=args.hours)
     finally:
         session.close()
 
+    polished, headline = polish_alerts(raw_alerts)
+
     html, text, total_docs = render_email(runs_data)
+    rfp_html, rfp_text = render_rfp_section(polished, headline)
+    if rfp_html:
+        # Inject before the closing </body> (or just append for text)
+        html = html.replace("</body></html>", rfp_html + "</body></html>")
+        text = text + rfp_text
+
     today = datetime.utcnow().strftime("%Y-%m-%d")
+    rfp_suffix = ""
+    if polished:
+        rfp_suffix = (f", {len(polished)} RFP alert"
+                      f"{'s' if len(polished) != 1 else ''}")
     subject = (f"[PensionGraph] Daily pipeline — {total_docs} new doc"
-               f"{'s' if total_docs != 1 else ''} ({today})")
+               f"{'s' if total_docs != 1 else ''}{rfp_suffix} ({today})")
 
     email = ApprovalEmail(
         subject=subject, html=html, text=text,
@@ -220,6 +300,7 @@ def main(argv=None) -> int:
     print(f"  subject:   {subject}")
     print(f"  runs:      {len(runs_data)}")
     print(f"  new docs:  {total_docs}")
+    print(f"  rfp alrt:  {len(polished)} polished from {len(raw_alerts)} regex candidates")
 
     delivery_id = send_email(email, to=recipient)
     print(f"  delivery:  {delivery_id}")

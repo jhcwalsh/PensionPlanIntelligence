@@ -100,6 +100,7 @@ jobs:
       - name: Send daily digest email
         if: ${{ success() && github.event.inputs.dry_run != 'true' }}
         env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           APPROVAL_EMAIL_RECIPIENT: ${{ secrets.APPROVAL_EMAIL_RECIPIENT }}
           APPROVAL_EMAIL_FROM: ${{ secrets.APPROVAL_EMAIL_FROM }}
