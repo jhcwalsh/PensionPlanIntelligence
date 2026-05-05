@@ -32,6 +32,46 @@ CADENCE_LABELS = {
 }
 
 
+def _extract_tldr(md: str) -> str | None:
+    """Return the body of a `## TL;DR` (or Summary/Overview) block if one exists.
+
+    The block runs from the heading line up to the next `## ` heading or EOF.
+    Case-insensitive on the heading text.
+    """
+    match = re.search(
+        r"^##\s+(?:TL;DR|Summary|Overview)\s*$\s*(.+?)(?=^##\s|\Z)",
+        md, flags=re.MULTILINE | re.IGNORECASE | re.DOTALL,
+    )
+    return match.group(1).strip() if match else None
+
+
+def _trim_leading_metadata(md: str) -> str:
+    """Drop the H1 title, italic 'Generated:' line, and horizontal rules from the top.
+
+    Operates on raw Markdown (before _strip_markdown) so heading syntax is still
+    visible. Stops at the first content-bearing line.
+    """
+    lines = md.split("\n")
+    i = 0
+    n = len(lines)
+    while i < n:
+        s = lines[i].strip()
+        if not s:
+            i += 1
+            continue
+        if s.startswith("# ") and not s.startswith("## "):
+            i += 1
+            continue
+        if s in {"---", "***", "___"}:
+            i += 1
+            continue
+        if re.match(r"^\*?_?generated:.*\*?_?$", s, re.IGNORECASE):
+            i += 1
+            continue
+        break
+    return "\n".join(lines[i:])
+
+
 def _strip_markdown(md: str) -> str:
     """Best-effort plaintext extraction from Markdown for the preview block.
 
@@ -55,10 +95,17 @@ def _strip_markdown(md: str) -> str:
 
 
 def _make_preview(draft_markdown: str) -> str:
-    """First ~700 chars of stripped Markdown, ending on a sentence boundary."""
+    """Build a ≤700-char prose preview from the briefing markdown.
+
+    Prefers an explicit `## TL;DR` block when the composer emits one.
+    Otherwise drops the title heading + `Generated:` line + leading divider
+    so the preview opens on real content rather than metadata.
+    """
     if not draft_markdown:
         return ""
-    text = _strip_markdown(draft_markdown)
+    tldr = _extract_tldr(draft_markdown)
+    source = tldr if tldr else _trim_leading_metadata(draft_markdown)
+    text = _strip_markdown(source)
     if len(text) <= PREVIEW_CHAR_LIMIT:
         return text
     truncated = text[:PREVIEW_CHAR_LIMIT]
