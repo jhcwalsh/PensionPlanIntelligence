@@ -20,6 +20,7 @@ from database import (
     CafrAllocation,
     CafrExtract,
     CafrPerformance,
+    CafrRefreshLog,
     Document,
     DocumentHealth,
     DocumentSkip,
@@ -1427,6 +1428,140 @@ def _render_cafr_coverage():
     st.dataframe(detail_df, hide_index=True, use_container_width=True)
 
 
+CAFR_REFRESH_LIMIT = 10  # how many distinct refresh runs to surface
+
+
+def _render_cafr_refreshes():
+    """Render the 'CAFR Refreshes' Admin sub-tab: per-run breakdown of
+    refresh_cafrs.py outcomes (saved / already_have / no_strategy / etc.),
+    last N runs, each expandable to per-plan status."""
+    from collections import defaultdict, Counter
+    from sqlalchemy import desc
+
+    st.caption(
+        f"Last {CAFR_REFRESH_LIMIT} CAFR refresh runs (GHA monthly + local "
+        "Task Scheduler). Each run produces one row per CAFR-having plan in "
+        "the cafr_refresh_log table. Status legend: saved = new CAFR saved; "
+        "already_have = nothing to do; no_strategy = no URL produced a "
+        "candidate (template/landing/static all returned None); url_failed "
+        "= download failed; validation_failed = file < min size or magic "
+        "header / cover-year mismatch."
+    )
+
+    session = get_session()
+    try:
+        # Distinct run timestamps, newest first
+        recent_run_ats = [
+            row[0] for row in
+            session.query(CafrRefreshLog.run_at)
+            .distinct()
+            .order_by(desc(CafrRefreshLog.run_at))
+            .limit(CAFR_REFRESH_LIMIT)
+            .all()
+        ]
+        if not recent_run_ats:
+            st.info(
+                "No CAFR refresh runs recorded yet. The next monthly cron "
+                "(GHA + local Task Scheduler) will populate this tab."
+            )
+            return
+
+        # Pull every row for those run_ats in one query
+        rows = (
+            session.query(
+                CafrRefreshLog.run_at,
+                CafrRefreshLog.plan_id,
+                CafrRefreshLog.expected_year,
+                CafrRefreshLog.status,
+                CafrRefreshLog.url_tried,
+                CafrRefreshLog.notes,
+            )
+            .filter(CafrRefreshLog.run_at.in_(recent_run_ats))
+            .order_by(desc(CafrRefreshLog.run_at), CafrRefreshLog.plan_id)
+            .all()
+        )
+        # Plan abbreviations for display
+        plans = {p.id: (p.abbreviation or p.id, p.name or p.id)
+                 for p in session.query(Plan).all()}
+    finally:
+        session.close()
+
+    # Group rows by run_at
+    by_run: dict = defaultdict(list)
+    for r in rows:
+        by_run[r.run_at].append(r)
+
+    # ---------- headline metrics across the most recent run
+    latest = recent_run_ats[0]
+    latest_rows = by_run[latest]
+    latest_counts = Counter(r.status for r in latest_rows)
+    n_total = len(latest_rows)
+    n_saved = latest_counts.get("saved", 0)
+    n_already = latest_counts.get("already_have", 0)
+    n_failed = (latest_counts.get("no_strategy", 0)
+                + latest_counts.get("url_failed", 0)
+                + latest_counts.get("validation_failed", 0)
+                + latest_counts.get("error", 0))
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Latest run", latest.strftime("%Y-%m-%d %H:%M"))
+    c2.metric("Plans processed", n_total)
+    c3.metric("Saved + already-have",
+              f"{n_saved + n_already} ({(n_saved + n_already) * 100 // n_total}%)"
+              if n_total else "0")
+    c4.metric("Failed", n_failed)
+
+    # ---------- per-run expanders, newest first
+    for run_at in recent_run_ats:
+        run_rows = by_run[run_at]
+        counts = Counter(r.status for r in run_rows)
+        # Build a one-line summary from the count breakdown
+        order = ["saved", "already_have", "no_strategy",
+                 "url_failed", "validation_failed", "error"]
+        summary_parts = [f"{counts[s]} {s}" for s in order if counts.get(s)]
+        label = (f"{run_at.strftime('%Y-%m-%d %H:%M UTC')}  ·  "
+                 f"{len(run_rows)} plans  ·  " + ", ".join(summary_parts))
+        # Expand only the most-recent run by default
+        with st.expander(label, expanded=(run_at == latest)):
+            # Group plans within the run by status for readability
+            by_status: dict = defaultdict(list)
+            for r in run_rows:
+                abbrev, name = plans.get(r.plan_id, (r.plan_id, r.plan_id))
+                by_status[r.status].append({
+                    "plan_id": r.plan_id,
+                    "abbrev": abbrev,
+                    "name": name,
+                    "expected_year": r.expected_year,
+                    "url_tried": r.url_tried,
+                    "notes": r.notes,
+                })
+            for status in order:
+                items = by_status.get(status, [])
+                if not items:
+                    continue
+                st.markdown(f"**{status}** ({len(items)})")
+                # 'saved' and 'already_have' are routine — show as one-liners
+                if status in ("saved", "already_have"):
+                    for it in items:
+                        line = f"&nbsp;&nbsp;• {it['abbrev']}"
+                        if it['expected_year']:
+                            line += f" — FY{it['expected_year']}"
+                        if it['notes']:
+                            line += f"  *({it['notes']})*"
+                        st.markdown(line, unsafe_allow_html=True)
+                else:
+                    # Failures get a richer view: include url + notes
+                    for it in items:
+                        line = (f"&nbsp;&nbsp;• **{it['abbrev']}** "
+                                f"(target FY{it['expected_year']})")
+                        if it['notes']:
+                            line += f"  — {it['notes']}"
+                        if it['url_tried']:
+                            line += (f"  [`{it['url_tried'][:80]}`"
+                                     f"{'…' if len(it['url_tried']) > 80 else ''}`]")
+                        st.markdown(line, unsafe_allow_html=True)
+
+
 def _admin_plan_coverage_df():
     """Build the per-plan coverage table used by the Admin page.
 
@@ -2263,9 +2398,10 @@ def page_rfp(plan_id, plan_label):
 def page_admin():
     """Admin views: pipeline / data-quality diagnostics for the site owner."""
     st.title("Admin")
-    tab_runs, tab_coverage, tab_backlog, tab_failed, tab_cafr = st.tabs(
+    (tab_runs, tab_coverage, tab_backlog, tab_failed,
+     tab_cafr, tab_cafr_refreshes) = st.tabs(
         ["Recent Runs", "Plan Coverage", "Pipeline Backlog",
-         "Failed Docs", "CAFR Coverage"]
+         "Failed Docs", "CAFR Coverage", "CAFR Refreshes"]
     )
 
     with tab_runs:
@@ -2361,6 +2497,9 @@ def page_admin():
 
     with tab_cafr:
         _render_cafr_coverage()
+
+    with tab_cafr_refreshes:
+        _render_cafr_refreshes()
 
 
 def page_approval_action(raw_token: str, action: str):
