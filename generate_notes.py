@@ -461,21 +461,49 @@ FORMAT REQUIREMENTS:
 - Bold (**) plan names, dollar amounts, and manager names on first mention
 - Include plan AUM in parentheses on first mention of each plan (see PLAN AUM TABLE)
 - Every sentence containing a $ figure, %, bps, vote tally, or manager name \
-must end with an inline citation in the form (doc_id=42). The cited doc_id \
-must be the one whose summary contains that specific figure or name verbatim. \
-If a sentence's figures come from two different docs, split the sentence so \
-each cite is unambiguous. The section-level *Sources:* line (see below) \
-remains as a summary.
-- End with ## Upcoming Meetings to Watch (bullet list of what's on deck next)
+must end with an inline citation as a parenthesised markdown link in the \
+form ([source](?doc=42)). The cited doc must be the one whose summary in \
+MEETING DATA contains that specific figure or name verbatim. If a sentence's \
+figures come from two different docs, either split the sentence so each cite \
+is unambiguous, or list both links: ([source](?doc=42), [source](?doc=58)). \
+Concrete example of an acceptable sentence: "**LAFPP** approved a three-year \
+contract extension with **MacKay Shields LLC** for high yield fixed income \
+through June 30, 2029, with the manager managing **$771.9 million** at \
+approximately **33 basis points** ([source](?doc=2069))." The section-level \
+*Sources:* line (see below) remains as a summary at the end of each section.
+- End with ## Upcoming Meetings to Watch. Today is {today_str}. Each bullet \
+must include a dated trigger that has not yet ended as of {today_str}. \
+"Has not yet ended" means: a specific calendar date strictly after \
+{today_str}; a month whose last day is after {today_str}; a quarter whose \
+last day is after {today_str}; or a half-year / "by year-end <YYYY>" whose \
+end date is after {today_str}. Omit any bullet whose dated trigger has \
+already passed. Omit bullets that reference only a past meeting with no \
+forward-looking date — do not invent one. Omit open-ended items ("ongoing", \
+"underway", "TBD", "in progress") that have no forward-dated trigger at all. \
+If nothing qualifies, write a single bullet: \
+"- _No forward-dated meetings or deadlines were identified in the source \
+materials._"
 - Hard cap 900 words total. If you reach it, drop the weakest-evidenced \
 theme entirely rather than trimming a sentence from each.
 
 SOURCE LINKS:
-Each summary in the data below includes a doc_id (e.g. doc_id=42). At the end of
-each ## section, add a *Sources:* line listing the documents referenced in that
-section as markdown links. Use this exact format for each link:
+Each summary in MEETING DATA below includes a doc_id (e.g. ``doc_id=42``). \
+You must cite sources two ways, and BOTH are required:
+
+1. INLINE — every sentence containing a $ figure, %, bps, vote tally, or \
+manager name ends with a parenthesised ``([source](?doc=ID))`` markdown \
+link. Use the doc_id whose summary contains that specific figure or name \
+verbatim. Multiple cites in one sentence are written \
+``([source](?doc=42), [source](?doc=58))``. Do NOT write the literal text \
+``(doc_id=42)`` — always write it as the markdown link \
+``([source](?doc=42))``.
+
+2. SECTION-LEVEL — at the end of each ## section, add a *Sources:* line \
+listing the documents referenced in that section. Use this exact format \
+for each link:
   [Plan Abbreviation — DocType — Date](?doc=ID)
 Example: *Sources: [CalPERS — Agenda — April 02, 2026](?doc=42), [LACERA — Board Pack — March 11, 2026](?doc=58)*
+
 Only cite documents whose content you actually used in that section.
 
 BEFORE FINALISING — scan the draft for these specific patterns and verify each \
@@ -489,11 +517,22 @@ these are the most common arithmetic-derived hallucinations)
 - list counts ("three plans", "all 11 portfolios", "two managers")
 - the connective phrases: "consistent with", "reflects", "driven by", \
 "a notable", "suggests", "indicates", "underscores"
-- every inline (doc_id=N): the cited doc must contain the specific figure or \
-name in that sentence verbatim, not merely be on the same topic.
+- every inline ([source](?doc=N)) link: the cited doc must contain the \
+specific figure or name in that sentence verbatim, not merely be on the \
+same topic. Every sentence containing a $ figure, %, bps, vote tally, or \
+manager name MUST have at least one such inline link — if any qualifying \
+sentence is missing one, add it before finalising. Do NOT leave bare \
+``(doc_id=N)`` text — convert any to ``([source](?doc=N))``.
 - AUM consistency: each plan should appear with one and only one AUM value \
 throughout the note (the PLAN AUM TABLE value, OR a single override with an \
 "as of <date>" qualifier — never both for the same plan).
+- ## Upcoming Meetings to Watch: re-read every bullet. Today is {today_str}. \
+Delete any bullet whose dated trigger has already ended on or before \
+{today_str} (a calendar date, month, or quarter whose end is in the past). \
+Delete any bullet that has no forward-dated trigger at all (pure "ongoing", \
+"underway", "TBD", "in progress"). If this empties the section, emit the \
+single "_No forward-dated meetings or deadlines were identified in the \
+source materials._" bullet instead.
 
 PLAN AUM TABLE (canonical reference):
 {aum_table}
