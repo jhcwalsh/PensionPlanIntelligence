@@ -796,24 +796,67 @@ def _find_latest_consultant_rfps() -> tuple[Path, str, str] | None:
     return (path, title, generated_date)
 
 
-_RFP_ALERT_PATTERN = re.compile(
-    r"\b(RFPs?|RFQs?|Requests? for Proposals?|"
-    r"Requests? for Qualifications?|consultants?)\b",
+_RFP_PATTERN = re.compile(
+    r"\b(RFPs?|RFQs?|Requests? for Proposals?|Requests? for Qualifications?)\b",
     re.IGNORECASE,
 )
+_CONSULTANT_PATTERN = re.compile(r"\bconsultants?\b", re.IGNORECASE)
+_CONSULTANT_ACTIONS = frozenset([
+    "search", "searches", "searching",
+    "select", "selects", "selection", "selecting", "selected",
+    "rebid", "rebidding",
+    "procurement", "procure", "procuring",
+    "shortlist", "shortlisted",
+    "award", "awards", "awarded", "awarding",
+    "incumbent",
+    "replace", "replaces", "replacing", "replaced",
+    "renew", "renews", "renewing", "renewed", "renewal",
+    "expire", "expires", "expiring", "expired", "expiration",
+    "interview", "interviews", "interviewing",
+    "finalist", "finalists",
+    "issued", "issuing", "issue",
+    "rfp", "rfps", "rfq", "rfqs",
+    "proposal", "proposals",
+    "responses", "respondents", "respondent",
+])
+_CONSULTANT_CONTEXT_WINDOW = 8  # words on either side of the consultant token
+
+
+def _find_consultant_with_context(text: str):
+    """First 'consultant' mention paired with an RFP-context action word
+    within ±``_CONSULTANT_CONTEXT_WINDOW`` words. Returns the re.Match or None.
+    """
+    word_matches = list(re.finditer(r"\b\w+\b", text))
+    words_lower = [m.group(0).lower() for m in word_matches]
+    for i, w in enumerate(words_lower):
+        if w not in {"consultant", "consultants"}:
+            continue
+        lo = max(0, i - _CONSULTANT_CONTEXT_WINDOW)
+        hi = min(len(words_lower), i + _CONSULTANT_CONTEXT_WINDOW + 1)
+        if any(words_lower[j] in _CONSULTANT_ACTIONS for j in range(lo, hi) if j != i):
+            return word_matches[i]
+    return None
 
 
 def _extract_rfp_snippet(text: str, max_words: int = 25) -> tuple[str, str] | None:
-    """Find the first RFP/consultant mention; return (keyword, ~25-word window).
+    """Find the first qualifying RFP/consultant mention.
 
-    Window is centered on the match: ~half the budget of words before, the rest
-    after (including the keyword). Adds ellipses when the snippet is truncated.
-    Returns None if no match.
+    Always flags RFP / RFQ / Request for Proposal / Request for Qualifications.
+    Flags 'consultant' only when an RFP-context action word (search,
+    selection, rebid, incumbent, shortlist, award, etc.) appears within
+    ±8 words. Returns (keyword, ~25-word snippet) or None.
     """
     if not text:
         return None
-    match = _RFP_ALERT_PATTERN.search(text)
-    if not match:
+
+    rfp_match = _RFP_PATTERN.search(text)
+    consultant_match = _find_consultant_with_context(text)
+
+    if rfp_match and consultant_match:
+        match = rfp_match if rfp_match.start() <= consultant_match.start() else consultant_match
+    else:
+        match = rfp_match or consultant_match
+    if match is None:
         return None
     keyword = match.group(0)
 
