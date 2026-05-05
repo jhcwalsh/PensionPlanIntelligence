@@ -357,10 +357,33 @@ def page_search(plan_id, plan_label):
             st.rerun()
 
 
-def page_browse(plan_id, plan_label):
-    st.title("Recent Meetings")
+def page_activity(plan_id, plan_label):
+    """Recency-driven activity feed with three view modes.
 
-    limit = st.slider("Show last N documents", 5, 100, 20)
+    Replaces the previous three browse-mode tabs (Summary / Updates / Browse
+    Recent) — same underlying data, different groupings, behind a single tab
+    with a view-mode segmented control. The plan filter and the look-back
+    control are scoped per view.
+    """
+    st.title("Recent Activity")
+    view = st.radio(
+        "View",
+        options=["By plan", "By meeting", "By document"],
+        horizontal=True,
+        key="activity_view",
+        label_visibility="collapsed",
+    )
+    if view == "By plan":
+        _render_activity_by_plan(plan_id, plan_label)
+    elif view == "By meeting":
+        _render_activity_by_meeting(plan_id, plan_label)
+    else:
+        _render_activity_by_document(plan_id, plan_label)
+
+
+def _render_activity_by_document(plan_id, plan_label):
+    """Recency-driven document feed — last N docs across the corpus."""
+    limit = st.slider("Show last N documents", 5, 100, 20, key="activity_doc_limit")
     results = load_recent_summaries(plan_id=plan_id if plan_label != "All" else None,
                                     limit=limit)
 
@@ -409,11 +432,11 @@ def _truncate_words(text: str, max_words: int) -> tuple[str, bool]:
     return " ".join(words[:max_words]) + "…", True
 
 
-def page_summary_updates(plan_id, plan_label):
-    st.title("Summary of Updates")
+def _render_activity_by_plan(plan_id, plan_label):
+    """Plan-grouped headline view — one snapshot per plan, expand for detail."""
     st.caption("One snapshot per plan — up to 100 words. Expand a plan for the full detail.")
 
-    days = st.slider("Look back (days)", 1, 90, 14, key="summary_days")
+    days = st.slider("Look back (days)", 1, 90, 14, key="activity_by_plan_days")
     session = get_db_session()
     meetings = get_new_meetings(session, days=days)
 
@@ -488,11 +511,11 @@ def page_summary_updates(plan_id, plan_label):
         st.divider()
 
 
-def page_updates(plan_id, plan_label):
-    st.title("Meeting Updates")
+def _render_activity_by_meeting(plan_id, plan_label):
+    """Per-meeting card view — full agenda summary + materials per meeting."""
     st.caption("New meetings detected since last pipeline run, with agenda summaries and links to materials.")
 
-    days = st.slider("Look back (days)", 1, 90, 14)
+    days = st.slider("Look back (days)", 1, 90, 14, key="activity_by_meeting_days")
     session = get_db_session()
     meetings = get_new_meetings(session, days=days)
 
@@ -2868,7 +2891,7 @@ def main():
         return
 
     tabs = st.tabs([
-        "Insights", "Summary", "Updates", "Search", "Browse Recent",
+        "Insights", "Activity", "Search",
         "Investment Actions", "Managers", "RFPs", "CAFR", "Asset Allocation",
         "Plans", "Drafts", "Archive", "Admin",
     ])
@@ -2876,30 +2899,26 @@ def main():
     with tabs[0]:
         page_insights()
     with tabs[1]:
-        page_summary_updates(plan_id, plan_label)
+        page_activity(plan_id, plan_label)
     with tabs[2]:
-        page_updates(plan_id, plan_label)
-    with tabs[3]:
         page_search(plan_id, plan_label)
-    with tabs[4]:
-        page_browse(plan_id, plan_label)
-    with tabs[5]:
+    with tabs[3]:
         page_investment_actions(plan_id, plan_label)
-    with tabs[6]:
+    with tabs[4]:
         page_managers()
-    with tabs[7]:
+    with tabs[5]:
         page_rfp(plan_id, plan_label)
-    with tabs[8]:
+    with tabs[6]:
         page_cafr()
-    with tabs[9]:
+    with tabs[7]:
         page_asset_allocation()
-    with tabs[10]:
+    with tabs[8]:
         page_plans()
-    with tabs[11]:
+    with tabs[9]:
         page_drafts()
-    with tabs[12]:
+    with tabs[10]:
         page_archive()
-    with tabs[13]:
+    with tabs[11]:
         page_admin()
 
 
