@@ -181,13 +181,15 @@ def render_publication_notice(publication: Publication) -> ApprovalEmail:
     )
 
 
-def send_publication_notice(publication: Publication, to: str | None = None) -> str:
+def send_publication_notice(publication: Publication,
+                            to: str | list[str] | None = None) -> str:
     """Send the post-approval notice. Returns the Resend delivery id (or
     mock-mode file path).
 
-    Recipient defaults to ``APPROVAL_EMAIL_RECIPIENT``. Pass ``to`` to
-    override (used by tests). Honors INSIGHTS_MODE=mock through the
-    underlying send_email() helper.
+    Recipients default to ``APPROVAL_EMAIL_RECIPIENTS`` (the comma-split
+    of ``APPROVAL_EMAIL_RECIPIENT``). Pass ``to`` as a single address, a
+    list, or a comma-separated string to override. Honors
+    INSIGHTS_MODE=mock through the underlying send_email() helper.
     """
     if publication.status != "published":
         raise ValueError(

@@ -31,6 +31,14 @@ APPROVAL_REMINDER_HOURS = int(os.environ.get("APPROVAL_REMINDER_HOURS", "72"))
 APPROVAL_EMAIL_RECIPIENT = os.environ.get(
     "APPROVAL_EMAIL_RECIPIENT", "founder@pensionintel.com"
 )
+# Comma-separated recipient list parsed once at import. Every approval /
+# notice / reminder email sent through ``insights.approval.send_email``
+# fans out to all entries. The single-string ``APPROVAL_EMAIL_RECIPIENT``
+# is preserved for any caller that still references it directly.
+APPROVAL_EMAIL_RECIPIENTS: list[str] = [
+    addr.strip() for addr in APPROVAL_EMAIL_RECIPIENT.split(",")
+    if addr.strip()
+]
 APPROVAL_EMAIL_FROM = os.environ.get(
     "APPROVAL_EMAIL_FROM", "insights@pensionintel.com"
 )
