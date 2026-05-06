@@ -1113,9 +1113,49 @@ def page_insights():
             )
 
 
+_DEPLOYMENT_ACTIONS = {"hire", "fire", "commitment"}
+_POLICY_ACTIONS = {"rebalance", "allocation_change", "policy_change", "other"}
+
+
+def _coerce_amount(val) -> float | None:
+    """Tolerantly parse amount_millions which may be int / float / str / None."""
+    if val in (None, "", "None"):
+        return None
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return None
+
+
+def _excerpt(text: str, n: int) -> str:
+    """Truncate ``text`` to ``n`` characters with an ellipsis when cut."""
+    if not text:
+        return ""
+    text = text.replace("\n", " ").strip()
+    return text if len(text) <= n else text[:n].rstrip() + "…"
+
+
+def _fmt_amount(v) -> str:
+    """Format a $M number with comma thousands; blank if missing."""
+    a = _coerce_amount(v)
+    return f"{a:,.1f}" if a is not None else ""
+
+
 def page_investment_actions(plan_id, plan_label):
     st.title("Investment Actions")
-    st.caption("Manager hires/fires, allocation changes, and new commitments extracted from board packs.")
+    st.caption(
+        "Manager hires/fires, allocation changes, and new commitments "
+        "extracted from board packs. The 'Capital deployment' tab shows "
+        "money-flow actions (hire/fire/commitment); 'Policy & rebalancing' "
+        "shows allocation shifts, policy changes, and other governance items."
+    )
+
+    days_back = st.slider(
+        "Look-back window (days)", min_value=30, max_value=365, value=90, step=30,
+        key="invest_actions_days",
+        help="Filters by document meeting date.",
+    )
+    cutoff = datetime.utcnow().date() - timedelta(days=days_back)
 
     session = get_db_session()
     q = (
@@ -1123,45 +1163,165 @@ def page_investment_actions(plan_id, plan_label):
         .join(Summary, Document.id == Summary.document_id)
         .filter(Summary.investment_actions != "[]")
         .filter(Summary.investment_actions.isnot(None))
+        .filter(Document.meeting_date >= cutoff)
     )
     if plan_id:
         q = q.filter(Document.plan_id == plan_id)
-    results = q.order_by(Document.meeting_date.desc()).limit(100).all()
+    results = q.order_by(Document.meeting_date.desc()).all()
 
     if not results:
-        st.info("No investment actions found yet.")
+        st.info(f"No investment actions in the last {days_back} days.")
         return
 
-    action_filter = st.multiselect(
-        "Filter by action type",
-        ["hire", "fire", "rebalance", "allocation_change", "commitment", "other"],
-        default=[]
-    )
-
-    rows = []
+    deployment_rows: list[dict] = []
+    policy_rows: list[dict] = []
     for doc, summary in results:
-        actions = parse_json_field(summary.investment_actions)
+        actions = parse_json_field(summary.investment_actions) or []
         for a in actions:
-            if action_filter and a.get("action") not in action_filter:
-                continue
-            rows.append({
+            row = {
                 "Plan": doc.plan_id.upper(),
                 "Date": doc.meeting_date.strftime("%Y-%m-%d") if doc.meeting_date else "",
-                "Action": a.get("action", ""),
-                "Description": a.get("description", ""),
-                "Manager": a.get("manager", ""),
-                "Asset Class": a.get("asset_class", ""),
-                "Amount ($M)": a.get("amount_millions", ""),
-            })
+                "Action": a.get("action", "") or "",
+                "Manager": a.get("manager", "") or "",
+                "Asset Class": a.get("asset_class", "") or "",
+                "Amount ($M)": _coerce_amount(a.get("amount_millions")),
+                "Description": a.get("description", "") or "",
+                "doc_id": doc.id,
+            }
+            action = row["Action"]
+            if action in _DEPLOYMENT_ACTIONS:
+                deployment_rows.append(row)
+            else:
+                # Unknown / blank actions land in policy as a catch-all.
+                policy_rows.append(row)
 
-    if rows:
-        import pandas as pd
-        df = pd.DataFrame(rows)
-        st.dataframe(df, use_container_width=True, hide_index=True)
-        csv = df.to_csv(index=False)
-        st.download_button("Download CSV", csv, "investment_actions.csv", "text/csv")
+    tab_deploy, tab_policy = st.tabs([
+        f"Capital deployment ({len(deployment_rows)})",
+        f"Policy & rebalancing ({len(policy_rows)})",
+    ])
+    with tab_deploy:
+        _render_deployment_actions(deployment_rows, days_back)
+    with tab_policy:
+        _render_policy_actions(policy_rows, days_back)
+
+
+def _render_deployment_actions(rows: list[dict], days_back: int) -> None:
+    """Hires, fires, commitments — money-flow view with amount filter."""
+    import pandas as pd
+
+    if not rows:
+        st.info(f"No capital deployment actions in the last {days_back} days.")
+        return
+
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        min_amount = st.slider(
+            "Minimum amount ($M)", 0, 250, 10, step=5,
+            key="invest_actions_min_amount",
+            help=(
+                "Drop small or unspecified amounts. Set to 0 to include "
+                "rows with no amount captured."
+            ),
+        )
+    with col2:
+        action_types = sorted({r["Action"] for r in rows if r["Action"]})
+        selected_actions = st.multiselect(
+            "Action type",
+            action_types,
+            default=action_types,
+            key="invest_actions_deploy_types",
+        )
+
+    if min_amount > 0:
+        filtered = [
+            r for r in rows
+            if r["Action"] in selected_actions
+            and r["Amount ($M)"] is not None
+            and r["Amount ($M)"] >= min_amount
+        ]
     else:
-        st.info("No actions match the current filter.")
+        filtered = [r for r in rows if r["Action"] in selected_actions]
+
+    total_amount = sum(
+        r["Amount ($M)"] for r in filtered if r["Amount ($M)"] is not None
+    )
+    plan_count = len({r["Plan"] for r in filtered})
+    st.markdown(
+        f"**{len(filtered)} actions** · "
+        f"**${total_amount:,.0f}M total** · "
+        f"across **{plan_count} plans** · "
+        f"last **{days_back} days**"
+    )
+
+    if not filtered:
+        st.info("No actions match the current filters.")
+        return
+
+    df = pd.DataFrame(filtered)
+    df["Excerpt"] = df["Description"].map(lambda t: _excerpt(t, 100))
+    df["Amount ($M)"] = df["Amount ($M)"].map(_fmt_amount)
+
+    display = df[["Plan", "Date", "Action", "Manager", "Asset Class",
+                  "Amount ($M)", "Excerpt"]]
+    st.dataframe(display, use_container_width=True, hide_index=True)
+    csv_df = df[["Plan", "Date", "Action", "Manager", "Asset Class",
+                 "Amount ($M)", "Description", "doc_id"]]
+    st.download_button(
+        "Download CSV (full descriptions)",
+        csv_df.to_csv(index=False),
+        "capital_deployment.csv",
+        "text/csv",
+    )
+
+
+def _render_policy_actions(rows: list[dict], days_back: int) -> None:
+    """Rebalances, allocation changes, governance — descriptive view.
+
+    'other' is hidden by default because most rows in that bucket are
+    low-signal governance items (waivers, committee notes, etc.)."""
+    import pandas as pd
+
+    if not rows:
+        st.info(f"No policy or rebalancing actions in the last {days_back} days.")
+        return
+
+    action_types = sorted({r["Action"] for r in rows if r["Action"]})
+    default_selected = [t for t in action_types if t != "other"]
+
+    selected = st.multiselect(
+        "Action type",
+        action_types,
+        default=default_selected,
+        key="invest_actions_policy_types",
+        help="'other' is hidden by default — usually low-signal governance items.",
+    )
+
+    filtered = [r for r in rows if r["Action"] in selected]
+
+    plan_count = len({r["Plan"] for r in filtered})
+    st.markdown(
+        f"**{len(filtered)} actions** · "
+        f"across **{plan_count} plans** · "
+        f"last **{days_back} days**"
+    )
+
+    if not filtered:
+        st.info("No actions match the current filters.")
+        return
+
+    df = pd.DataFrame(filtered)
+    df["Excerpt"] = df["Description"].map(lambda t: _excerpt(t, 140))
+
+    display = df[["Plan", "Date", "Action", "Asset Class", "Excerpt"]]
+    st.dataframe(display, use_container_width=True, hide_index=True)
+    csv_df = df[["Plan", "Date", "Action", "Manager", "Asset Class",
+                 "Description", "doc_id"]]
+    st.download_button(
+        "Download CSV (full descriptions)",
+        csv_df.to_csv(index=False),
+        "policy_actions.csv",
+        "text/csv",
+    )
 
 
 # ---------------------------------------------------------------------------
