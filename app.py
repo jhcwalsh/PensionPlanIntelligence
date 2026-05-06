@@ -2273,27 +2273,56 @@ ASSET_ALLOCATION_VIEWS = (
 
 
 @st.cache_data(ttl=300)
-def _allocation_df(match_patterns: tuple, exclude_patterns: tuple, exact_label: str):
+def _allocation_fy_range() -> tuple[int, int] | None:
+    """Min/max fiscal_year across CAFR extracts. Returns ``None`` if empty."""
+    from sqlalchemy import func
+
+    session = get_db_session()
+    row = (
+        session.query(
+            func.min(CafrExtract.fiscal_year),
+            func.max(CafrExtract.fiscal_year),
+        )
+        .filter(CafrExtract.fiscal_year.isnot(None))
+        .one_or_none()
+    )
+    if not row or row[0] is None or row[1] is None:
+        return None
+    return int(row[0]), int(row[1])
+
+
+@st.cache_data(ttl=300)
+def _allocation_df(match_patterns: tuple, exclude_patterns: tuple,
+                   exact_label: str, min_fy: int | None = None):
     """Plans with both target and actual weights for a given asset class.
 
-    Pulls the latest CAFR extract per plan, filters allocation rows whose
-    asset_class matches any of `match_patterns` (case-insensitive LIKE)
-    and matches none of `exclude_patterns`, and keeps only rows where both
-    target_pct and actual_pct are populated. When a plan has multiple
-    matching rows, the one whose asset_class equals `exact_label` is
-    preferred; otherwise the first row is kept.
+    Pulls the latest CAFR extract per plan (whose fiscal_year is at least
+    ``min_fy`` if provided), filters allocation rows whose asset_class
+    matches any of ``match_patterns`` (case-insensitive LIKE) and matches
+    none of ``exclude_patterns``, and keeps only rows where both target_pct
+    and actual_pct are populated. When a plan has multiple matching rows,
+    the one whose asset_class equals ``exact_label`` is preferred;
+    otherwise the first row is kept.
     """
     import pandas as pd
     from sqlalchemy import func, or_
 
     session = get_db_session()
 
-    latest_extract_id = (
+    # The "latest extract per plan" subquery has to apply the same
+    # min_fy filter; otherwise a plan whose newest CAFR is older than
+    # min_fy would simply drop out (correct), but a plan whose newest
+    # CAFR is newer than min_fy would still be picked even when the
+    # user only wanted older data — apply consistently.
+    latest_extract_q = (
         session.query(func.max(CafrExtract.id))
         .filter(CafrExtract.plan_id == Plan.id)
-        .correlate(Plan)
-        .scalar_subquery()
     )
+    if min_fy is not None:
+        latest_extract_q = latest_extract_q.filter(
+            CafrExtract.fiscal_year >= min_fy
+        )
+    latest_extract_id = latest_extract_q.correlate(Plan).scalar_subquery()
 
     asset_class_lower = func.lower(CafrAllocation.asset_class)
     match_clause = or_(*[asset_class_lower.like(p) for p in match_patterns])
@@ -2439,6 +2468,25 @@ def page_asset_allocation():
         "underweight."
     )
 
+    fy_range = _allocation_fy_range()
+    min_fy: int | None = None
+    if fy_range:
+        lo, hi = fy_range
+        if hi > lo:
+            min_fy = st.slider(
+                "Show CAFRs with fiscal year ≥",
+                min_value=lo,
+                max_value=hi,
+                value=lo,
+                step=1,
+                key="asset_alloc_min_fy",
+                help=(
+                    "Drop plans whose latest available CAFR fiscal year is "
+                    "older than this. Useful for excluding stale data when "
+                    "comparing against current policy targets."
+                ),
+            )
+
     sub_tabs = st.tabs([v["tab_name"] for v in ASSET_ALLOCATION_VIEWS])
     for tab, view in zip(sub_tabs, ASSET_ALLOCATION_VIEWS):
         with tab:
@@ -2446,6 +2494,7 @@ def page_asset_allocation():
                 view["match_patterns"],
                 view["exclude_patterns"],
                 view["exact_label"],
+                min_fy=min_fy,
             )
             _render_allocation_view(df, view["tab_name"])
 
