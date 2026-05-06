@@ -706,9 +706,45 @@ def _find_latest_insights_recent() -> tuple[Path, str, str] | None:
 from insights.render import markdown_to_pdf_bytes as _markdown_to_pdf_bytes
 
 
+_INLINE_CITE_RE = re.compile(
+    # Match a parenthesised inline citation like:
+    #   ([source](?doc=42))
+    #   ([source 1](?doc=42), [source 2](?doc=58))
+    # The "source" link-text prefix is the discriminator that distinguishes
+    # these from the section-level *Sources:* footer links, which use
+    # "[Plan — DocType — Date](?doc=N)" and should keep their full text.
+    # An optional leading space is consumed so the superscript glues to the
+    # preceding word, academic-paper style.
+    r"\s?\(\s*"
+    r"\[source[^\]]*\]\(\?doc=\d+\)"
+    r"(?:\s*,\s*\[source[^\]]*\]\(\?doc=\d+\))*"
+    r"\s*\)",
+    flags=re.IGNORECASE,
+)
+
+
+def _shrink_inline_cites(text: str) -> str:
+    """Compress noisy ``([source](?doc=N))`` citations into superscript ``[N]``
+    links. The full bibliography is preserved by the section-level
+    ``*Sources:*`` footer the composer also emits."""
+    def repl(match: re.Match) -> str:
+        ids = re.findall(r"\?doc=(\d+)", match.group(0))
+        return "".join(
+            f'<sup style="font-size:0.72em;line-height:0;margin:0 1px;">'
+            f'<a href="?doc={i}" '
+            f'style="color:#4A90D9;text-decoration:none;">[{i}]</a>'
+            f'</sup>'
+            for i in ids
+        )
+    return _INLINE_CITE_RE.sub(repl, text)
+
+
 def _notes_md_to_html(content: str) -> str:
     """Convert notes markdown to HTML with inline styles, bypassing Streamlit's renderer."""
     def inline(text: str) -> str:
+        # Inline citations first — must run before the generic link regex
+        # so the "[source](?doc=N)" pattern doesn't get matched as a normal link.
+        text = _shrink_inline_cites(text)
         # Links: [text](url) → <a>
         text = re.sub(
             r'\[([^\]]+)\]\(([^)]+)\)',
