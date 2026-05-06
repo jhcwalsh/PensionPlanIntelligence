@@ -947,14 +947,15 @@ def _render_rfp_alerts():
     )
     _render_ai_disclaimer()
 
-    hours = st.slider("Look-back window (hours)", 12, 168, 24, step=12,
-                      key="rfp_alerts_hours")
+    days = st.slider("Look-back window (days)", 1, 30, 1, step=1,
+                     key="rfp_alerts_days")
+    hours = days * 24
 
     session = get_db_session()
     raw_alerts = _find_rfp_alerts_raw(session, hours=hours)
 
     if not raw_alerts:
-        st.info(f"No RFP or consultant references found in materials from the last {hours} hours.")
+        st.info(f"No RFP or consultant references found in materials from the last {days} day(s).")
         return
 
     # Build a hashable, stable per-doc tuple so st.cache_data keys correctly.
@@ -989,7 +990,7 @@ def _render_rfp_alerts():
     if not enriched:
         st.info(
             f"{len(raw_alerts)} regex candidate(s) all filtered out by Haiku as "
-            f"incidental mentions in the last {hours} hours."
+            f"incidental mentions in the last {days} day(s)."
         )
         return
 
