@@ -20,7 +20,7 @@ import argparse
 import json
 import logging
 import sys
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from database import Document, Plan, RFPRecord, get_session
@@ -57,24 +57,42 @@ def _parse_iso(s: str | None) -> date | None:
         return None
 
 
-def _is_in_period(rec: dict, start: date, end: date) -> bool:
-    """True if the RFP relates to [start, end].
+_AWARDED_STATUSES = {"awarded", "closed"}
+_ACTIVE_STALENESS = timedelta(days=365)
+_AWARDED_STALENESS = timedelta(days=90)
 
-    Includes the record if any of release/due/award dates fall in the
-    window. Falls back to ``extracted_at`` when none of the explicit
-    dates are present, so newly-discovered RFPs without firm timing
-    aren't dropped just because the source doc didn't list dates yet.
+
+def _is_relevant(rec: dict, start: date, end: date) -> bool:
+    """True if the RFP belongs in the brief for [start, end].
+
+    Anchor: the source document's ``meeting_date`` (or ``downloaded_at``
+    for CAFRs and other non-meeting docs) must fall in the window. This
+    captures "what surfaced in this month's board materials" rather than
+    the RFP's self-reported dates, which lag and miss dateless Planned
+    rows.
+
+    Staleness guard: even if the doc is fresh, drop records whose latest
+    explicit date (release/due/award) is older than the configured
+    horizon — 12 months for active stages, 3 months for Awarded/Closed.
+    Records with no explicit dates pass the guard (newly surfaced).
     """
+    anchor = _parse_iso(rec.get("meeting_date")) or _parse_iso(rec.get("downloaded_at"))
+    if anchor is None or not (start <= anchor <= end):
+        return False
+
     explicit = [
         _parse_iso(rec.get("release_date")),
         _parse_iso(rec.get("response_due_date")),
         _parse_iso(rec.get("award_date")),
     ]
     explicit = [d for d in explicit if d is not None]
-    if explicit:
-        return any(start <= d <= end for d in explicit)
-    extracted = _parse_iso(rec.get("extracted_at"))
-    return extracted is not None and start <= extracted <= end
+    if not explicit:
+        return True
+
+    horizon = (_AWARDED_STALENESS
+               if (rec.get("status") or "").lower() in _AWARDED_STATUSES
+               else _ACTIVE_STALENESS)
+    return max(explicit) >= end - horizon
 
 
 def _gather_consultant_rfps(period_start: date | None = None,
@@ -112,10 +130,12 @@ def _gather_consultant_rfps(period_start: date | None = None,
                 "mandate_size_usd_millions": payload.get("mandate_size_usd_millions"),
                 "doc_id": doc.id,
                 "doc_filename": doc.filename,
+                "meeting_date": doc.meeting_date.isoformat() if doc.meeting_date else "",
+                "downloaded_at": doc.downloaded_at.isoformat() if doc.downloaded_at else "",
                 "extracted_at": r.extracted_at.isoformat() if r.extracted_at else "",
             })
         if period_start and period_end:
-            out = [rec for rec in out if _is_in_period(rec, period_start, period_end)]
+            out = [rec for rec in out if _is_relevant(rec, period_start, period_end)]
         return out
     finally:
         session.close()
@@ -129,10 +149,10 @@ def _build_user_prompt(records: list[dict],
 
     return f"""\
 Write a Monthly Consultant RFP Brief for {month_label} summarizing the
-{len(records)} consultant-type RFP records with activity in {month_label}
-(records have at least one of release_date / response_due_date /
-award_date in the period, OR were newly extracted during it without
-firm dates yet).
+{len(records)} consultant-type RFP records that surfaced in board
+materials dated within {month_label}. Records with stale explicit dates
+(active searches >12 months old, or awards >3 months old) have already
+been filtered out upstream.
 
 GROUNDING RULES (non-negotiable):
 - Every plan name, RFP title, status, date, dollar figure, and vendor
@@ -151,7 +171,7 @@ GROUNDING RULES (non-negotiable):
 
 FORMAT REQUIREMENTS:
 - Start with exactly: # Monthly Consultant RFP Brief: {month_label}
-- Second line: *RFP activity during \
+- Second line: *Surfaced in board materials dated \
 {period_start.isoformat()} – {period_end.isoformat()}*
 - Third line: *Generated: {today_str}*
 - Then a --- horizontal rule.
