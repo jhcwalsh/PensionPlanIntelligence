@@ -1,17 +1,19 @@
-"""Compose a monthly Consultant RFP newsletter from rfp_records.
+"""Compose a weekly Consultant RFP newsletter from rfp_records.
 
-Pulls every rfp_records row whose payload ``rfp_type == 'consultant'``,
-joins to Document/Plan for context, hands the structured data to
-Claude, and writes the resulting markdown to
-``notes/monthly_consultant_rfps_<period_start>.md``.
+Each Sunday run produces a brief covering the trailing 7 days plus a
+running 30-day list. Pulls every rfp_records row whose payload
+``rfp_type == 'consultant'``, joins to Document/Plan for context, hands
+the structured data to Claude, and writes the resulting markdown to
+``notes/weekly_consultant_rfps_<period_end>.md`` where period_end is
+the Sunday the brief covers.
 
 This is its own briefing — independent of the Insights weekly /
 monthly cycle — so it doesn't go through the Publication approval
-flow. The Insights tab reads ``monthly_consultant_rfps_*.md`` directly.
+flow. The Insights tab reads ``weekly_consultant_rfps_*.md`` directly.
 
 Run:
-    python -m scripts.compose_rfp_monthly                   # April 2026
-    python -m scripts.compose_rfp_monthly --period 2026-05  # any month
+    python -m scripts.compose_rfp_weekly                          # most recent Sunday
+    python -m scripts.compose_rfp_weekly --period 2026-05-10      # any Sunday
 """
 
 from __future__ import annotations
@@ -29,9 +31,12 @@ logger = logging.getLogger(__name__)
 
 NOTES_DIR = Path(__file__).parent.parent / "notes"
 
+_WEEK_DAYS = 7
+_MONTH_DAYS = 30
+
 _SYSTEM_PROMPT = """\
 You are a senior investment analyst at a pension fund research firm.
-You write concise, factual monthly briefings on consultant RFP activity
+You write concise, factual weekly briefings on consultant RFP activity
 across U.S. public pension plans for institutional readers.
 
 Style:
@@ -66,14 +71,9 @@ def _is_relevant(rec: dict, start: date, end: date) -> bool:
     """True if the RFP belongs in the brief for [start, end].
 
     Anchor: the source document's ``meeting_date`` (or ``downloaded_at``
-    for CAFRs and other non-meeting docs) must fall in the window. This
-    captures "what surfaced in this month's board materials" rather than
-    the RFP's self-reported dates, which lag and miss dateless Planned
-    rows.
-
-    Staleness guard: even if the doc is fresh, drop records whose latest
-    explicit date (release/due/award) is older than the configured
-    horizon — 12 months for active stages, 3 months for Awarded/Closed.
+    for CAFRs and other non-meeting docs) must fall in the window.
+    Staleness guard: drop records whose latest explicit date is older
+    than 12 months (3 months for Awarded/Closed) before period_end.
     Records with no explicit dates pass the guard (newly surfaced).
     """
     anchor = _parse_iso(rec.get("meeting_date")) or _parse_iso(rec.get("downloaded_at"))
@@ -95,8 +95,8 @@ def _is_relevant(rec: dict, start: date, end: date) -> bool:
     return max(explicit) >= end - horizon
 
 
-def _gather_consultant_rfps(period_start: date | None = None,
-                            period_end: date | None = None) -> list[dict]:
+def _gather_consultant_rfps(period_start: date, period_end: date) -> list[dict]:
+    """Return all consultant-type RFP records relevant to [start, end]."""
     session = get_session()
     try:
         rows = (
@@ -134,25 +134,47 @@ def _gather_consultant_rfps(period_start: date | None = None,
                 "downloaded_at": doc.downloaded_at.isoformat() if doc.downloaded_at else "",
                 "extracted_at": r.extracted_at.isoformat() if r.extracted_at else "",
             })
-        if period_start and period_end:
-            out = [rec for rec in out if _is_relevant(rec, period_start, period_end)]
-        return out
+        return [rec for rec in out if _is_relevant(rec, period_start, period_end)]
     finally:
         session.close()
 
 
-def _build_user_prompt(records: list[dict],
-                       period_start: date, period_end: date) -> str:
+def _tag_week(records: list[dict], week_start: date, week_end: date) -> list[dict]:
+    """Mark each 30-day record with ``new_this_week`` so the LLM can flag it."""
+    out = []
+    for r in records:
+        rec = dict(r)
+        anchor = _parse_iso(r.get("meeting_date")) or _parse_iso(r.get("downloaded_at"))
+        rec["new_this_week"] = bool(anchor and week_start <= anchor <= week_end)
+        out.append(rec)
+    return out
+
+
+def _build_user_prompt(week_records: list[dict],
+                       month_records: list[dict],
+                       week_start: date, week_end: date,
+                       month_start: date, month_end: date) -> str:
     today_str = datetime.utcnow().strftime("%B %d, %Y")
-    month_label = period_start.strftime("%B %Y")
-    data_block = json.dumps(records, indent=2, ensure_ascii=False)
+    week_label = f"Week ending {week_end.strftime('%b %d, %Y')}"
+    data_block = json.dumps({
+        "this_week": week_records,
+        "past_30_days": month_records,
+    }, indent=2, ensure_ascii=False)
 
     return f"""\
-Write a Monthly Consultant RFP Brief for {month_label} summarizing the
-{len(records)} consultant-type RFP records that surfaced in board
-materials dated within {month_label}. Records with stale explicit dates
-(active searches >12 months old, or awards >3 months old) have already
-been filtered out upstream.
+Write a Weekly Consultant RFP Brief covering {week_label}.
+
+Inputs in the DATA block:
+- ``this_week`` ({len(week_records)} records): consultant RFPs that
+  surfaced in board materials dated {week_start.isoformat()} –
+  {week_end.isoformat()}.
+- ``past_30_days`` ({len(month_records)} records): the running 30-day
+  list of consultant RFPs surfaced {month_start.isoformat()} –
+  {month_end.isoformat()} (a superset of this_week — each record has a
+  ``new_this_week`` boolean flag).
+
+Records with stale explicit dates (active searches >12 months old, or
+awards >3 months old) have already been filtered out upstream.
 
 GROUNDING RULES (non-negotiable):
 - Every plan name, RFP title, status, date, dollar figure, and vendor
@@ -166,51 +188,56 @@ GROUNDING RULES (non-negotiable):
 - Every RFP mentioned in prose must include an inline source link in
   the form ([source](?doc=N)) where N is the doc_id from the DATA.
 - If a date is missing in the DATA, write "—". Do not estimate.
-- Stage counts in the "At a glance" paragraph must match the count of
-  records in the DATA at each status. Recount before writing.
 
 FORMAT REQUIREMENTS:
-- Start with exactly: # Monthly Consultant RFP Brief: {month_label}
-- Second line: *Surfaced in board materials dated \
-{period_start.isoformat()} – {period_end.isoformat()}*
-- Third line: *Generated: {today_str}*
+- Start with exactly: # Weekly Consultant RFP Brief: {week_label}
+- Second line: *This week: {week_start.isoformat()} – {week_end.isoformat()}*
+- Third line: *Past 30 days: {month_start.isoformat()} – {month_end.isoformat()}*
+- Fourth line: *Generated: {today_str}*
 - Then a --- horizontal rule.
-- ## At a glance — one short paragraph (~3 sentences) covering: total
-  RFP count, # of plans involved, distribution across stages, and any
-  notable theme (e.g. concentration in admin systems vs. investment
-  consulting).
-- ## Summary table — a markdown table with columns:
-  Plan | RFP | Stage | Released | Due | Awarded vendor | Incumbent | Source
+- ## This week — open with one short paragraph (~2 sentences) covering
+  the count of new RFPs this week, plans involved, and any pattern.
+  If ``this_week`` is empty, write a single line stating no new
+  consultant RFPs surfaced this week and skip the by-stage prose.
+  Otherwise follow with short prose sections grouped by stage
+  (Awarded → ResponsesReceived → Issued → Planned). For each RFP, one
+  tight sentence covering plan, what's being procured, available
+  timing or incumbent info, with an inline ([source](?doc=N)) link.
+- ## Past 30 days — running summary table with columns:
+  Plan | RFP | Stage | Released | Due | Awarded vendor | Incumbent | New | Source
   Plan: bold plan_abbrev. Stage: status field. Released: release_date.
   Due: response_due_date. Awarded vendor: awarded_manager (use "—" if
-  empty). Incumbent: incumbent_manager (use "—" if empty). Source: a
-  markdown link `[doc](?doc=N)`. Use "—" for any other missing field.
-  List rows in order Awarded → ResponsesReceived → Issued → Planned.
-- ## By stage — short prose sections grouped by stage. For each RFP,
-  one tight sentence covering plan, what's being procured, any
-  available timing or incumbent info, with an inline ([source](?doc=N))
-  link.
-- Target ~400–600 words total. Err on the short side.
-- Do NOT speculate on outcomes or strategic implications — this is a
-  reference brief, not editorial.
+  empty). Incumbent: incumbent_manager (use "—" if empty).
+  New: "•" if new_this_week is true, else "—".
+  Source: a markdown link `[doc](?doc=N)`. Use "—" for any other
+  missing field. List rows new-this-week first, then by stage
+  (Awarded → ResponsesReceived → Issued → Planned).
+- Target ~300–500 words total. Err on the short side.
+- Do NOT speculate on outcomes or strategic implications.
 
 DATA:
 {data_block}"""
 
 
-def compose(records: list[dict],
-            period_start: date, period_end: date) -> str:
-    if not records:
+def compose(week_records: list[dict], month_records: list[dict],
+            week_start: date, week_end: date,
+            month_start: date, month_end: date) -> str:
+    week_label = f"Week ending {week_end.strftime('%b %d, %Y')}"
+    if not month_records:
         return (
-            f"# Monthly Consultant RFP Brief: {period_start.strftime('%B %Y')}\n"
+            f"# Weekly Consultant RFP Brief: {week_label}\n"
+            f"*This week: {week_start.isoformat()} – {week_end.isoformat()}*\n"
+            f"*Past 30 days: {month_start.isoformat()} – {month_end.isoformat()}*\n"
             f"*Generated: {datetime.utcnow().strftime('%B %d, %Y')}*\n\n"
             "---\n\n"
-            "_No consultant RFP records extracted in this window._\n"
+            "_No consultant RFP records in the trailing 30 days._\n"
         )
 
     from summarizer import _get_client
 
-    user_prompt = _build_user_prompt(records, period_start, period_end)
+    user_prompt = _build_user_prompt(
+        week_records, month_records, week_start, week_end, month_start, month_end,
+    )
     message = _get_client().messages.create(
         model="claude-sonnet-4-6",
         max_tokens=2048,
@@ -227,46 +254,49 @@ def compose(records: list[dict],
     return message.content[0].text
 
 
-def _period_for(period_arg: str | None) -> tuple[date, date]:
-    """``2026-04`` or ``2026-04-01`` → (first, last) of that month.
+def _last_sunday(today: date | None = None) -> date:
+    """Return the most recent Sunday (today if today is Sunday)."""
+    today = today or date.today()
+    # Python weekday: Mon=0..Sun=6
+    return today - timedelta(days=(today.weekday() + 1) % 7)
 
-    Default: prior calendar month relative to today.
+
+def _period_for(period_arg: str | None) -> tuple[date, date, date, date]:
+    """Return (week_start, week_end, month_start, month_end).
+
+    ``week_end`` is a Sunday; week is the trailing 7 days, month the
+    trailing 30. Default: most recent Sunday.
     """
-    if period_arg:
-        s = period_arg if len(period_arg) > 7 else period_arg + "-01"
-        start = date.fromisoformat(s).replace(day=1)
-    else:
-        today = date.today()
-        start = (date(today.year - 1, 12, 1) if today.month == 1
-                 else date(today.year, today.month - 1, 1))
-
-    if start.month == 12:
-        end = date(start.year, 12, 31)
-    else:
-        end = date.fromordinal(date(start.year, start.month + 1, 1).toordinal() - 1)
-    return start, end
+    end = date.fromisoformat(period_arg) if period_arg else _last_sunday()
+    week_start = end - timedelta(days=_WEEK_DAYS - 1)
+    month_start = end - timedelta(days=_MONTH_DAYS - 1)
+    return week_start, end, month_start, end
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="compose_rfp_monthly")
+    parser = argparse.ArgumentParser(prog="compose_rfp_weekly")
     parser.add_argument(
         "--period",
-        help="Month as YYYY-MM (default: prior calendar month).",
+        help="Sunday end-date as YYYY-MM-DD (default: most recent Sunday).",
     )
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
-    period_start, period_end = _period_for(args.period)
+    week_start, week_end, month_start, month_end = _period_for(args.period)
 
-    records = _gather_consultant_rfps(period_start, period_end)
-    print(f"consultant RFP records: {len(records)}")
-    print(f"period: {period_start} to {period_end}")
+    month_records = _gather_consultant_rfps(month_start, month_end)
+    month_records = _tag_week(month_records, week_start, week_end)
+    week_records = [r for r in month_records if r["new_this_week"]]
 
-    markdown = compose(records, period_start, period_end)
+    print(f"week records: {len(week_records)} ({week_start} → {week_end})")
+    print(f"30-day records: {len(month_records)} ({month_start} → {month_end})")
+
+    markdown = compose(week_records, month_records,
+                       week_start, week_end, month_start, month_end)
 
     NOTES_DIR.mkdir(parents=True, exist_ok=True)
-    out_path = NOTES_DIR / f"monthly_consultant_rfps_{period_start.isoformat()}.md"
+    out_path = NOTES_DIR / f"weekly_consultant_rfps_{week_end.isoformat()}.md"
     out_path.write_text(markdown, encoding="utf-8")
     print(f"wrote {out_path}")
     return 0

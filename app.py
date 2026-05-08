@@ -895,13 +895,13 @@ def _render_note_page(md_path: Path, title: str, generated_date: str, pdf_filena
 
 
 def _find_latest_consultant_rfps() -> tuple[Path, str, str] | None:
-    """Find the latest Monthly Consultant RFP brief.
+    """Find the latest Weekly Consultant RFP brief.
 
-    Picks the newest ``monthly_consultant_rfps_<YYYY-MM-DD>.md`` by
+    Picks the newest ``weekly_consultant_rfps_<YYYY-MM-DD>.md`` by
     filename (lexical sort = chronological since the date is embedded).
     """
     candidates = sorted(
-        NOTES_DIR.glob("monthly_consultant_rfps_*.md"),
+        NOTES_DIR.glob("weekly_consultant_rfps_*.md"),
         reverse=True,
     )
     if not candidates:
@@ -910,12 +910,12 @@ def _find_latest_consultant_rfps() -> tuple[Path, str, str] | None:
     content = path.read_text(encoding="utf-8")
     gen_match = re.search(r"\*Generated:\s*(.+?)\*", content)
     generated_date = gen_match.group(1).strip() if gen_match else "Unknown"
-    m = re.match(r"monthly_consultant_rfps_(\d{4}-\d{2})", path.name)
+    m = re.match(r"weekly_consultant_rfps_(\d{4}-\d{2}-\d{2})", path.name)
     if m:
-        month = datetime.strptime(m.group(1) + "-01", "%Y-%m-%d").strftime("%B %Y")
-        title = f"Monthly Consultant RFP Brief: {month}"
+        week_end = datetime.strptime(m.group(1), "%Y-%m-%d").strftime("%b %d, %Y")
+        title = f"Weekly Consultant RFP Brief: Week ending {week_end}"
     else:
-        title = "Monthly Consultant RFP Brief"
+        title = "Weekly Consultant RFP Brief"
     return (path, title, generated_date)
 
 
@@ -1027,17 +1027,17 @@ def _render_rfp_alerts():
 
 
 def page_insights():
-    (tab_week, tab_insights_monthly, tab_rfps_monthly,
+    (tab_week, tab_insights_monthly, tab_rfps_weekly,
      tab_rfp_alerts, tab_insights_year) = st.tabs([
         "Weekly Insights",
         "Monthly Insights",
-        "RFP Monthly",
+        "RFP Weekly",
         "RFP Alerts",
         "Year to date Insights",
     ])
 
-    with tab_rfps_monthly:
-        st.title("RFP Monthly")
+    with tab_rfps_weekly:
+        st.title("RFP Weekly")
         result = _find_latest_consultant_rfps()
         if result:
             path, title, gen_date = result
@@ -1050,7 +1050,7 @@ def page_insights():
         else:
             st.info(
                 "No consultant RFP brief found yet. "
-                "Run `python -m scripts.compose_rfp_monthly` to generate."
+                "Run `python -m scripts.compose_rfp_weekly` to generate."
             )
 
     with tab_rfp_alerts:

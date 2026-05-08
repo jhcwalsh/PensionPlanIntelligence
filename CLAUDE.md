@@ -98,6 +98,7 @@ Render hosts only two web services now: Streamlit (`pension-plan-intelligence`) 
 | Daily document pipeline (11 WAF-blocked plans) | Task Scheduler | local Windows | `scripts/run_daily.bat` |
 | Weekly Insights composition + email | cron Sundays 11:00 UTC | GHA | `.github/workflows/weekly-insights.yml` |
 | Weekly RFP backfill (`--limit 100`) | cron Sundays 11:30 UTC | GHA | `.github/workflows/weekly-rfp.yml` |
+| Weekly Consultant RFP brief (7-day + 30-day rollup) | cron Sundays 12:00 UTC | GHA | `.github/workflows/weekly-rfp-brief.yml` |
 | Monthly CAFR refresh + structured extraction (~92 plans) | cron 1st of month 15:00 UTC | GHA | `.github/workflows/monthly-cafr-refresh.yml` |
 | Monthly CAFR refresh + structured extraction (5 WAF-blocked plans) | Task Scheduler | local Windows | `scripts/run_monthly.bat` |
 | Monthly IPS refresh (all 148 plans, auto-discover + verify via Haiku 4.5) | Task Scheduler | local Windows | `scripts/run_ips.bat` |
