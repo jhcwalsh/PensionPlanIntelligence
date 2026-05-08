@@ -854,10 +854,7 @@ def _notes_md_to_html(content: str) -> str:
 def _render_ai_disclaimer():
     """Standard disclaimer shown above any AI-composed insight surface."""
     st.warning(
-        "AI-generated summary. Claude composes these briefings from board "
-        "materials and CAFRs; figures, dates, and attributions can be wrong. "
-        "Refer to the source documents (linked throughout) for authoritative "
-        "detail before acting on anything here."
+        "AI-generated summary — figures and attributions may be wrong; verify against the linked source documents."
     )
 
 
