@@ -3148,6 +3148,52 @@ def page_approval_action(raw_token: str, action: str):
         st.rerun()
 
 
+def page_post_linkedin_action(raw_token: str):
+    """Handle ?post_linkedin=<token>.
+
+    Independent of the email approve/reject flow — clicking this link
+    consumes the token and posts the briefing to LinkedIn via the
+    Zapier webhook. The publication's status is unchanged.
+    """
+    from insights import approval as _approval, social as _social
+
+    try:
+        publication = _approval.consume_token(raw_token, expected_action="post_linkedin")
+    except _approval.TokenError as exc:
+        st.title("Token error")
+        st.error(str(exc))
+        st.caption(
+            "If you believe this is a mistake, the LinkedIn link may "
+            "already have been used. Each post link is single-use."
+        )
+        if st.button("Go to dashboard"):
+            st.query_params.clear()
+            st.rerun()
+        return
+
+    try:
+        delivery_id = _social.post_to_linkedin(publication)
+    except Exception as exc:
+        st.title("LinkedIn post failed")
+        st.error(f"Could not send post to LinkedIn: {exc}")
+        st.caption(
+            "The token has been consumed. Re-run the cycle with --force "
+            "to mint a new link, or post manually."
+        )
+        return
+
+    st.title("Posted to LinkedIn")
+    st.success(
+        f"Publication #{publication.id} ({publication.cadence}, "
+        f"{publication.period_start.isoformat()}) was sent to the LinkedIn "
+        f"webhook (delivery_id={delivery_id})."
+    )
+    st.caption("Allow a minute or two for Zapier to relay it to LinkedIn.")
+    if st.button("Back to dashboard"):
+        st.query_params.clear()
+        st.rerun()
+
+
 def page_drafts():
     """List publications awaiting founder approval."""
     st.title("Drafts awaiting approval")
@@ -3244,11 +3290,15 @@ def main():
     # lands on the action page rather than the dashboard.
     approve_param = st.query_params.get("approve")
     reject_param = st.query_params.get("reject")
+    post_linkedin_param = st.query_params.get("post_linkedin")
     if approve_param:
         page_approval_action(approve_param, "approve")
         return
     if reject_param:
         page_approval_action(reject_param, "reject")
+        return
+    if post_linkedin_param:
+        page_post_linkedin_action(post_linkedin_param)
         return
 
     # Handle deep-link to a specific document

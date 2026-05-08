@@ -50,6 +50,11 @@ APPROVAL_EMAIL_FROM = os.environ.get(
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL", "")
 
+# Zapier/Make catch-hook URL that fans the LinkedIn post out to LinkedIn.
+# Empty string disables the third "post to LinkedIn" button in the
+# approval email; tokens are still issued so old emails keep working.
+LINKEDIN_POST_WEBHOOK_URL = os.environ.get("LINKEDIN_POST_WEBHOOK_URL", "")
+
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
@@ -57,6 +62,7 @@ SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL", "")
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TMP_DIR = REPO_ROOT / "tmp"
 SENT_EMAILS_DIR = TMP_DIR / "sent_emails"
+SENT_SOCIAL_DIR = TMP_DIR / "sent_social"
 PDF_OUTPUT_DIR = REPO_ROOT / "notes" / "pdfs"
 
 

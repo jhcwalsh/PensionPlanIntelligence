@@ -66,6 +66,7 @@ def _isolated_environment(tmp_path, monkeypatch):
         import insights.config as ic
         monkeypatch.setattr(ic, "TMP_DIR", test_tmp)
         monkeypatch.setattr(ic, "SENT_EMAILS_DIR", test_tmp / "sent_emails")
+        monkeypatch.setattr(ic, "SENT_SOCIAL_DIR", test_tmp / "sent_social")
         monkeypatch.setattr(ic, "PDF_OUTPUT_DIR", test_tmp / "pdfs")
 
         import insights.notify as _notify

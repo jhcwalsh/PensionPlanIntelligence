@@ -120,10 +120,21 @@ def finalize_for_approval(session, publication: Publication,
 
     # Issue tokens; flush so they're visible if the email send fails.
     approve_tok, reject_tok = approval.issue_tokens(session, publication)
+    # Weekly cadence gets the optional "Approve & post to LinkedIn" button
+    # when a webhook URL is configured. Other cadences keep the original
+    # two-button email.
+    linkedin_tok = None
+    if publication.cadence == "weekly" and (
+        config.LINKEDIN_POST_WEBHOOK_URL or config.is_mock()
+    ):
+        linkedin_tok = approval.issue_linkedin_token(session, publication)
     transition_status(publication, "awaiting_approval")
     session.flush()
 
-    email = approval.render_approval_email(publication, approve_tok, reject_tok, pdf_bytes)
+    email = approval.render_approval_email(
+        publication, approve_tok, reject_tok, pdf_bytes,
+        post_linkedin=linkedin_tok,
+    )
     delivery_id = approval.send_email(email)
     logger.info(
         "Approval email sent for publication %s (delivery_id=%s)",

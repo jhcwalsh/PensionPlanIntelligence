@@ -96,6 +96,25 @@ def issue_tokens(session, publication: Publication) -> tuple[IssuedToken, Issued
     )
 
 
+def issue_linkedin_token(session, publication: Publication) -> IssuedToken:
+    """Mint a single ``post_linkedin`` token for ``publication``.
+
+    Kept separate from ``issue_tokens`` so the existing approve/reject
+    callsites and tests stay on a 2-tuple return. Callers that want the
+    "Approve & post to LinkedIn" button in the email mint this in
+    addition to the standard pair.
+    """
+    raw = generate_raw_token()
+    session.add(ApprovalToken(
+        publication_id=publication.id,
+        token_hash=hash_token(raw),
+        action="post_linkedin",
+        expires_at=config.expires_at_default(),
+    ))
+    session.flush()
+    return IssuedToken(raw=raw, action="post_linkedin")
+
+
 # ---------------------------------------------------------------------------
 # Token consumption (called from the Streamlit query-param handler)
 # ---------------------------------------------------------------------------
@@ -133,7 +152,17 @@ def consume_token(raw_token: str, expected_action: str) -> Publication:
         pub = session.get(Publication, token.publication_id)
         if pub is None:
             raise TokenError("Publication missing")
-        if pub.status not in ("awaiting_approval",):
+
+        # post_linkedin is independent of email approval — it only
+        # requires the publication to still exist and be in a sane
+        # pre-rejection state. approve / reject still demand
+        # awaiting_approval as before.
+        if expected_action == "post_linkedin":
+            if pub.status in ("rejected", "expired", "failed"):
+                raise TokenError(
+                    f"Publication is in status '{pub.status}', cannot post to LinkedIn"
+                )
+        elif pub.status != "awaiting_approval":
             raise TokenError(f"Publication is in status '{pub.status}', cannot {expected_action}")
 
         now = datetime.utcnow()
@@ -141,9 +170,12 @@ def consume_token(raw_token: str, expected_action: str) -> Publication:
         if expected_action == "approve":
             pub.status = "approved"
             pub.approved_at = now
-        else:
+        elif expected_action == "reject":
             pub.status = "rejected"
             pub.rejected_at = now
+        # post_linkedin: token is consumed but publication status is
+        # untouched — the click is its own social-post trigger and
+        # does not affect email approval state.
 
         session.commit()
         session.refresh(pub)
@@ -174,12 +206,15 @@ def render_approval_email(publication: Publication,
                           approve: IssuedToken, reject: IssuedToken,
                           pdf_bytes: Optional[bytes],
                           *, is_reminder: bool = False,
-                          is_expiry: bool = False) -> ApprovalEmail:
+                          is_expiry: bool = False,
+                          post_linkedin: Optional[IssuedToken] = None) -> ApprovalEmail:
     """Render the email content (subject + html + text + attachment).
 
     ``is_reminder`` switches the subject line to a more urgent variant
     (sent at 72h unapproved). ``is_expiry`` switches it to the "draft
-    has expired" notice (sent at 7 days).
+    has expired" notice (sent at 7 days). ``post_linkedin``, when
+    supplied, adds a third "Approve & post to LinkedIn" button below
+    the standard approve/reject pair.
     """
     cadence = publication.cadence.title()
     period = f"{publication.period_start.isoformat()} – {publication.period_end.isoformat()}"
@@ -219,6 +254,22 @@ def render_approval_email(publication: Publication,
             "The latest Insights draft is ready for your review.\n"
             "Click Approve to push it live, or Reject to discard.\n\n"
         )
+        linkedin_button_html = ""
+        linkedin_link_html = ""
+        linkedin_button_text = ""
+        if post_linkedin is not None:
+            linkedin_url = _approval_url(post_linkedin)
+            linkedin_button_html = f"""
+  <a href="{linkedin_url}"
+     style="display:inline-block;padding:12px 24px;background:#0a66c2;color:#fff;
+            text-decoration:none;border-radius:4px;margin-left:10px;">
+     Approve & post to LinkedIn
+  </a>"""
+            linkedin_link_html = (
+                f'<br>Post to LinkedIn: <a href="{linkedin_url}">{linkedin_url}</a>'
+            )
+            linkedin_button_text = f"Approve & post to LinkedIn: {linkedin_url}\n"
+
         action_buttons_html = f"""\
 <p style="margin: 20px 0;">
   <a href="{approve_url}"
@@ -230,16 +281,18 @@ def render_approval_email(publication: Publication,
      style="display:inline-block;padding:12px 24px;background:#cc0033;color:#fff;
             text-decoration:none;border-radius:4px;">
      Reject
-  </a>
+  </a>{linkedin_button_html}
 </p>
 <p style="font-size:0.85em;color:#666;">
   Plain-text fallback links:<br>
   Approve: <a href="{approve_url}">{approve_url}</a><br>
-  Reject: <a href="{reject_url}">{reject_url}</a>
+  Reject: <a href="{reject_url}">{reject_url}</a>{linkedin_link_html}
 </p>"""
         action_buttons_text = (
             f"Approve and publish: {approve_url}\n"
-            f"Reject: {reject_url}\n\n"
+            f"Reject: {reject_url}\n"
+            f"{linkedin_button_text}"
+            f"\n"
         )
 
     html = f"""\

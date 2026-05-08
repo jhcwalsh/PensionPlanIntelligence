@@ -34,11 +34,14 @@ def test_weekly_cycle_produces_awaiting_approval_publication(seeded_plans, monke
     assert pub.pdf_path
     assert Path(pub.pdf_path).exists()
 
-    # Two approval tokens were issued.
+    # Three tokens are issued for the weekly cycle: approve, reject,
+    # post_linkedin (the third lights up the optional LinkedIn auto-post
+    # button in the approval email; minted in mock mode + when the
+    # webhook URL is configured).
     s = get_session()
     try:
         tokens = s.query(ApprovalToken).filter_by(publication_id=pub.id).all()
-        assert {t.action for t in tokens} == {"approve", "reject"}
+        assert {t.action for t in tokens} == {"approve", "reject", "post_linkedin"}
     finally:
         s.close()
 
