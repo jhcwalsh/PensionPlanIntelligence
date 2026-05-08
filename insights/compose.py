@@ -62,10 +62,10 @@ def compose_weekly(session, period_start: date, period_end: date) -> str:
     from generate_notes import (
         MAX_TOKENS_HIGHLIGHTS,
         build_highlights_prompt,
-        format_highlights_footer,
         format_weekly_date_range,
         gather_highlights_data,
         generate_note,
+        inject_highlights_preamble,
     )
     from summarizer import MODEL_SONNET
 
@@ -93,7 +93,7 @@ def compose_weekly(session, period_start: date, period_end: date) -> str:
             f"  expected: {expected_title!r}\n"
             f"  actual:   {actual_title!r}"
         )
-    return markdown + format_highlights_footer(data["new_doc_count"], days)
+    return inject_highlights_preamble(markdown, data["new_doc_count"], days)
 
 
 # ---------------------------------------------------------------------------

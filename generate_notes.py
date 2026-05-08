@@ -197,22 +197,36 @@ def _count_new_documents(session, days: int = 7) -> int:
     )
 
 
-def format_highlights_footer(doc_count: int, days: int) -> str:
-    """Markdown footer appended to the 7-Day Highlights note.
+def format_highlights_preamble(doc_count: int, days: int) -> str:
+    """Markdown preamble injected at the top of the 7-Day Highlights note.
 
-    Reports the number of newly-downloaded documents and links back to
-    the app's Activity tab. The bare ``?`` href clears query params in
-    Streamlit (same pattern as the sidebar logo) and is rewritten to
-    ``APP_BASE_URL/?`` by ``insights.render.absolute_url`` for PDFs.
+    Sits between the title block and the first ## section. Renders as a
+    blockquote in Streamlit (under the AI caveat) and in the PDF/email
+    paths. The bare ``?`` href clears query params in Streamlit and is
+    rewritten to ``APP_BASE_URL/?`` by ``insights.render.absolute_url``.
     """
     period = "past week" if days == 7 else f"past {days} days"
     noun = "document" if doc_count == 1 else "documents"
     verb = "was" if doc_count == 1 else "were"
     return (
-        "\n\n---\n\n"
-        f"*{doc_count} new {noun} {verb} downloaded in the {period} — "
-        "browse the full feed in the [Activity tab](?).*\n"
+        f"> Below is a summary of materials gathered over the {period}. "
+        f"In total, **{doc_count} new {noun}** {verb} downloaded this period — "
+        f"browse the full feed in the [Activity tab](?).\n"
     )
+
+
+def inject_highlights_preamble(markdown: str, doc_count: int, days: int) -> str:
+    """Splice the preamble between the title block and the first ## section.
+
+    The brief's title block ends with ``---\\n\\n`` before the first ##,
+    so we splice on ``\\n## `` and add one newline of separation before
+    the blockquote — yielding ``---\\n\\n> preamble\\n\\n## ...``.
+    """
+    preamble = format_highlights_preamble(doc_count, days)
+    idx = markdown.find("\n## ")
+    if idx == -1:
+        return markdown.rstrip() + "\n\n" + preamble
+    return markdown[:idx] + "\n" + preamble + markdown[idx:]
 
 
 def gather_trends_data(session) -> dict:
@@ -965,7 +979,7 @@ def main():
                     f"{data['plans_with_activity']} plans, "
                     f"{len(data['meetings'])} meetings)...")
                 content = generate_note(prompt, MAX_TOKENS_HIGHLIGHTS, model=MODEL_SONNET)
-                content += format_highlights_footer(data["new_doc_count"], args.days)
+                content = inject_highlights_preamble(content, data["new_doc_count"], args.days)
                 today = datetime.utcnow().strftime("%Y-%m-%d")
                 write_note(content, f"7day_highlights_{today}.md")
 
