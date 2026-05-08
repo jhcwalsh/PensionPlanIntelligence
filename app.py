@@ -223,7 +223,12 @@ def _retrieve_source_file(url: str, plan_id: str, filename: str) -> tuple[Path |
 # ---------------------------------------------------------------------------
 
 def render_sidebar():
-    st.sidebar.title("🏛️ Pension Intelligence")
+    st.sidebar.markdown(
+        "<h1 style='font-size:1.75rem;margin:0 0 1rem 0;font-weight:600;'>"
+        "<a href='?' target='_self' style='color:inherit;text-decoration:none;'>"
+        "🏛️ Pension Intelligence</a></h1>",
+        unsafe_allow_html=True,
+    )
     st.sidebar.markdown("---")
 
     plans = load_plans()
