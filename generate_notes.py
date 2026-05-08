@@ -153,7 +153,7 @@ def gather_highlights_data(session, days: int = 7) -> dict:
 
     if not meetings:
         return {"meetings": [], "date_range": None, "plans_with_activity": 0,
-                "total_aum": 0, "plans": []}
+                "total_aum": 0, "plans": [], "new_doc_count": 0}
 
     # Enrich with all summaries
     for m in meetings:
@@ -177,7 +177,42 @@ def gather_highlights_data(session, days: int = 7) -> dict:
         "plans_with_activity": len(plan_ids),
         "total_aum": total_aum,
         "plans": plans,
+        "new_doc_count": _count_new_documents(session, days=days),
     }
+
+
+def _count_new_documents(session, days: int = 7) -> int:
+    """Count documents downloaded in the past ``days``, matching the
+    Activity tab's filter (excludes CAFRs / performance, future-cap on
+    meeting_date — see ``database.get_new_meetings``)."""
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    future_cap = datetime.utcnow() + timedelta(days=60)
+    return (
+        session.query(Document)
+        .filter(Document.downloaded_at >= cutoff)
+        .filter(Document.doc_type.notin_(["cafr", "performance"]))
+        .filter((Document.meeting_date.is_(None)) |
+                (Document.meeting_date <= future_cap))
+        .count()
+    )
+
+
+def format_highlights_footer(doc_count: int, days: int) -> str:
+    """Markdown footer appended to the 7-Day Highlights note.
+
+    Reports the number of newly-downloaded documents and links back to
+    the app's Activity tab. The bare ``?`` href clears query params in
+    Streamlit (same pattern as the sidebar logo) and is rewritten to
+    ``APP_BASE_URL/?`` by ``insights.render.absolute_url`` for PDFs.
+    """
+    period = "past week" if days == 7 else f"past {days} days"
+    noun = "document" if doc_count == 1 else "documents"
+    verb = "was" if doc_count == 1 else "were"
+    return (
+        "\n\n---\n\n"
+        f"*{doc_count} new {noun} {verb} downloaded in the {period} — "
+        "browse the full feed in the [Activity tab](?).*\n"
+    )
 
 
 def gather_trends_data(session) -> dict:
@@ -930,6 +965,7 @@ def main():
                     f"{data['plans_with_activity']} plans, "
                     f"{len(data['meetings'])} meetings)...")
                 content = generate_note(prompt, MAX_TOKENS_HIGHLIGHTS, model=MODEL_SONNET)
+                content += format_highlights_footer(data["new_doc_count"], args.days)
                 today = datetime.utcnow().strftime("%Y-%m-%d")
                 write_note(content, f"7day_highlights_{today}.md")
 
