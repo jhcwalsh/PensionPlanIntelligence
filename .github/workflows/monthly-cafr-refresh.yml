@@ -61,6 +61,16 @@ jobs:
           fi
           python refresh_cafrs.py $YEAR_FLAG ${{ github.event.inputs.plan_ids }}
 
+      # Structured extraction MUST run in the same job as the refresh —
+      # extract_cafr_investments.py opens the PDF binary at doc.local_path
+      # for page-targeted extraction, and PDFs aren't committed to git.
+      # If this step moved to monthly-insights.yml on a different runner,
+      # all freshly-downloaded CAFRs would silently fail with "missing_file".
+      - name: Extract CAFR investment data
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python extract_cafr_investments.py
+
       - name: Commit DB changes
         if: ${{ github.event.inputs.dry_run != 'true' }}
         run: |

@@ -1,4 +1,4 @@
-# CIO Insights Automation — Decisions
+# Insights Automation — Decisions
 
 This file records non-obvious choices made while building the
 publication automation layer (`insights/` package). For background,
@@ -78,7 +78,7 @@ Three composition paths in `insights/compose.py`:
 
 The new prompts live in `insights/compose.py` and are flagged with
 `# EDITORIAL: review with founder before live mode`. They follow the
-same grounding rules as the existing CIO Insights prompt.
+same grounding rules as the existing Insights prompt.
 
 ## 6. Idempotency
 

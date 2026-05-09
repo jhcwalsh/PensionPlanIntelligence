@@ -1,4 +1,4 @@
-"""CIO Insights publishing automation.
+"""Insights publishing automation.
 
 Orchestrates the weekly / monthly / annual publication cadence with a
 founder-only magic-link approval flow.

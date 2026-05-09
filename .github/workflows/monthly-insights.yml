@@ -1,7 +1,7 @@
 name: Monthly insights (GHA edition)
 
 # Extracts CAFR investment data from already-downloaded CAFRs, then
-# composes the monthly CIO Insights digest and sends the approve/reject
+# composes the monthly Insights digest and sends the approve/reject
 # magic-link email. CAFR fetching itself stays on local Task Scheduler
 # (it's a Playwright scrape with the same WAF risks the daily had) --
 # see scripts/run_monthly.bat.
@@ -60,10 +60,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-pipeline.txt
 
-      - name: Extract CAFR investment data
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: python extract_cafr_investments.py
+      # NOTE: extract_cafr_investments.py used to run here, but it can't
+      # see the PDF binaries — those are downloaded by the cafr-refresh
+      # workflow on a different runner and never committed to git. Moved
+      # to monthly-cafr-refresh.yml so it runs in the same job as the
+      # refresh while the PDFs are still on disk.
 
       - name: Compose monthly insights + send approval email
         env:

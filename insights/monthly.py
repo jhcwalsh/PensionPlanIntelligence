@@ -45,7 +45,7 @@ def _gather_approved_weeklies(session, period_start: date,
 
 def run_monthly_cycle(period_start: Optional[date] = None,
                        *, force: bool = False) -> Publication:
-    """Compose, render, and email the monthly CIO Insights for the prior month."""
+    """Compose, render, and email the monthly Insights for the prior month."""
     if period_start is None:
         period_start, period_end = compose.monthly_period_for(date.today())
     else:
@@ -108,7 +108,7 @@ def run_monthly_cycle(period_start: Optional[date] = None,
 
         cycle_common.finalize_for_approval(
             session, publication, draft,
-            title_for_pdf=f"Monthly CIO Insights: {period_start.strftime('%B %Y')}",
+            title_for_pdf=f"Monthly Insights: {period_start.strftime('%B %Y')}",
         )
         return cycle_common.detach_for_caller(session, publication)
 

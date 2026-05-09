@@ -4,6 +4,7 @@ Streamlit UI — search and browse pension plan meeting documents and summaries.
 Run with: streamlit run app.py
 """
 
+import html as _html
 import io
 import json
 import os
@@ -126,10 +127,21 @@ def load_plans():
 
 
 def load_recent_summaries(plan_id=None, limit=20):
+    """Most recent summarized documents, sorted by meeting_date desc.
+
+    Filters out CAFRs / performance reports and caps meeting_date at
+    today + 60 days so the By-document view of Activity matches the
+    other two views — see ``database.get_new_meetings`` for the same
+    filter rationale.
+    """
     session = get_db_session()
+    future_cap = datetime.utcnow() + timedelta(days=60)
     q = (
         session.query(Document, Summary)
         .join(Summary, Document.id == Summary.document_id)
+        .filter(Document.doc_type.notin_(["cafr", "performance"]))
+        .filter((Document.meeting_date.is_(None)) |
+                (Document.meeting_date <= future_cap))
     )
     if plan_id and plan_id != "All":
         q = q.filter(Document.plan_id == plan_id)
@@ -214,7 +226,12 @@ def _retrieve_source_file(url: str, plan_id: str, filename: str) -> tuple[Path |
 # ---------------------------------------------------------------------------
 
 def render_sidebar():
-    st.sidebar.title("🏛️ Pension Intelligence")
+    st.sidebar.markdown(
+        "<h1 style='font-size:1.75rem;margin:0 0 1rem 0;font-weight:600;'>"
+        "<a href='?' target='_self' style='color:inherit;text-decoration:none;'>"
+        "🏛️ Pension Intelligence</a></h1>",
+        unsafe_allow_html=True,
+    )
     st.sidebar.markdown("---")
 
     plans = load_plans()
@@ -359,12 +376,55 @@ def page_search(plan_id, plan_label):
             st.rerun()
 
 
-def page_browse(plan_id, plan_label):
-    st.title("Recent Meetings")
+def page_activity(plan_id, plan_label):
+    """Recency-driven activity feed with three view modes.
 
-    limit = st.slider("Show last N documents", 5, 100, 20)
+    Replaces the previous three browse-mode tabs (Summary / Updates / Browse
+    Recent) — same underlying data, different groupings, behind a single tab
+    with a view-mode segmented control. The plan filter and the look-back
+    control are scoped per view.
+    """
+    st.title("Recent Activity")
+    col_view, col_sort = st.columns([2, 1])
+    with col_view:
+        view = st.radio(
+            "View",
+            options=["By plan", "By meeting", "By document"],
+            horizontal=True,
+            key="activity_view",
+            label_visibility="collapsed",
+        )
+    with col_sort:
+        sort = st.radio(
+            "Sort",
+            options=["Most recent", "Alphabetical"],
+            horizontal=True,
+            key="activity_sort",
+            label_visibility="collapsed",
+        )
+    if view == "By plan":
+        _render_activity_by_plan(plan_id, plan_label, sort)
+    elif view == "By meeting":
+        _render_activity_by_meeting(plan_id, plan_label, sort)
+    else:
+        _render_activity_by_document(plan_id, plan_label, sort)
+
+
+def _render_activity_by_document(plan_id, plan_label, sort: str = "Most recent"):
+    """Recency-driven document feed — last N docs across the corpus.
+
+    Sort: 'Most recent' (default, by meeting_date desc), or 'Alphabetical'
+    which re-orders the recency-limited result set by plan abbreviation.
+    """
+    limit = st.slider("Show last N documents", 5, 100, 20, key="activity_doc_limit")
     results = load_recent_summaries(plan_id=plan_id if plan_label != "All" else None,
                                     limit=limit)
+    if sort == "Alphabetical":
+        results = sorted(
+            results,
+            key=lambda ds: ((ds[0].plan.abbreviation or ds[0].plan_id or "").lower(),
+                            ds[0].meeting_date or datetime.min),
+        )
 
     if not results:
         st.warning("No summarized documents yet. Run the pipeline to fetch and process documents.")
@@ -411,12 +471,13 @@ def _truncate_words(text: str, max_words: int) -> tuple[str, bool]:
     return " ".join(words[:max_words]) + "…", True
 
 
-def page_summary_updates(plan_id, plan_label):
-    st.title("Summary of Updates")
+def _render_activity_by_plan(plan_id, plan_label, sort: str = "Most recent"):
+    """Plan-grouped headline view — one snapshot per plan, expand for detail."""
     st.caption("One snapshot per plan — up to 100 words. Expand a plan for the full detail.")
 
-    days = st.slider("Look back (days)", 1, 90, 14, key="summary_days")
+    days = st.slider("Look back (days)", 1, 90, 14, key="activity_by_plan_days")
     session = get_db_session()
+    _sort_alpha = sort == "Alphabetical"
     meetings = get_new_meetings(session, days=days)
 
     if plan_id:
@@ -436,9 +497,18 @@ def page_summary_updates(plan_id, plan_label):
     st.caption(f"**{len(by_plan)} plan(s)** with activity in the last {days} days"
                + (f" for {plan_label}" if plan_label != "All" else ""))
 
+    if _sort_alpha:
+        sort_key = lambda kv: (
+            (kv[1][0]["plan"].abbreviation or kv[1][0]["plan"].name or kv[0]).lower()
+            if kv[1][0]["plan"] else kv[0]
+        )
+        sort_reverse = False
+    else:
+        sort_key = lambda kv: kv[1][0]["meeting_date"] or datetime.min
+        sort_reverse = True
     for pid, plan_meetings in sorted(by_plan.items(),
-                                     key=lambda kv: kv[1][0]["meeting_date"] or datetime.min,
-                                     reverse=True):
+                                     key=sort_key,
+                                     reverse=sort_reverse):
         plan = plan_meetings[0]["plan"]
         plan_label_str = (plan.abbreviation or plan.name) if plan else pid.upper()
         latest_date = plan_meetings[0]["meeting_date"]
@@ -490,11 +560,11 @@ def page_summary_updates(plan_id, plan_label):
         st.divider()
 
 
-def page_updates(plan_id, plan_label):
-    st.title("Meeting Updates")
+def _render_activity_by_meeting(plan_id, plan_label, sort: str = "Most recent"):
+    """Per-meeting card view — full agenda summary + materials per meeting."""
     st.caption("New meetings detected since last pipeline run, with agenda summaries and links to materials.")
 
-    days = st.slider("Look back (days)", 1, 90, 14)
+    days = st.slider("Look back (days)", 1, 90, 14, key="activity_by_meeting_days")
     session = get_db_session()
     meetings = get_new_meetings(session, days=days)
 
@@ -507,6 +577,15 @@ def page_updates(plan_id, plan_label):
 
     st.caption(f"**{len(meetings)} new meeting(s)** in the last {days} days"
                + (f" for {plan_label}" if plan_label != "All" else ""))
+
+    if sort == "Alphabetical":
+        meetings = sorted(
+            meetings,
+            key=lambda m: (
+                ((m["plan"].abbreviation or m["plan"].name) if m["plan"] else "").lower(),
+                -(m["meeting_date"].toordinal() if m["meeting_date"] else 0),
+            ),
+        )
 
     for m in meetings:
         plan = m["plan"]
@@ -580,18 +659,18 @@ def _find_all_highlights() -> list[tuple[Path, str, str]]:
 
 
 def _find_latest_insights() -> tuple[Path, str, str] | None:
-    """Find the YTD CIO Insights note and extract its generated date."""
+    """Find the YTD Insights note and extract its generated date."""
     path = NOTES_DIR / "2026_cio_insights.md"
     if not path.exists():
         return None
     content = path.read_text(encoding="utf-8")
     gen_match = re.search(r"\*Generated:\s*(.+?)\*", content)
     generated_date = gen_match.group(1).strip() if gen_match else "Unknown"
-    return (path, "CIO Insights: 2026 Institutional Trends", generated_date)
+    return (path, "Insights: 2026 Institutional Trends", generated_date)
 
 
 def _find_latest_insights_recent() -> tuple[Path, str, str] | None:
-    """Find the latest Monthly CIO Insights note for the Notes tab.
+    """Find the latest Monthly Insights note for the Insights tab.
 
     Prefers the new approval-flow output (``monthly_cio_insights_<date>.md``
     written by ``insights.publish.publish``) sorted by period date.
@@ -610,9 +689,9 @@ def _find_latest_insights_recent() -> tuple[Path, str, str] | None:
         m = re.match(r"monthly_cio_insights_(\d{4}-\d{2})", path.name)
         if m:
             month = datetime.strptime(m.group(1) + "-01", "%Y-%m-%d").strftime("%B %Y")
-            title = f"Monthly CIO Insights: {month}"
+            title = f"Monthly Insights: {month}"
         else:
-            title = "Monthly CIO Insights"
+            title = "Monthly Insights"
         return (path, title, generated_date)
 
     legacy = sorted(
@@ -628,16 +707,52 @@ def _find_latest_insights_recent() -> tuple[Path, str, str] | None:
     generated_date = gen_match.group(1).strip() if gen_match else "Unknown"
     m = re.match(r"cio_insights_(\d+)day\.md", path.name)
     days = m.group(1) if m else "?"
-    return (path, f"CIO Insights: Past {days} Days", generated_date)
+    return (path, f"Insights: Past {days} Days", generated_date)
 
 
 
 from insights.render import markdown_to_pdf_bytes as _markdown_to_pdf_bytes
 
 
+_INLINE_CITE_RE = re.compile(
+    # Match a parenthesised inline citation like:
+    #   ([source](?doc=42))
+    #   ([source 1](?doc=42), [source 2](?doc=58))
+    # The "source" link-text prefix is the discriminator that distinguishes
+    # these from the section-level *Sources:* footer links, which use
+    # "[Plan — DocType — Date](?doc=N)" and should keep their full text.
+    # An optional leading space is consumed so the superscript glues to the
+    # preceding word, academic-paper style.
+    r"\s?\(\s*"
+    r"\[source[^\]]*\]\(\?doc=\d+\)"
+    r"(?:\s*,\s*\[source[^\]]*\]\(\?doc=\d+\))*"
+    r"\s*\)",
+    flags=re.IGNORECASE,
+)
+
+
+def _shrink_inline_cites(text: str) -> str:
+    """Compress noisy ``([source](?doc=N))`` citations into superscript ``[N]``
+    links. The full bibliography is preserved by the section-level
+    ``*Sources:*`` footer the composer also emits."""
+    def repl(match: re.Match) -> str:
+        ids = re.findall(r"\?doc=(\d+)", match.group(0))
+        return "".join(
+            f'<sup style="font-size:0.72em;line-height:0;margin:0 1px;">'
+            f'<a href="?doc={i}" '
+            f'style="color:#4A90D9;text-decoration:none;">[{i}]</a>'
+            f'</sup>'
+            for i in ids
+        )
+    return _INLINE_CITE_RE.sub(repl, text)
+
+
 def _notes_md_to_html(content: str) -> str:
     """Convert notes markdown to HTML with inline styles, bypassing Streamlit's renderer."""
     def inline(text: str) -> str:
+        # Inline citations first — must run before the generic link regex
+        # so the "[source](?doc=N)" pattern doesn't get matched as a normal link.
+        text = _shrink_inline_cites(text)
         # Links: [text](url) → <a>
         text = re.sub(
             r'\[([^\]]+)\]\(([^)]+)\)',
@@ -648,9 +763,21 @@ def _notes_md_to_html(content: str) -> str:
         text = re.sub(r'\*(.+?)\*', r'<em>\1</em>', text)
         return text
 
+    def split_row(s: str) -> list[str]:
+        # Markdown tables wrap rows in optional leading/trailing pipes.
+        inner = s.strip().strip("|")
+        return [c.strip() for c in inner.split("|")]
+
+    def is_table_separator(s: str) -> bool:
+        # `| --- | :---: | ---: |` — at least one column of dashes per cell.
+        if "|" not in s:
+            return False
+        return all(re.fullmatch(r":?-{3,}:?", c) for c in split_row(s) if c)
+
     lines = content.splitlines()
     parts: list[str] = []
     para: list[str] = []
+    i = 0
 
     def flush():
         if para:
@@ -659,19 +786,63 @@ def _notes_md_to_html(content: str) -> str:
             )
             para.clear()
 
-    for line in lines:
+    while i < len(lines):
+        line = lines[i]
         s = line.strip()
+
+        # Markdown table: header row, separator row, then data rows.
+        if (
+            "|" in s
+            and i + 1 < len(lines)
+            and is_table_separator(lines[i + 1])
+        ):
+            flush()
+            headers = split_row(s)
+            i += 2  # past header + separator
+            rows: list[list[str]] = []
+            while i < len(lines) and "|" in lines[i] and lines[i].strip():
+                rows.append(split_row(lines[i]))
+                i += 1
+            thead = "".join(
+                f'<th style="text-align:left;padding:6px 10px;border-bottom:2px solid #888;'
+                f'font-weight:600;">{inline(h)}</th>'
+                for h in headers
+            )
+            tbody_rows = []
+            for row in rows:
+                cells = "".join(
+                    f'<td style="padding:6px 10px;border-bottom:1px solid #444;'
+                    f'vertical-align:top;">{inline(c)}</td>'
+                    for c in row
+                )
+                tbody_rows.append(f"<tr>{cells}</tr>")
+            parts.append(
+                '<div style="overflow-x:auto;margin:0 0 14px;">'
+                '<table style="border-collapse:collapse;width:100%;font-size:0.95em;'
+                'line-height:1.45;">'
+                f'<thead><tr>{thead}</tr></thead>'
+                f'<tbody>{"".join(tbody_rows)}</tbody>'
+                '</table></div>'
+            )
+            continue
+
         if s.startswith("## "):
             flush()
             parts.append(
                 f'<h2 style="margin:28px 0 8px;font-size:1.25em;font-weight:600;">'
                 f'{inline(s[3:])}</h2>'
             )
+        elif s.startswith("### "):
+            flush()
+            parts.append(
+                f'<h3 style="margin:20px 0 6px;font-size:1.1em;font-weight:600;">'
+                f'{inline(s[4:])}</h3>'
+            )
         elif s == "---":
             flush()
             parts.append('<hr style="margin:16px 0;border:none;border-top:1px solid #555;">')
         elif s.startswith("# "):
-            continue  # skip H1 — shown via st.title
+            pass  # skip H1 — shown via st.title
         elif s.startswith("- ") or s.startswith("* "):
             flush()
             parts.append(
@@ -682,9 +853,17 @@ def _notes_md_to_html(content: str) -> str:
             flush()
         else:
             para.append(s)
+        i += 1
 
     flush()
     return "\n".join(parts)
+
+
+def _render_ai_disclaimer():
+    """Standard disclaimer shown above any AI-composed insight surface."""
+    st.warning(
+        "AI-generated summary — figures and attributions may be wrong; verify against the linked source documents."
+    )
 
 
 def _render_note_page(md_path: Path, title: str, generated_date: str, pdf_filename: str):
@@ -708,6 +887,7 @@ def _render_note_page(md_path: Path, title: str, generated_date: str, pdf_filena
             use_container_width=True,
         )
 
+    _render_ai_disclaimer()
     st.divider()
     html = _notes_md_to_html(content)
     st.markdown(
@@ -718,13 +898,13 @@ def _render_note_page(md_path: Path, title: str, generated_date: str, pdf_filena
 
 
 def _find_latest_consultant_rfps() -> tuple[Path, str, str] | None:
-    """Find the latest Monthly Consultant RFP brief.
+    """Find the latest Weekly Consultant RFP brief.
 
-    Picks the newest ``monthly_consultant_rfps_<YYYY-MM-DD>.md`` by
+    Picks the newest ``weekly_consultant_rfps_<YYYY-MM-DD>.md`` by
     filename (lexical sort = chronological since the date is embedded).
     """
     candidates = sorted(
-        NOTES_DIR.glob("monthly_consultant_rfps_*.md"),
+        NOTES_DIR.glob("weekly_consultant_rfps_*.md"),
         reverse=True,
     )
     if not candidates:
@@ -733,25 +913,134 @@ def _find_latest_consultant_rfps() -> tuple[Path, str, str] | None:
     content = path.read_text(encoding="utf-8")
     gen_match = re.search(r"\*Generated:\s*(.+?)\*", content)
     generated_date = gen_match.group(1).strip() if gen_match else "Unknown"
-    m = re.match(r"monthly_consultant_rfps_(\d{4}-\d{2})", path.name)
+    m = re.match(r"weekly_consultant_rfps_(\d{4}-\d{2}-\d{2})", path.name)
     if m:
-        month = datetime.strptime(m.group(1) + "-01", "%Y-%m-%d").strftime("%B %Y")
-        title = f"Monthly Consultant RFP Brief: {month}"
+        week_end = datetime.strptime(m.group(1), "%Y-%m-%d").strftime("%b %d, %Y")
+        title = f"Weekly Consultant RFP Brief: Week ending {week_end}"
     else:
-        title = "Monthly Consultant RFP Brief"
+        title = "Weekly Consultant RFP Brief"
     return (path, title, generated_date)
 
 
-def page_notes():
-    tab_week, tab_insights_monthly, tab_rfps, tab_insights_year = st.tabs([
-        "7-Day Highlights",
-        "Monthly CIO Insights",
-        "Consultant RFPs",
-        "2026 CIO Insights",
+from lib.rfp_alerts import find_alerts as _find_rfp_alerts_raw
+from lib.rfp_alerts import polish_alerts as _polish_alerts_raw
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _polish_alerts_cached(payload: tuple, today_iso: str,
+                           cutoff_iso: str) -> tuple[list[dict], str]:
+    """Streamlit-cached wrapper. ``payload`` is a hashable tuple per alert
+    so cache keys correctly across reruns.
+    """
+    raw_alerts = [{
+        "doc_id": p[0], "plan_id": p[1],
+        "plan_abbrev": p[1], "plan_name": p[2],
+        "filename": p[3], "keyword": p[4],
+        "polish_context": p[5], "meeting_date_str": p[6],
+    } for p in payload]
+    return _polish_alerts_raw(raw_alerts, today_iso, cutoff_iso)
+
+
+def _render_rfp_alerts():
+    st.title("RFP Alerts")
+    st.caption(
+        "RFP and consultant references found in materials downloaded "
+        "by the daily pipeline. Each candidate is polished by Haiku "
+        "into a one-sentence summary and dropped if Haiku judges it "
+        "incidental (CAFR boilerplate, agenda placeholders, etc.). "
+        "Widen the window to scan a longer trailing period."
+    )
+    _render_ai_disclaimer()
+
+    days = st.slider("Look-back window (days)", 1, 30, 1, step=1,
+                     key="rfp_alerts_days")
+    hours = days * 24
+
+    session = get_db_session()
+    raw_alerts = _find_rfp_alerts_raw(session, hours=hours)
+
+    if not raw_alerts:
+        st.info(f"No RFP or consultant references found in materials from the last {days} day(s).")
+        return
+
+    # Build a hashable, stable per-doc tuple so st.cache_data keys correctly.
+    today = datetime.utcnow().date()
+    cutoff = today - timedelta(days=30)
+    today_iso = today.isoformat()
+    cutoff_iso = cutoff.isoformat()
+    payload = tuple(
+        (a["doc_id"], a["plan_abbrev"], a["plan_name"], a["filename"],
+         a["keyword"], a["polish_context"],
+         a["meeting_date"].date().isoformat() if a.get("meeting_date") else "")
+        for a in raw_alerts
+    )
+    with st.spinner(f"Polishing {len(payload)} candidate(s) via Haiku…"):
+        polished, headline = _polish_alerts_cached(payload, today_iso, cutoff_iso)
+
+    # Re-attach the per-doc fields the polish layer doesn't carry through.
+    raw_by_id = {a["doc_id"]: a for a in raw_alerts}
+    enriched = []
+    for p in polished:
+        meta = raw_by_id.get(p["doc_id"], {})
+        enriched.append({**p,
+                         "doc_type": meta.get("doc_type", ""),
+                         "downloaded_at": meta.get("downloaded_at")})
+
+    dropped = len(raw_alerts) - len(enriched)
+    by_plan: dict[tuple, list[dict]] = {}
+    for a in enriched:
+        key = (a["plan_abbrev"], a["plan_name"])
+        by_plan.setdefault(key, []).append(a)
+
+    if not enriched:
+        st.info(
+            f"{len(raw_alerts)} regex candidate(s) all filtered out by Haiku as "
+            f"incidental mentions in the last {days} day(s)."
+        )
+        return
+
+    if headline:
+        st.markdown(
+            f'<div style="padding:12px 16px;background:#f0f4f8;border-left:4px solid #003366;'
+            f'margin:0 0 14px;border-radius:4px;">'
+            f'<b>Headline:</b> {_html.escape(headline)}'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    summary_bits = [
+        f"**{len(enriched)} alert(s)** across **{len(by_plan)} plan(s)**"
+    ]
+    if dropped:
+        summary_bits.append(f"({dropped} regex candidate(s) filtered as incidental)")
+    st.markdown(" ".join(summary_bits))
+
+    for (abbrev, plan_name), plan_alerts in sorted(by_plan.items(), key=lambda kv: kv[0]):
+        label = f"{abbrev} ({plan_name})" if abbrev != plan_name else plan_name
+        with st.expander(f"**{label}** — {len(plan_alerts)} doc(s)", expanded=True):
+            for a in plan_alerts:
+                when = a["downloaded_at"].strftime("%Y-%m-%d %H:%M") if a.get("downloaded_at") else "—"
+                st.markdown(
+                    f"[{a['filename']}](?doc={a['doc_id']}) "
+                    f"<span style='color:#888;font-size:0.9em;'>· {a.get('doc_type', '')} · {when}</span>",
+                    unsafe_allow_html=True,
+                )
+                st.markdown(f"> {a['snippet']}")
+                st.markdown("")
+
+
+def page_insights():
+    (tab_week, tab_insights_monthly, tab_rfps_weekly,
+     tab_rfp_alerts, tab_insights_year) = st.tabs([
+        "Weekly Insights",
+        "Monthly Insights",
+        "RFP Weekly",
+        "RFP Alerts",
+        "Year to date Insights",
     ])
 
-    with tab_rfps:
-        st.title("Monthly Consultant RFP Brief")
+    with tab_rfps_weekly:
+        st.title("RFP Weekly")
         result = _find_latest_consultant_rfps()
         if result:
             path, title, gen_date = result
@@ -764,11 +1053,14 @@ def page_notes():
         else:
             st.info(
                 "No consultant RFP brief found yet. "
-                "Run `python -m scripts.compose_rfp_monthly` to generate."
+                "Run `python -m scripts.compose_rfp_weekly` to generate."
             )
 
+    with tab_rfp_alerts:
+        _render_rfp_alerts()
+
     with tab_insights_monthly:
-        st.title("Monthly CIO Insights")
+        st.title("Monthly Insights")
         result = _find_latest_insights_recent()
         if result:
             path, title, gen_date = result
@@ -785,7 +1077,7 @@ def page_notes():
             )
 
     with tab_insights_year:
-        st.title("2026 CIO Insights")
+        st.title("Year to date Insights")
         result = _find_latest_insights()
         if result:
             path, title, gen_date = result
@@ -799,7 +1091,7 @@ def page_notes():
             st.info("No 2026 insights document found. Run `python generate_notes.py --insights-ytd-only` to generate.")
 
     with tab_week:
-        st.title("7-Day Highlights")
+        st.title("Weekly Insights")
         all_highlights = _find_all_highlights()
         if not all_highlights:
             st.info("No highlights found. Run `python generate_notes.py` to generate.")
@@ -826,9 +1118,49 @@ def page_notes():
             )
 
 
+_DEPLOYMENT_ACTIONS = {"hire", "fire", "commitment"}
+_POLICY_ACTIONS = {"rebalance", "allocation_change", "policy_change", "other"}
+
+
+def _coerce_amount(val) -> float | None:
+    """Tolerantly parse amount_millions which may be int / float / str / None."""
+    if val in (None, "", "None"):
+        return None
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return None
+
+
+def _excerpt(text: str, n: int) -> str:
+    """Truncate ``text`` to ``n`` characters with an ellipsis when cut."""
+    if not text:
+        return ""
+    text = text.replace("\n", " ").strip()
+    return text if len(text) <= n else text[:n].rstrip() + "…"
+
+
+def _fmt_amount(v) -> str:
+    """Format a $M number with comma thousands; blank if missing."""
+    a = _coerce_amount(v)
+    return f"{a:,.1f}" if a is not None else ""
+
+
 def page_investment_actions(plan_id, plan_label):
     st.title("Investment Actions")
-    st.caption("Manager hires/fires, allocation changes, and new commitments extracted from board packs.")
+    st.caption(
+        "Manager hires/fires, allocation changes, and new commitments "
+        "extracted from board packs. The 'Capital deployment' tab shows "
+        "money-flow actions (hire/fire/commitment); 'Policy & rebalancing' "
+        "shows allocation shifts, policy changes, and other governance items."
+    )
+
+    days_back = st.slider(
+        "Look-back window (days)", min_value=30, max_value=365, value=90, step=30,
+        key="invest_actions_days",
+        help="Filters by document meeting date.",
+    )
+    cutoff = datetime.utcnow().date() - timedelta(days=days_back)
 
     session = get_db_session()
     q = (
@@ -836,45 +1168,165 @@ def page_investment_actions(plan_id, plan_label):
         .join(Summary, Document.id == Summary.document_id)
         .filter(Summary.investment_actions != "[]")
         .filter(Summary.investment_actions.isnot(None))
+        .filter(Document.meeting_date >= cutoff)
     )
     if plan_id:
         q = q.filter(Document.plan_id == plan_id)
-    results = q.order_by(Document.meeting_date.desc()).limit(100).all()
+    results = q.order_by(Document.meeting_date.desc()).all()
 
     if not results:
-        st.info("No investment actions found yet.")
+        st.info(f"No investment actions in the last {days_back} days.")
         return
 
-    action_filter = st.multiselect(
-        "Filter by action type",
-        ["hire", "fire", "rebalance", "allocation_change", "commitment", "other"],
-        default=[]
-    )
-
-    rows = []
+    deployment_rows: list[dict] = []
+    policy_rows: list[dict] = []
     for doc, summary in results:
-        actions = parse_json_field(summary.investment_actions)
+        actions = parse_json_field(summary.investment_actions) or []
         for a in actions:
-            if action_filter and a.get("action") not in action_filter:
-                continue
-            rows.append({
+            row = {
                 "Plan": doc.plan_id.upper(),
                 "Date": doc.meeting_date.strftime("%Y-%m-%d") if doc.meeting_date else "",
-                "Action": a.get("action", ""),
-                "Description": a.get("description", ""),
-                "Manager": a.get("manager", ""),
-                "Asset Class": a.get("asset_class", ""),
-                "Amount ($M)": a.get("amount_millions", ""),
-            })
+                "Action": a.get("action", "") or "",
+                "Manager": a.get("manager", "") or "",
+                "Asset Class": a.get("asset_class", "") or "",
+                "Amount ($M)": _coerce_amount(a.get("amount_millions")),
+                "Description": a.get("description", "") or "",
+                "doc_id": doc.id,
+            }
+            action = row["Action"]
+            if action in _DEPLOYMENT_ACTIONS:
+                deployment_rows.append(row)
+            else:
+                # Unknown / blank actions land in policy as a catch-all.
+                policy_rows.append(row)
 
-    if rows:
-        import pandas as pd
-        df = pd.DataFrame(rows)
-        st.dataframe(df, use_container_width=True, hide_index=True)
-        csv = df.to_csv(index=False)
-        st.download_button("Download CSV", csv, "investment_actions.csv", "text/csv")
+    tab_deploy, tab_policy = st.tabs([
+        f"Capital deployment ({len(deployment_rows)})",
+        f"Policy & rebalancing ({len(policy_rows)})",
+    ])
+    with tab_deploy:
+        _render_deployment_actions(deployment_rows, days_back)
+    with tab_policy:
+        _render_policy_actions(policy_rows, days_back)
+
+
+def _render_deployment_actions(rows: list[dict], days_back: int) -> None:
+    """Hires, fires, commitments — money-flow view with amount filter."""
+    import pandas as pd
+
+    if not rows:
+        st.info(f"No capital deployment actions in the last {days_back} days.")
+        return
+
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        min_amount = st.slider(
+            "Minimum amount ($M)", 0, 250, 10, step=5,
+            key="invest_actions_min_amount",
+            help=(
+                "Drop small or unspecified amounts. Set to 0 to include "
+                "rows with no amount captured."
+            ),
+        )
+    with col2:
+        action_types = sorted({r["Action"] for r in rows if r["Action"]})
+        selected_actions = st.multiselect(
+            "Action type",
+            action_types,
+            default=action_types,
+            key="invest_actions_deploy_types",
+        )
+
+    if min_amount > 0:
+        filtered = [
+            r for r in rows
+            if r["Action"] in selected_actions
+            and r["Amount ($M)"] is not None
+            and r["Amount ($M)"] >= min_amount
+        ]
     else:
-        st.info("No actions match the current filter.")
+        filtered = [r for r in rows if r["Action"] in selected_actions]
+
+    total_amount = sum(
+        r["Amount ($M)"] for r in filtered if r["Amount ($M)"] is not None
+    )
+    plan_count = len({r["Plan"] for r in filtered})
+    st.markdown(
+        f"**{len(filtered)} actions** · "
+        f"**${total_amount:,.0f}M total** · "
+        f"across **{plan_count} plans** · "
+        f"last **{days_back} days**"
+    )
+
+    if not filtered:
+        st.info("No actions match the current filters.")
+        return
+
+    df = pd.DataFrame(filtered)
+    df["Excerpt"] = df["Description"].map(lambda t: _excerpt(t, 100))
+    df["Amount ($M)"] = df["Amount ($M)"].map(_fmt_amount)
+
+    display = df[["Plan", "Date", "Action", "Manager", "Asset Class",
+                  "Amount ($M)", "Excerpt"]]
+    st.dataframe(display, use_container_width=True, hide_index=True)
+    csv_df = df[["Plan", "Date", "Action", "Manager", "Asset Class",
+                 "Amount ($M)", "Description", "doc_id"]]
+    st.download_button(
+        "Download CSV (full descriptions)",
+        csv_df.to_csv(index=False),
+        "capital_deployment.csv",
+        "text/csv",
+    )
+
+
+def _render_policy_actions(rows: list[dict], days_back: int) -> None:
+    """Rebalances, allocation changes, governance — descriptive view.
+
+    'other' is hidden by default because most rows in that bucket are
+    low-signal governance items (waivers, committee notes, etc.)."""
+    import pandas as pd
+
+    if not rows:
+        st.info(f"No policy or rebalancing actions in the last {days_back} days.")
+        return
+
+    action_types = sorted({r["Action"] for r in rows if r["Action"]})
+    default_selected = [t for t in action_types if t != "other"]
+
+    selected = st.multiselect(
+        "Action type",
+        action_types,
+        default=default_selected,
+        key="invest_actions_policy_types",
+        help="'other' is hidden by default — usually low-signal governance items.",
+    )
+
+    filtered = [r for r in rows if r["Action"] in selected]
+
+    plan_count = len({r["Plan"] for r in filtered})
+    st.markdown(
+        f"**{len(filtered)} actions** · "
+        f"across **{plan_count} plans** · "
+        f"last **{days_back} days**"
+    )
+
+    if not filtered:
+        st.info("No actions match the current filters.")
+        return
+
+    df = pd.DataFrame(filtered)
+    df["Excerpt"] = df["Description"].map(lambda t: _excerpt(t, 140))
+
+    display = df[["Plan", "Date", "Action", "Asset Class", "Excerpt"]]
+    st.dataframe(display, use_container_width=True, hide_index=True)
+    csv_df = df[["Plan", "Date", "Action", "Manager", "Asset Class",
+                 "Description", "doc_id"]]
+    st.download_button(
+        "Download CSV (full descriptions)",
+        csv_df.to_csv(index=False),
+        "policy_actions.csv",
+        "text/csv",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1669,6 +2121,22 @@ def _cafr_coverage_df():
         ).group_by(CafrPerformance.cafr_extract_id).all()
     )
 
+    # Plan metadata from JSON: cafr_format=aggregator marks a CAFR that
+    # covers a system-of-systems (e.g. NYC Retirement, MN SBI). The
+    # structured extractor intentionally skips these because the
+    # asset-allocation tables don't map to a single plan. Bucket them
+    # separately so they don't sit forever as "Pending extract".
+    # Read JSON directly (not via fetcher.load_plans) so this module
+    # doesn't drag in the pipeline-side bs4 / Playwright deps that
+    # aren't installed on the Render web service.
+    _plans_meta_path = Path(__file__).parent / "data" / "known_plans.json"
+    with open(_plans_meta_path, encoding="utf-8") as _f:
+        _plans_meta = json.load(_f)
+    aggregator_ids: set[str] = {
+        meta["id"] for meta in _plans_meta
+        if (meta.get("cafr_format") or "").lower() == "aggregator"
+    }
+
     plans = session.query(Plan).order_by(Plan.name).all()
     rows = []
     for p in plans:
@@ -1687,7 +2155,13 @@ def _cafr_coverage_df():
             downloaded = doc.downloaded_at.strftime("%Y-%m-%d") if doc.downloaded_at else ""
             url = doc.url or ""
             ext = extracts.get(doc.id)
-            if ext is None:
+            if p.id in aggregator_ids:
+                status = "Aggregator (skipped)"
+                extracted = "N/A"
+                extract_fy = ""
+                alloc = 0
+                perf = 0
+            elif ext is None:
                 status = "Pending extract"
                 extracted = "No"
                 extract_fy = ""
@@ -1964,27 +2438,56 @@ ASSET_ALLOCATION_VIEWS = (
 
 
 @st.cache_data(ttl=300)
-def _allocation_df(match_patterns: tuple, exclude_patterns: tuple, exact_label: str):
+def _allocation_fy_range() -> tuple[int, int] | None:
+    """Min/max fiscal_year across CAFR extracts. Returns ``None`` if empty."""
+    from sqlalchemy import func
+
+    session = get_db_session()
+    row = (
+        session.query(
+            func.min(CafrExtract.fiscal_year),
+            func.max(CafrExtract.fiscal_year),
+        )
+        .filter(CafrExtract.fiscal_year.isnot(None))
+        .one_or_none()
+    )
+    if not row or row[0] is None or row[1] is None:
+        return None
+    return int(row[0]), int(row[1])
+
+
+@st.cache_data(ttl=300)
+def _allocation_df(match_patterns: tuple, exclude_patterns: tuple,
+                   exact_label: str, min_fy: int | None = None):
     """Plans with both target and actual weights for a given asset class.
 
-    Pulls the latest CAFR extract per plan, filters allocation rows whose
-    asset_class matches any of `match_patterns` (case-insensitive LIKE)
-    and matches none of `exclude_patterns`, and keeps only rows where both
-    target_pct and actual_pct are populated. When a plan has multiple
-    matching rows, the one whose asset_class equals `exact_label` is
-    preferred; otherwise the first row is kept.
+    Pulls the latest CAFR extract per plan (whose fiscal_year is at least
+    ``min_fy`` if provided), filters allocation rows whose asset_class
+    matches any of ``match_patterns`` (case-insensitive LIKE) and matches
+    none of ``exclude_patterns``, and keeps only rows where both target_pct
+    and actual_pct are populated. When a plan has multiple matching rows,
+    the one whose asset_class equals ``exact_label`` is preferred;
+    otherwise the first row is kept.
     """
     import pandas as pd
     from sqlalchemy import func, or_
 
     session = get_db_session()
 
-    latest_extract_id = (
+    # The "latest extract per plan" subquery has to apply the same
+    # min_fy filter; otherwise a plan whose newest CAFR is older than
+    # min_fy would simply drop out (correct), but a plan whose newest
+    # CAFR is newer than min_fy would still be picked even when the
+    # user only wanted older data — apply consistently.
+    latest_extract_q = (
         session.query(func.max(CafrExtract.id))
         .filter(CafrExtract.plan_id == Plan.id)
-        .correlate(Plan)
-        .scalar_subquery()
     )
+    if min_fy is not None:
+        latest_extract_q = latest_extract_q.filter(
+            CafrExtract.fiscal_year >= min_fy
+        )
+    latest_extract_id = latest_extract_q.correlate(Plan).scalar_subquery()
 
     asset_class_lower = func.lower(CafrAllocation.asset_class)
     match_clause = or_(*[asset_class_lower.like(p) for p in match_patterns])
@@ -2130,6 +2633,25 @@ def page_asset_allocation():
         "underweight."
     )
 
+    fy_range = _allocation_fy_range()
+    min_fy: int | None = None
+    if fy_range:
+        lo, hi = fy_range
+        if hi > lo:
+            min_fy = st.slider(
+                "Show CAFRs with fiscal year ≥",
+                min_value=lo,
+                max_value=hi,
+                value=lo,
+                step=1,
+                key="asset_alloc_min_fy",
+                help=(
+                    "Drop plans whose latest available CAFR fiscal year is "
+                    "older than this. Useful for excluding stale data when "
+                    "comparing against current policy targets."
+                ),
+            )
+
     sub_tabs = st.tabs([v["tab_name"] for v in ASSET_ALLOCATION_VIEWS])
     for tab, view in zip(sub_tabs, ASSET_ALLOCATION_VIEWS):
         with tab:
@@ -2137,6 +2659,7 @@ def page_asset_allocation():
                 view["match_patterns"],
                 view["exclude_patterns"],
                 view["exact_label"],
+                min_fy=min_fy,
             )
             _render_allocation_view(df, view["tab_name"])
 
@@ -2159,17 +2682,21 @@ def page_cafr():
     total = len(df)
     extracted = int((df["Status"] == "Extracted").sum())
     pending = int((df["Status"] == "Pending extract").sum())
+    aggregator = int((df["Status"] == "Aggregator (skipped)").sum())
     missing = int((df["Status"] == "Missing CAFR").sum())
 
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("Plans tracked", total)
     c2.metric("Extracted", extracted)
     c3.metric("Pending extract", pending)
-    c4.metric("Missing CAFR", missing)
+    c4.metric("Aggregator", aggregator,
+              help="System-of-systems CAFRs that don't map to a single plan; "
+                   "skipped by design.")
+    c5.metric("Missing CAFR", missing)
 
     status_filter = st.multiselect(
         "Filter by status",
-        ["Extracted", "Pending extract", "Missing CAFR"],
+        ["Extracted", "Pending extract", "Aggregator (skipped)", "Missing CAFR"],
         default=[],
         key="cafr_status_filter",
     )
@@ -2596,6 +3123,45 @@ def page_meeting_recordings(plan_id, plan_label):
             )
 
 
+def _admin_unlocked() -> bool:
+    """True if Admin/Drafts tabs should be visible.
+
+    Fail-open when ``ADMIN_PASSWORD`` is unset (local dev convenience).
+    Otherwise gated on ``st.session_state['_admin_unlocked']`` — set
+    by ``_render_admin_login_sidebar`` after a correct password entry.
+    """
+    if not os.environ.get("ADMIN_PASSWORD", ""):
+        return True
+    return bool(st.session_state.get("_admin_unlocked", False))
+
+
+def _render_admin_login_sidebar() -> None:
+    """Sidebar password form. No-op when already unlocked or no password set."""
+    expected = os.environ.get("ADMIN_PASSWORD", "")
+    if not expected:
+        return
+    if st.session_state.get("_admin_unlocked", False):
+        with st.sidebar:
+            if st.button("Admin: lock", use_container_width=True):
+                st.session_state["_admin_unlocked"] = False
+                st.rerun()
+        return
+    with st.sidebar:
+        with st.expander("Admin login", expanded=False):
+            with st.form("admin_login", clear_on_submit=True):
+                pw = st.text_input(
+                    "Password", type="password",
+                    label_visibility="collapsed",
+                    placeholder="password",
+                )
+                if st.form_submit_button("Unlock", use_container_width=True):
+                    if pw == expected:
+                        st.session_state["_admin_unlocked"] = True
+                        st.rerun()
+                    else:
+                        st.error("Incorrect password.")
+
+
 def page_admin():
     """Admin views: pipeline / data-quality diagnostics for the site owner."""
     st.title("Admin")
@@ -2750,6 +3316,26 @@ def page_approval_action(raw_token: str, action: str):
             )
             return
 
+        # Post-publish notice email (currently only for weekly cadence;
+        # extend by removing the gate once monthly/annual want it too).
+        # Failures here don't roll back — the publication is already
+        # live; we just log and surface to the operator.
+        if publication.cadence == "weekly":
+            try:
+                from insights import notice as _notice
+                _notice.send_publication_notice(publication)
+            except Exception as exc:
+                # Don't block the approval-confirmation page on a notice failure.
+                import logging as _logging
+                _logging.getLogger(__name__).warning(
+                    "Publication %s published but notice email failed: %s",
+                    publication.id, exc,
+                )
+                st.warning(
+                    f"Briefing published, but the notice email failed to "
+                    f"send: {exc}. Check Resend logs."
+                )
+
     st.title(f"{action.title()}d")
     st.success(
         f"Publication #{publication.id} ({publication.cadence}, "
@@ -2767,7 +3353,7 @@ def page_drafts():
     """List publications awaiting founder approval."""
     st.title("Drafts awaiting approval")
     st.caption(
-        "CIO Insights publications generated by the scheduler that haven't "
+        "Insights publications generated by the scheduler that haven't "
         "yet been approved or rejected. The approval link in the email is "
         "the canonical way to act on these — this view is for visibility."
     )
@@ -2812,12 +3398,12 @@ def page_drafts():
                 )
 
 
-def page_insights():
-    """List approved/published CIO Insights publications with PDF downloads."""
-    st.title("Published CIO Insights")
+def page_archive():
+    """List approved/published Insights publications with PDF downloads."""
+    st.title("Insights Archive")
     st.caption(
-        "Every CIO Insights publication that has cleared the approval flow. "
-        "The 'Notes' tab still serves the live versions; this view is the "
+        "Every Insights publication that has cleared the approval flow. "
+        "The 'Insights' tab serves the live versions; this view is the "
         "audit trail."
     )
 
@@ -2880,42 +3466,34 @@ def main():
         page_cafr_plan_detail(cafr_plan_param)
         return
 
-    tabs = st.tabs([
-        "Notes", "Summary", "Updates", "Search", "Browse Recent",
-        "Investment Actions", "Managers", "RFPs", "CAFR", "Asset Allocation",
-        "Meeting Recordings", "Plans", "Drafts", "Insights", "Admin",
-    ])
+    # Sidebar admin login affordance — no-op when ADMIN_PASSWORD is unset
+    # (local dev) or when already unlocked (shows a "lock" button instead).
+    _render_admin_login_sidebar()
 
-    with tabs[0]:
-        page_notes()
-    with tabs[1]:
-        page_summary_updates(plan_id, plan_label)
-    with tabs[2]:
-        page_updates(plan_id, plan_label)
-    with tabs[3]:
-        page_search(plan_id, plan_label)
-    with tabs[4]:
-        page_browse(plan_id, plan_label)
-    with tabs[5]:
-        page_investment_actions(plan_id, plan_label)
-    with tabs[6]:
-        page_managers()
-    with tabs[7]:
-        page_rfp(plan_id, plan_label)
-    with tabs[8]:
-        page_cafr()
-    with tabs[9]:
-        page_asset_allocation()
-    with tabs[10]:
-        page_meeting_recordings(plan_id, plan_label)
-    with tabs[11]:
-        page_plans()
-    with tabs[12]:
-        page_drafts()
-    with tabs[13]:
-        page_insights()
-    with tabs[14]:
-        page_admin()
+    # Tabs are built from a (label, render) list so the gated tabs can be
+    # appended only when unlocked. When locked, Archive, Drafts and Admin
+    # disappear entirely from the tab strip — visitors don't see them at all.
+    tab_specs: list[tuple[str, callable]] = [
+        ("Insights",            lambda: page_insights()),
+        ("Activity",            lambda: page_activity(plan_id, plan_label)),
+        ("Search",              lambda: page_search(plan_id, plan_label)),
+        ("Investment Actions",  lambda: page_investment_actions(plan_id, plan_label)),
+        ("Managers",            lambda: page_managers()),
+        ("RFPs",                lambda: page_rfp(plan_id, plan_label)),
+        ("CAFR",                lambda: page_cafr()),
+        ("Asset Allocation",    lambda: page_asset_allocation()),
+        ("Meeting Recordings",  lambda: page_meeting_recordings(plan_id, plan_label)),
+        ("Plans",               lambda: page_plans()),
+    ]
+    if _admin_unlocked():
+        tab_specs.append(("Archive", lambda: page_archive()))
+        tab_specs.append(("Drafts",  lambda: page_drafts()))
+        tab_specs.append(("Admin",   lambda: page_admin()))
+
+    tabs = st.tabs([label for label, _ in tab_specs])
+    for tab, (_label, render) in zip(tabs, tab_specs):
+        with tab:
+            render()
 
 
 if __name__ == "__main__":

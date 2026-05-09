@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Three layered systems sharing one SQLite database (`db/pension.db`, ~42 MB, tracked in git):
 
 1. **Meeting-document pipeline** (`pipeline.py`, `fetcher.py`, `extractor.py`, `summarizer.py`) — fetches board materials and CAFRs from ~148 U.S. public pension plans, extracts text, summarizes with Claude per-document. Hybrid: GHA cron handles 137 of 148 plans daily; local Windows Task Scheduler handles the 11 WAF-blocked plans (see `data/local_only_plans.json`).
-2. **CIO Insights automation** (`insights/` package) — composes weekly / monthly / annual editorial briefings from the existing summaries, gated on a magic-link approval email to the founder. GHA cron-triggered (weekly Sundays 11:00 UTC, monthly 1st of month 18:00 UTC).
+2. **Insights automation** (`insights/` package) — composes weekly / monthly / annual editorial briefings from the existing summaries, gated on a magic-link approval email to the founder. GHA cron-triggered (weekly Sundays 11:00 UTC, monthly 1st of month 18:00 UTC).
 3. **RFP alerts pipeline** (`rfp/`, `lib/`, `api/`, `scripts/`) — structured extraction of RFP records from already-fetched documents into `rfp_records` / `document_health` / `pipeline_runs`, served via FastAPI. RFP backfill runs locally via Windows Task Scheduler weekly; FastAPI lives on Render.
 
 The Streamlit app (`app.py`) reads from the same DB and surfaces all three layers as tabs.
@@ -80,6 +80,9 @@ The full extracted PDF text is the bulk of the DB by 10× over everything else. 
 ### Approval flow is Streamlit-query-param-based
 Magic-link emails contain `?approve=<token>` and `?reject=<token>`. The Streamlit app's `main()` checks `st.query_params` before rendering tabs and dispatches to `page_document_detail`, `page_cafr_plan_detail`, or the approval consumer. Tokens are SHA-256-hashed in `approval_tokens`; raw values exist only in the email body. To add a new deep-link route, follow the same pattern in `app.py`'s `main()`.
 
+### Archive / Drafts / Admin password gate
+The Archive, Drafts, and Admin tabs are hidden from the tab strip entirely until the user enters the password set in the `ADMIN_PASSWORD` env var. The login form is a sidebar expander rendered by `_render_admin_login_sidebar()`; the predicate `_admin_unlocked()` drives whether the three gated tabs are appended to `main()`'s `tab_specs` list. Single shared password, session-state-sticky for the browser tab. Leave the env var unset for local dev (fail-open — tabs always present, no login UI). Set on Render to keep internal tooling, pre-editorial drafts, and the back-catalogue archive off the public site.
+
 ### Idempotency keys for cycles
 - `Publication` is unique on `(cadence, period_start)`. `find_or_create_publication()` returns the existing row or creates a new one with `status="generating"`.
 - `finalize_for_approval()` raises if status isn't `"generating"`. So once a publication is `awaiting_approval`, the cycle won't resend its email.
@@ -93,12 +96,13 @@ Render hosts only two web services now: Streamlit (`pension-plan-intelligence`) 
 |---|---|---|---|
 | Daily document pipeline (137 plans) | cron 11:00 UTC | GHA | `.github/workflows/daily-pipeline.yml` |
 | Daily document pipeline (11 WAF-blocked plans) | Task Scheduler | local Windows | `scripts/run_daily.bat` |
-| Weekly CIO Insights composition + email | cron Sundays 11:00 UTC | GHA | `.github/workflows/weekly-insights.yml` |
+| Weekly Insights composition + email | cron Sundays 11:00 UTC | GHA | `.github/workflows/weekly-insights.yml` |
 | Weekly RFP backfill (`--limit 100`) | cron Sundays 11:30 UTC | GHA | `.github/workflows/weekly-rfp.yml` |
-| Monthly CAFR refresh (~92 plans) | cron 1st of month 15:00 UTC | GHA | `.github/workflows/monthly-cafr-refresh.yml` |
-| Monthly CAFR refresh (5 WAF-blocked plans) | Task Scheduler | local Windows | `scripts/run_monthly.bat` |
+| Weekly Consultant RFP brief (7-day + 30-day rollup) | cron Sundays 12:00 UTC | GHA | `.github/workflows/weekly-rfp-brief.yml` |
+| Monthly CAFR refresh + structured extraction (~92 plans) | cron 1st of month 15:00 UTC | GHA | `.github/workflows/monthly-cafr-refresh.yml` |
+| Monthly CAFR refresh + structured extraction (5 WAF-blocked plans) | Task Scheduler | local Windows | `scripts/run_monthly.bat` |
 | Monthly IPS refresh (all 148 plans, auto-discover + verify via Haiku 4.5) | Task Scheduler | local Windows | `scripts/run_ips.bat` |
-| Monthly CAFR extraction + insights composition + email | cron 1st of month 18:00 UTC | GHA | `.github/workflows/monthly-insights.yml` |
+| Monthly insights composition + email | cron 1st of month 18:00 UTC | GHA | `.github/workflows/monthly-insights.yml` |
 | Quarterly insights composition + email | cron 1st of Jan/Apr/Jul/Oct 19:00 UTC | GHA | `.github/workflows/quarterly-insights.yml` |
 
 GHA secrets that must exist for the cron entries to work: `ANTHROPIC_API_KEY`, `RESEND_API_KEY`, `APPROVAL_EMAIL_RECIPIENT`, `APPROVAL_EMAIL_FROM`. Local cron uses the same names from `.env`. Schedules are UTC; ET drifts one hour between EDT and EST. The 1st-of-month sequence is deliberate: GHA CAFR refresh @ 15:00 UTC → local CAFR refresh runs early ET → GHA monthly-insights @ 18:00 UTC pulls a DB that already has both runs' new CAFRs.

@@ -73,7 +73,7 @@ def _git_commit_and_push(path: Path, publication: Publication) -> None:
     failed (rather than silently leaving an un-pushed change).
     """
     msg = (
-        f"Publish {publication.cadence} CIO Insights "
+        f"Publish {publication.cadence} Insights "
         f"({publication.period_start.isoformat()})"
     )
 

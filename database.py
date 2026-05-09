@@ -219,7 +219,7 @@ class CafrPerformance(Base):
 
 
 class Publication(Base):
-    """One row per scheduled CIO Insights publication, regardless of status.
+    """One row per scheduled Insights publication, regardless of status.
 
     Lifecycle: generating → awaiting_approval → (approved | rejected | expired)
                                               ↓ approved
@@ -767,11 +767,23 @@ def get_new_meetings(session: Session, days: int = 7) -> list[dict]:
     Groups by (plan_id, meeting_date). For each meeting returns:
       plan, meeting_date, agenda_doc, agenda_summary, all_docs
     Sorted by meeting_date descending.
+
+    Filters applied:
+      - Excludes doc_type IN ('cafr', 'performance') — CAFRs and stand-alone
+        performance reports aren't meetings; they get FY-end stamps that
+        otherwise pollute the meeting feed.
+      - Caps meeting_date at today + 60 days. Real forward-scheduled board
+        meetings (next ~2 months) stay visible; far-future parse errors
+        (Dec 31 FY stamps, multi-year workplans) drop out.
     """
     cutoff = datetime.utcnow() - timedelta(days=days)
+    future_cap = datetime.utcnow() + timedelta(days=60)
     recent_docs = (
         session.query(Document)
         .filter(Document.downloaded_at >= cutoff)
+        .filter(Document.doc_type.notin_(["cafr", "performance"]))
+        .filter((Document.meeting_date.is_(None)) |
+                (Document.meeting_date <= future_cap))
         .order_by(Document.meeting_date.desc())
         .all()
     )

@@ -3,7 +3,7 @@ Generate analyst notes from summarized pension plan data.
 
 Checks for latest documents across all plans, then uses Claude to produce:
   - 7-Day Highlights: a weekly briefing of recent board/committee activity
-  - CIO Insights: a strategic thematic analysis of 2026 meeting activity
+  - Insights: a strategic thematic analysis of 2026 meeting activity
 
 Usage:
     python generate_notes.py                    # run pipeline first, then generate notes
@@ -153,7 +153,7 @@ def gather_highlights_data(session, days: int = 7) -> dict:
 
     if not meetings:
         return {"meetings": [], "date_range": None, "plans_with_activity": 0,
-                "total_aum": 0, "plans": []}
+                "total_aum": 0, "plans": [], "new_doc_count": 0}
 
     # Enrich with all summaries
     for m in meetings:
@@ -177,11 +177,60 @@ def gather_highlights_data(session, days: int = 7) -> dict:
         "plans_with_activity": len(plan_ids),
         "total_aum": total_aum,
         "plans": plans,
+        "new_doc_count": _count_new_documents(session, days=days),
     }
 
 
+def _count_new_documents(session, days: int = 7) -> int:
+    """Count documents downloaded in the past ``days``, matching the
+    Activity tab's filter (excludes CAFRs / performance, future-cap on
+    meeting_date — see ``database.get_new_meetings``)."""
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    future_cap = datetime.utcnow() + timedelta(days=60)
+    return (
+        session.query(Document)
+        .filter(Document.downloaded_at >= cutoff)
+        .filter(Document.doc_type.notin_(["cafr", "performance"]))
+        .filter((Document.meeting_date.is_(None)) |
+                (Document.meeting_date <= future_cap))
+        .count()
+    )
+
+
+def format_highlights_preamble(doc_count: int, days: int) -> str:
+    """Markdown preamble injected at the top of the 7-Day Highlights note.
+
+    Sits between the title block and the first ## section. Renders as a
+    blockquote in Streamlit (under the AI caveat) and in the PDF/email
+    paths. The bare ``?`` href clears query params in Streamlit and is
+    rewritten to ``APP_BASE_URL/?`` by ``insights.render.absolute_url``.
+    """
+    period = "past week" if days == 7 else f"past {days} days"
+    noun = "document" if doc_count == 1 else "documents"
+    verb = "was" if doc_count == 1 else "were"
+    return (
+        f"> Below is a summary of materials gathered over the {period}. "
+        f"In total, **{doc_count} new {noun}** {verb} downloaded this period — "
+        f"browse the full feed in the [Activity tab](?).\n"
+    )
+
+
+def inject_highlights_preamble(markdown: str, doc_count: int, days: int) -> str:
+    """Splice the preamble between the title block and the first ## section.
+
+    The brief's title block ends with ``---\\n\\n`` before the first ##,
+    so we splice on ``\\n## `` and add one newline of separation before
+    the blockquote — yielding ``---\\n\\n> preamble\\n\\n## ...``.
+    """
+    preamble = format_highlights_preamble(doc_count, days)
+    idx = markdown.find("\n## ")
+    if idx == -1:
+        return markdown.rstrip() + "\n\n" + preamble
+    return markdown[:idx] + "\n" + preamble + markdown[idx:]
+
+
 def gather_trends_data(session) -> dict:
-    """Collect all 2026 meeting data for the CIO Insights note."""
+    """Collect all 2026 meeting data for the Insights note."""
     days_since_jan1 = (datetime.utcnow() - datetime(2026, 1, 1)).days + 1
     meetings = get_new_meetings(session, days=days_since_jan1)
 
@@ -220,7 +269,7 @@ def gather_recent_insights_data(session, days: int = 30) -> dict:
     filter inherited from :func:`get_new_meetings`), this gathers by
     true meeting date — meetings that actually happened recently rather
     than documents downloaded recently. Meant for the rolling-window
-    CIO Insights variant.
+    Insights variant.
     """
     cutoff = datetime.utcnow() - timedelta(days=days)
     recent_docs = (
@@ -461,21 +510,49 @@ FORMAT REQUIREMENTS:
 - Bold (**) plan names, dollar amounts, and manager names on first mention
 - Include plan AUM in parentheses on first mention of each plan (see PLAN AUM TABLE)
 - Every sentence containing a $ figure, %, bps, vote tally, or manager name \
-must end with an inline citation in the form (doc_id=42). The cited doc_id \
-must be the one whose summary contains that specific figure or name verbatim. \
-If a sentence's figures come from two different docs, split the sentence so \
-each cite is unambiguous. The section-level *Sources:* line (see below) \
-remains as a summary.
-- End with ## Upcoming Meetings to Watch (bullet list of what's on deck next)
+must end with an inline citation as a parenthesised markdown link in the \
+form ([source](?doc=42)). The cited doc must be the one whose summary in \
+MEETING DATA contains that specific figure or name verbatim. If a sentence's \
+figures come from two different docs, either split the sentence so each cite \
+is unambiguous, or list both links: ([source](?doc=42), [source](?doc=58)). \
+Concrete example of an acceptable sentence: "**LAFPP** approved a three-year \
+contract extension with **MacKay Shields LLC** for high yield fixed income \
+through June 30, 2029, with the manager managing **$771.9 million** at \
+approximately **33 basis points** ([source](?doc=2069))." The section-level \
+*Sources:* line (see below) remains as a summary at the end of each section.
+- End with ## Upcoming Meetings to Watch. Today is {today_str}. Each bullet \
+must include a dated trigger that has not yet ended as of {today_str}. \
+"Has not yet ended" means: a specific calendar date strictly after \
+{today_str}; a month whose last day is after {today_str}; a quarter whose \
+last day is after {today_str}; or a half-year / "by year-end <YYYY>" whose \
+end date is after {today_str}. Omit any bullet whose dated trigger has \
+already passed. Omit bullets that reference only a past meeting with no \
+forward-looking date — do not invent one. Omit open-ended items ("ongoing", \
+"underway", "TBD", "in progress") that have no forward-dated trigger at all. \
+If nothing qualifies, write a single bullet: \
+"- _No forward-dated meetings or deadlines were identified in the source \
+materials._"
 - Hard cap 900 words total. If you reach it, drop the weakest-evidenced \
 theme entirely rather than trimming a sentence from each.
 
 SOURCE LINKS:
-Each summary in the data below includes a doc_id (e.g. doc_id=42). At the end of
-each ## section, add a *Sources:* line listing the documents referenced in that
-section as markdown links. Use this exact format for each link:
+Each summary in MEETING DATA below includes a doc_id (e.g. ``doc_id=42``). \
+You must cite sources two ways, and BOTH are required:
+
+1. INLINE — every sentence containing a $ figure, %, bps, vote tally, or \
+manager name ends with a parenthesised ``([source](?doc=ID))`` markdown \
+link. Use the doc_id whose summary contains that specific figure or name \
+verbatim. Multiple cites in one sentence are written \
+``([source](?doc=42), [source](?doc=58))``. Do NOT write the literal text \
+``(doc_id=42)`` — always write it as the markdown link \
+``([source](?doc=42))``.
+
+2. SECTION-LEVEL — at the end of each ## section, add a *Sources:* line \
+listing the documents referenced in that section. Use this exact format \
+for each link:
   [Plan Abbreviation — DocType — Date](?doc=ID)
 Example: *Sources: [CalPERS — Agenda — April 02, 2026](?doc=42), [LACERA — Board Pack — March 11, 2026](?doc=58)*
+
 Only cite documents whose content you actually used in that section.
 
 BEFORE FINALISING — scan the draft for these specific patterns and verify each \
@@ -489,11 +566,22 @@ these are the most common arithmetic-derived hallucinations)
 - list counts ("three plans", "all 11 portfolios", "two managers")
 - the connective phrases: "consistent with", "reflects", "driven by", \
 "a notable", "suggests", "indicates", "underscores"
-- every inline (doc_id=N): the cited doc must contain the specific figure or \
-name in that sentence verbatim, not merely be on the same topic.
+- every inline ([source](?doc=N)) link: the cited doc must contain the \
+specific figure or name in that sentence verbatim, not merely be on the \
+same topic. Every sentence containing a $ figure, %, bps, vote tally, or \
+manager name MUST have at least one such inline link — if any qualifying \
+sentence is missing one, add it before finalising. Do NOT leave bare \
+``(doc_id=N)`` text — convert any to ``([source](?doc=N))``.
 - AUM consistency: each plan should appear with one and only one AUM value \
 throughout the note (the PLAN AUM TABLE value, OR a single override with an \
 "as of <date>" qualifier — never both for the same plan).
+- ## Upcoming Meetings to Watch: re-read every bullet. Today is {today_str}. \
+Delete any bullet whose dated trigger has already ended on or before \
+{today_str} (a calendar date, month, or quarter whose end is in the past). \
+Delete any bullet that has no forward-dated trigger at all (pure "ongoing", \
+"underway", "TBD", "in progress"). If this empties the section, emit the \
+single "_No forward-dated meetings or deadlines were identified in the \
+source materials._" bullet instead.
 
 PLAN AUM TABLE (canonical reference):
 {aum_table}
@@ -503,14 +591,14 @@ MEETING DATA:
 
 
 def build_insights_prompt(data: dict) -> str:
-    """Build the Claude prompt for the CIO Insights note."""
+    """Build the Claude prompt for the Insights note."""
     today_str = datetime.utcnow().strftime("%B %d, %Y")
     aum_trillions = data["total_aum"] / 1000
     aum_table = _format_aum_table(data.get("plans") or [])
     meetings_text = format_meetings_for_prompt(data["meetings"])
 
     return f"""\
-Write a CIO Insights briefing synthesizing the most important strategic themes and \
+Write a Insights briefing synthesizing the most important strategic themes and \
 implications from U.S. public pension plan board and investment committee activity in 2026.
 
 Below is structured data from {data['plans_with_activity']} pension plans representing \
@@ -553,7 +641,7 @@ MEETING DATA — but only if you append an "as of <date>" qualifier and use \
 that same value consistently for that plan throughout the rest of the note.
 
 FORMAT REQUIREMENTS:
-- Start with exactly: # CIO Insights: 2026 Institutional Trends
+- Start with exactly: # Insights: 2026 Institutional Trends
 - Second line: *Synthesized from board and investment committee activity across \
 {data['plans_with_activity']} U.S. public pension plans (~${aum_trillions:.1f} trillion AUM)*
 - Third line must be exactly: *Generated: {today_str}*
@@ -609,7 +697,7 @@ MEETING DATA:
 
 
 def build_recent_insights_prompt(data: dict) -> str:
-    """Build the Claude prompt for the rolling-window (e.g. 30-day) CIO Insights note."""
+    """Build the Claude prompt for the rolling-window (e.g. 30-day) Insights note."""
     today_str = datetime.utcnow().strftime("%B %d, %Y")
     aum_trillions = data["total_aum"] / 1000
     aum_table = _format_aum_table(data.get("plans") or [])
@@ -619,7 +707,7 @@ def build_recent_insights_prompt(data: dict) -> str:
     date_range = data.get("date_range_str", window_label)
 
     return f"""\
-Write a CIO Insights briefing synthesizing the most important strategic themes and \
+Write a Insights briefing synthesizing the most important strategic themes and \
 implications from U.S. public pension plan board and investment committee activity \
 over {window_label} ({date_range}).
 
@@ -667,7 +755,7 @@ MEETING DATA — but only if you append an "as of <date>" qualifier and use \
 that same value consistently for that plan throughout the rest of the note.
 
 FORMAT REQUIREMENTS:
-- Start with exactly: # CIO Insights: Past {days} Days
+- Start with exactly: # Insights: Past {days} Days
 - Second line: *Synthesized from board and investment committee activity across \
 {data['plans_with_activity']} U.S. public pension plans (~${aum_trillions:.1f} trillion AUM) \
 — meetings held {date_range}*
@@ -891,12 +979,13 @@ def main():
                     f"{data['plans_with_activity']} plans, "
                     f"{len(data['meetings'])} meetings)...")
                 content = generate_note(prompt, MAX_TOKENS_HIGHLIGHTS, model=MODEL_SONNET)
+                content = inject_highlights_preamble(content, data["new_doc_count"], args.days)
                 today = datetime.utcnow().strftime("%Y-%m-%d")
                 write_note(content, f"7day_highlights_{today}.md")
 
         # Step 3: Generate YTD CIO insights
         if do_insights_ytd:
-            console.rule("[bold blue]Generate CIO Insights (YTD)[/bold blue]")
+            console.rule("[bold blue]Generate Insights (YTD)[/bold blue]")
             data = gather_trends_data(session)
             if not data["meetings"]:
                 console.print("[yellow]No 2026 meetings found. Skipping YTD insights.[/yellow]")
@@ -908,13 +997,13 @@ def main():
                     f"{len(data['meetings'])} meetings)...")
                 content = generate_note(prompt, MAX_TOKENS_INSIGHTS, model=MODEL_OPUS)
                 note_path = write_note(content, "2026_cio_insights.md")
-                _validate_insights_note(note_path, data, "CIO Insights (YTD)")
+                _validate_insights_note(note_path, data, "Insights (YTD)")
 
         # Step 4: Generate rolling 30-day CIO insights
         if do_insights_30day:
             window_days = args.insights_30day_days
             console.rule(
-                f"[bold blue]Generate CIO Insights ({window_days}-day)[/bold blue]"
+                f"[bold blue]Generate Insights ({window_days}-day)[/bold blue]"
             )
             data = gather_recent_insights_data(session, days=window_days)
             if not data["meetings"]:
@@ -931,7 +1020,7 @@ def main():
                 content = generate_note(prompt, MAX_TOKENS_INSIGHTS)
                 note_path = write_note(content, f"cio_insights_{window_days}day.md")
                 _validate_insights_note(
-                    note_path, data, f"CIO Insights ({window_days}-day)"
+                    note_path, data, f"Insights ({window_days}-day)"
                 )
 
         console.rule("[bold green]Notes generation complete[/bold green]")

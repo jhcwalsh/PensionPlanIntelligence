@@ -7,7 +7,7 @@ is self-contained (no need to log into the box to triage).
 Usage (from a .bat, after a failing command):
     python -m scripts.notify_failure <task_name> <step_name> <log_path> [exit_code]
 
-Reuses the same Resend account that sends CIO Insights approval mails.
+Reuses the same Resend account that sends Insights approval mails.
 Silently no-ops if RESEND_API_KEY isn't set so dev environments don't
 crash on cron runs.
 """
