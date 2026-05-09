@@ -4,14 +4,16 @@ name: Weekly RFP Brief
 # plus a running 30-day rollup). Read-only against the documents corpus
 # but writes notes/weekly_consultant_rfps_<period_end>.md.
 #
-# Runs Sundays at 12:00 UTC (~8:00 AM EDT / 7:00 AM EST), 30 minutes
-# after weekly-rfp backfill (11:30 UTC) so this brief sees freshly
-# extracted records, and 30 minutes after weekly-insights (11:00 UTC)
-# to avoid pushing the same DB at the same time.
+# Runs Sundays at 13:00 UTC (~9:00 AM EDT / 8:00 AM EST), the last leg
+# of the Sunday cascade:
+#   11:00 daily-pipeline → 12:00 weekly-rfp → 12:30 weekly-insights →
+#   13:00 weekly-rfp-brief.
+# Each stage gets 30 min margin from the previous, and this brief sees
+# freshly extracted records committed by weekly-rfp.
 
 on:
   schedule:
-    - cron: "0 12 * * 0"   # Sundays at 12:00 UTC = 8:00 AM EDT / 7:00 AM EST
+    - cron: "0 13 * * 0"   # Sundays at 13:00 UTC = 9:00 AM EDT / 8:00 AM EST
   workflow_dispatch:
     inputs:
       period:
