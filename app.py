@@ -25,8 +25,10 @@ from database import (
     DocumentHealth,
     DocumentSkip,
     FetchRun,
+    MeetingRecording,
     PipelineRun,
     Plan,
+    PlanVideoSource,
     Publication,
     RFPRecord,
     Summary,
@@ -37,6 +39,7 @@ from database import (
     init_db,
     search_summaries,
 )
+from video_storage import RECORDINGS_DIR, recording_path
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
@@ -2395,6 +2398,204 @@ def page_rfp(plan_id, plan_label):
     )
 
 
+def page_meeting_recordings(plan_id, plan_label):
+    """Smart catalogue of plan video sources and meeting recordings.
+
+    Three views in one tab:
+      - Directory:    per-plan summary of where recordings are published
+                      (YouTube channel, Granicus archive, etc.).
+      - Recordings:   individual videos discovered on plans' meetings pages,
+                      with download status and the local D:\\ path the file
+                      will live at when downloaded.
+      - Coverage:     plans with no known video source — the gap list.
+    """
+    st.title("Meeting Recordings")
+    st.caption(
+        f"Local recordings root: `{RECORDINGS_DIR}`. "
+        "Files live on the user's D: drive — paths are stored in the DB so "
+        "the catalogue can find them again. Source data populated by "
+        "`discover_video_sources.py`."
+    )
+
+    session = get_db_session()
+
+    src_q = session.query(PlanVideoSource)
+    rec_q = session.query(MeetingRecording)
+    if plan_id:
+        src_q = src_q.filter(PlanVideoSource.plan_id == plan_id)
+        rec_q = rec_q.filter(MeetingRecording.plan_id == plan_id)
+
+    sources = src_q.order_by(PlanVideoSource.plan_id, PlanVideoSource.platform).all()
+    recordings = rec_q.order_by(
+        MeetingRecording.published_at.desc().nullslast(),
+        MeetingRecording.discovered_at.desc(),
+    ).all()
+
+    # Build a {plan_id: Plan} lookup once
+    all_plans = {p.id: p for p in session.query(Plan).all()}
+
+    # ---- summary metrics
+    total_plans = len(all_plans) if not plan_id else 1
+    plans_with_source = len({s.plan_id for s in sources if s.status == "active"})
+    downloaded = sum(1 for r in recordings if r.download_status == "done")
+    pending = sum(1 for r in recordings
+                  if r.download_status in ("pending", "downloading"))
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Plans tracked", total_plans)
+    c2.metric("Plans with active source", plans_with_source)
+    c3.metric("Recordings catalogued", len(recordings))
+    c4.metric("Downloaded locally", downloaded,
+              delta=f"{pending} pending" if pending else None)
+
+    tab_dir, tab_rec, tab_gap = st.tabs(
+        ["Directory", "Recordings", "Coverage gaps"]
+    )
+
+    # -----------------------------------------------------------------
+    # Directory: where each plan publishes meeting video
+    # -----------------------------------------------------------------
+    with tab_dir:
+        show_inactive = st.checkbox(
+            "Show inactive sources (e.g. social-media footer links auto-deactivated)",
+            value=False, key="mr_show_inactive",
+        )
+        active_sources = [s for s in sources if show_inactive or s.status == "active"]
+        if not active_sources:
+            st.info("No video sources catalogued yet for this filter. "
+                    "Run `python discover_video_sources.py --site-crawl` to populate.")
+        else:
+            from collections import defaultdict
+            by_plan: dict[str, list] = defaultdict(list)
+            for s in active_sources:
+                by_plan[s.plan_id].append(s)
+
+            for pid in sorted(by_plan):
+                plan = all_plans.get(pid)
+                if not plan:
+                    continue
+                platforms = sorted({s.platform for s in by_plan[pid]})
+                live_flags = {s.live_streamed for s in by_plan[pid] if s.live_streamed}
+                live_badge = "📡 live-streamed" if live_flags else ""
+                header = (f"**{plan.abbreviation or plan.name}** ({plan.state}) — "
+                          f"{', '.join(platforms)}  {live_badge}")
+                with st.expander(header, expanded=False):
+                    for s in by_plan[pid]:
+                        status_tag = (f":green[active]" if s.status == "active"
+                                      else f":gray[{s.status}]")
+                        live_tag = (":blue[live ✓]" if s.live_streamed
+                                    else (":gray[live ?]"))
+                        rec_tag = (f":violet[{s.recording_policy}]"
+                                   if s.recording_policy else "")
+                        st.markdown(
+                            f"- **{s.platform}** {status_tag} {live_tag} {rec_tag}<br>"
+                            f"&nbsp;&nbsp;[{s.source_url}]({s.source_url})  "
+                            f"<small>discovery={s.discovery_method}"
+                            + (f" · channel_id=`{s.channel_id}`" if s.channel_id else "")
+                            + "</small>",
+                            unsafe_allow_html=True,
+                        )
+                        if s.notes:
+                            st.caption(s.notes)
+
+    # -----------------------------------------------------------------
+    # Recordings: individual videos with download status + local path
+    # -----------------------------------------------------------------
+    with tab_rec:
+        if not recordings:
+            st.info("No recordings catalogued yet. The discovery script "
+                    "captures watch URLs found on plan meetings pages.")
+        else:
+            status_filter = st.selectbox(
+                "Download status",
+                ["all", "pending", "done", "failed", "skipped"],
+                key="mr_status_filter",
+            )
+            filtered = ([r for r in recordings if r.download_status == status_filter]
+                        if status_filter != "all" else recordings)
+
+            rows = []
+            for r in filtered[:500]:  # cap render cost; filter further if needed
+                plan = all_plans.get(r.plan_id)
+                expected_path = recording_path(
+                    r.plan_id, r.video_id,
+                    meeting_date=r.meeting_date_inferred,
+                    published_at=r.published_at,
+                )
+                local = r.local_path or str(expected_path)
+                exists_on_disk = (r.local_path is not None
+                                  and Path(r.local_path).exists()) \
+                                 if r.local_path else False
+                rows.append({
+                    "plan": plan.abbreviation if plan else r.plan_id,
+                    "platform": r.platform,
+                    "title": (r.title or "")[:80],
+                    "meeting_date": (r.meeting_date_inferred.date()
+                                     if r.meeting_date_inferred else None),
+                    "published": (r.published_at.date()
+                                  if r.published_at else None),
+                    "status": r.download_status,
+                    "on_disk": "✓" if exists_on_disk else "",
+                    "video_url": r.video_url,
+                    "local_path": local,
+                    "size_mb": (round(r.file_size_bytes / 1_048_576, 1)
+                                if r.file_size_bytes else None),
+                })
+
+            if not rows:
+                st.info(f"No recordings with status='{status_filter}'.")
+            else:
+                import pandas as pd
+                df = pd.DataFrame(rows)
+                st.caption(f"Showing {len(rows)} of {len(filtered)} recording(s)"
+                           + (" (capped at 500)" if len(filtered) > 500 else ""))
+                st.dataframe(
+                    df,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "video_url": st.column_config.LinkColumn("video_url"),
+                        "local_path": st.column_config.TextColumn(
+                            "local_path",
+                            help="Where the file will live on D:\\ once downloaded "
+                                 "(or where it lives now if on_disk='✓').",
+                        ),
+                    },
+                )
+
+    # -----------------------------------------------------------------
+    # Coverage: plans we still have no source for
+    # -----------------------------------------------------------------
+    with tab_gap:
+        plans_with_active = {s.plan_id for s in sources if s.status == "active"}
+        gap_plans = [p for pid, p in all_plans.items()
+                     if pid not in plans_with_active]
+        if plan_id and plan_id in plans_with_active:
+            gap_plans = []
+        st.markdown(
+            f"**{len(gap_plans)} plan(s)** have no active video source row. "
+            "These need either a deeper crawl of their meetings sub-pages "
+            "or a manual entry."
+        )
+        if gap_plans:
+            import pandas as pd
+            gap_df = pd.DataFrame([{
+                "plan_id": p.id,
+                "name": p.name,
+                "state": p.state,
+                "aum_b": p.aum_billions,
+                "materials_url": p.materials_url,
+            } for p in sorted(gap_plans, key=lambda x: -(x.aum_billions or 0))])
+            st.dataframe(
+                gap_df,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "materials_url": st.column_config.LinkColumn("materials_url"),
+                },
+            )
+
+
 def page_admin():
     """Admin views: pipeline / data-quality diagnostics for the site owner."""
     st.title("Admin")
@@ -2682,7 +2883,7 @@ def main():
     tabs = st.tabs([
         "Notes", "Summary", "Updates", "Search", "Browse Recent",
         "Investment Actions", "Managers", "RFPs", "CAFR", "Asset Allocation",
-        "Plans", "Drafts", "Insights", "Admin",
+        "Meeting Recordings", "Plans", "Drafts", "Insights", "Admin",
     ])
 
     with tabs[0]:
@@ -2706,12 +2907,14 @@ def main():
     with tabs[9]:
         page_asset_allocation()
     with tabs[10]:
-        page_plans()
+        page_meeting_recordings(plan_id, plan_label)
     with tabs[11]:
-        page_drafts()
+        page_plans()
     with tabs[12]:
-        page_insights()
+        page_drafts()
     with tabs[13]:
+        page_insights()
+    with tabs[14]:
         page_admin()
 
 

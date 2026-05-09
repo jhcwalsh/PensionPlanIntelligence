@@ -4,3 +4,4 @@ python-dotenv
 pandas
 reportlab
 requests
+yt-dlp
