@@ -1,22 +1,25 @@
 """Daily pipeline digest email.
 
 Sends a daily summary of new documents fetched by the document pipeline.
-Reads FetchRun rows from the last N hours (default 26), aggregates each
-run's new_document_ids, joins to Document + Plan, and renders a
-per-plan grouped list. Same data shape the Admin "Recent Runs" tab
-shows, just emailed.
+Defaults to runs whose ``started_at`` falls on today's UTC date — that
+captures both the GHA cron at 11:00 UTC and the local Task Scheduler
+run for the 11 WAF-blocked plans (which fires earlier ET, still same
+UTC date) without dragging in yesterday's GHA run. Pass ``--hours N``
+to fall back to a rolling N-hour window.
+
+Aggregates each run's new_document_ids, joins to Document + Plan, and
+renders a per-plan grouped list. Same data shape the Admin "Recent
+Runs" tab shows, just emailed.
 
 Triggered at the end of .github/workflows/daily-pipeline.yml after the
-137-plan GHA run completes. The 26-hour window also catches any local
-Task Scheduler FetchRun for the 11 WAF-blocked plans (which fires
-earlier ET than the GHA cron).
+137-plan GHA run completes.
 
 Honors INSIGHTS_MODE=mock for offline tests — writes to tmp/sent_emails/
 instead of calling Resend.
 
 Usage:
-    python -m scripts.send_daily_digest                # default 26-hour window
-    python -m scripts.send_daily_digest --hours 48     # wider window
+    python -m scripts.send_daily_digest                # today's runs (UTC)
+    python -m scripts.send_daily_digest --hours 48     # rolling 48h window
     python -m scripts.send_daily_digest user@x.com     # one-off recipient override
     INSIGHTS_MODE=mock python -m scripts.send_daily_digest
 """
@@ -35,16 +38,12 @@ from database import Document, FetchRun, Plan, get_session
 from lib.rfp_alerts import find_alerts, polish_alerts
 
 
-DEFAULT_HOURS = 26
-
-
-def collect_recent_runs(session, hours: int) -> list[dict]:
-    """Return [{run, plan_to_docs}] for FetchRuns started in the last `hours`.
+def collect_recent_runs(session, cutoff: datetime) -> list[dict]:
+    """Return [{run, plan_to_docs}] for FetchRuns started at or after ``cutoff``.
 
     plan_to_docs maps (plan_id, plan_name, abbreviation) -> list of
     (doc_id, filename) for each newly-inserted document.
     """
-    cutoff = datetime.utcnow() - timedelta(hours=hours)
     runs = (
         session.query(FetchRun)
         .filter(FetchRun.started_at >= cutoff)
@@ -94,7 +93,7 @@ def _fmt_run_header(run) -> str:
     )
 
 
-def render_email(runs_data: list[dict]) -> tuple[str, str, int]:
+def render_email(runs_data: list[dict], window_label: str) -> tuple[str, str, int]:
     """Return (html_body, text_body, total_new_docs)."""
     total_docs = sum(
         sum(len(d) for d in r["plan_to_docs"].values()) for r in runs_data
@@ -108,7 +107,7 @@ def render_email(runs_data: list[dict]) -> tuple[str, str, int]:
         f'<h2 style="margin-bottom:0.2em;">Daily pipeline — {today}</h2>',
         (f'<p style="color:#555;margin-top:0;">{total_docs} new document'
          f'{"s" if total_docs != 1 else ""} across {len(runs_data)} run'
-         f'{"s" if len(runs_data) != 1 else ""} in the last 26 hours.</p>'),
+         f'{"s" if len(runs_data) != 1 else ""} {window_label}.</p>'),
     ]
 
     # ---- Text body
@@ -116,7 +115,7 @@ def render_email(runs_data: list[dict]) -> tuple[str, str, int]:
         f"Daily pipeline — {today}",
         "=" * 40,
         f"{total_docs} new document(s) across {len(runs_data)} run(s) "
-        "in the last 26 hours.",
+        f"{window_label}.",
         "",
     ]
 
@@ -255,8 +254,9 @@ def render_rfp_section(polished: list[dict], headline: str) -> tuple[str, str]:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="scripts.send_daily_digest")
     parser.add_argument(
-        "--hours", type=int, default=DEFAULT_HOURS,
-        help=f"Window for recent FetchRun rows (default: {DEFAULT_HOURS}).",
+        "--hours", type=int, default=None,
+        help="Use a rolling N-hour window instead of the default "
+             "(today's UTC date).",
     )
     parser.add_argument(
         "recipient", nargs="?",
@@ -264,16 +264,27 @@ def main(argv=None) -> int:
     )
     args = parser.parse_args(argv)
 
+    now = datetime.utcnow()
+    if args.hours is not None:
+        cutoff = now - timedelta(hours=args.hours)
+        window_label = f"in the last {args.hours} hours"
+        rfp_hours = args.hours
+    else:
+        cutoff = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        window_label = "today"
+        # find_alerts takes hours; convert today's elapsed UTC time.
+        rfp_hours = max(1, int((now - cutoff).total_seconds() // 3600) + 1)
+
     session = get_session()
     try:
-        runs_data = collect_recent_runs(session, args.hours)
-        raw_alerts = find_alerts(session, hours=args.hours)
+        runs_data = collect_recent_runs(session, cutoff)
+        raw_alerts = find_alerts(session, hours=rfp_hours)
     finally:
         session.close()
 
     polished, headline = polish_alerts(raw_alerts)
 
-    html, text, total_docs = render_email(runs_data)
+    html, text, total_docs = render_email(runs_data, window_label)
     rfp_html, rfp_text = render_rfp_section(polished, headline)
     if rfp_html:
         # Inject before the closing </body> (or just append for text)

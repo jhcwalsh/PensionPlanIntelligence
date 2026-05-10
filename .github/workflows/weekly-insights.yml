@@ -6,13 +6,13 @@ name: Weekly insights (GHA edition)
 # db/pension.db + notes/ so the production Streamlit can resolve the
 # token when the user clicks the magic link.
 #
-# Runs Sundays at 11:00 UTC (~7 AM EDT / 6 AM EST). The local
-# Task Scheduler still owns the weekly RFP backfill -- see
-# scripts/run_weekly.bat.
+# Runs Sundays at 12:30 UTC (~8:30 AM EDT / 7:30 AM EST), staggered
+# after daily-pipeline (11:00 UTC) and weekly-rfp (12:00 UTC) so the
+# digest sees today's fresh summaries and RFP records.
 
 on:
   schedule:
-    - cron: "0 11 * * 0"   # Sundays at 11:00 UTC = 7 AM EDT / 6 AM EST
+    - cron: "30 12 * * 0"  # Sundays at 12:30 UTC = 8:30 AM EDT / 7:30 AM EST
   workflow_dispatch:
     inputs:
       period:

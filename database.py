@@ -472,6 +472,35 @@ class DocumentSkip(Base):
     error_message = Column(Text)
 
 
+class PrunedDocument(Base):
+    """URLs that were intentionally pruned from ``documents`` and must NOT be
+    re-fetched.
+
+    The fetcher's only dedup gate is row-presence in ``documents``, so deleting
+    rows for size or housekeeping reasons (e.g. the 2026-05 pre-2026-agenda
+    prune) caused the next pipeline run to re-discover the same URLs in plan
+    listings and re-download them. This table is the durable memory of "we
+    don't want this URL anymore." ``fetcher.run_fetcher`` consults it
+    alongside ``document_exists``.
+
+    To un-prune a URL (i.e. allow it back in), delete its row.
+    """
+
+    __tablename__ = "pruned_documents"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    url = Column(String, nullable=False, unique=True)
+    plan_id = Column(String)                                  # context, nullable
+    doc_type = Column(String)                                 # context, nullable
+    meeting_date = Column(DateTime)                           # context, nullable
+    pruned_at = Column(DateTime, default=_utcnow, nullable=False)
+    reason = Column(String, nullable=False)                   # short tag, e.g. 'pre-2026-agenda-prune'
+
+    __table_args__ = (
+        Index("ix_pruned_documents_url", "url"),
+    )
+
+
 class IpsDocument(Base):
     """An Investment Policy Statement (IPS) PDF tracked per-plan.
 
@@ -574,6 +603,10 @@ def get_or_create_meeting(session: Session, plan_id: str, meeting_date: Optional
 
 def document_exists(session: Session, url: str) -> bool:
     return session.query(Document).filter_by(url=url).first() is not None
+
+
+def document_pruned(session: Session, url: str) -> bool:
+    return session.query(PrunedDocument).filter_by(url=url).first() is not None
 
 
 def get_unextracted_documents(session: Session) -> list[Document]:

@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Three layered systems sharing one SQLite database (`db/pension.db`, ~42 MB, tracked in git):
 
 1. **Meeting-document pipeline** (`pipeline.py`, `fetcher.py`, `extractor.py`, `summarizer.py`) — fetches board materials and CAFRs from ~148 U.S. public pension plans, extracts text, summarizes with Claude per-document. Hybrid: GHA cron handles 137 of 148 plans daily; local Windows Task Scheduler handles the 11 WAF-blocked plans (see `data/local_only_plans.json`).
-2. **Insights automation** (`insights/` package) — composes weekly / monthly / annual editorial briefings from the existing summaries, gated on a magic-link approval email to the founder. GHA cron-triggered (weekly Sundays 11:00 UTC, monthly 1st of month 18:00 UTC).
+2. **Insights automation** (`insights/` package) — composes weekly / monthly / annual editorial briefings from the existing summaries, gated on a magic-link approval email to the founder. GHA cron-triggered (weekly Sundays 12:30 UTC, monthly 1st of month 18:00 UTC).
 3. **RFP alerts pipeline** (`rfp/`, `lib/`, `api/`, `scripts/`) — structured extraction of RFP records from already-fetched documents into `rfp_records` / `document_health` / `pipeline_runs`, served via FastAPI. RFP backfill runs locally via Windows Task Scheduler weekly; FastAPI lives on Render.
 
 The Streamlit app (`app.py`) reads from the same DB and surfaces all three layers as tabs.
@@ -53,7 +53,7 @@ uvicorn api.main:app --reload --port 8000
 `db/pension.db` is committed. Pushing to `master` is how new data lands on Render. The Streamlit web service and FastAPI service on Render mount the persistent disk at `/data` but read from the deployed `db/pension.db` until something writes back. Three things now write back to master:
 1. **GHA daily-pipeline** (~11:00 UTC) — fetches/extracts/summarizes 137 plans, commits the DB.
 2. **Local Windows Task Scheduler daily** — same pipeline scoped to the 11 WAF-blocked plans via `--local-only`, commits the DB.
-3. **GHA weekly-insights** (Sundays 11:00 UTC) and **GHA monthly-insights** (1st of month 18:00 UTC) — compose digests, send approval email, commit the DB + `notes/` (+ `cafr_summaries/` for monthly).
+3. **GHA weekly-insights** (Sundays 12:30 UTC) and **GHA monthly-insights** (1st of month 18:00 UTC) — compose digests, send approval email, commit the DB + `notes/` (+ `cafr_summaries/` for monthly).
 
 Local Task Scheduler still owns the WAF-blocked subset of monthly CAFR refresh (5 plans via `--local-only`) — a `git push`-back operation on the same master branch. Each writer runs at a distinct time; conflicts haven't been observed but a `git pull --rebase` would be the next defensive step if they appear.
 
@@ -96,9 +96,9 @@ Render hosts only two web services now: Streamlit (`pension-plan-intelligence`) 
 |---|---|---|---|
 | Daily document pipeline (137 plans) | cron 11:00 UTC | GHA | `.github/workflows/daily-pipeline.yml` |
 | Daily document pipeline (11 WAF-blocked plans) | Task Scheduler | local Windows | `scripts/run_daily.bat` |
-| Weekly Insights composition + email | cron Sundays 11:00 UTC | GHA | `.github/workflows/weekly-insights.yml` |
-| Weekly RFP backfill (`--limit 100`) | cron Sundays 11:30 UTC | GHA | `.github/workflows/weekly-rfp.yml` |
-| Weekly Consultant RFP brief (7-day + 30-day rollup) | cron Sundays 12:00 UTC | GHA | `.github/workflows/weekly-rfp-brief.yml` |
+| Weekly RFP backfill (`--limit 100`) | cron Sundays 12:00 UTC | GHA | `.github/workflows/weekly-rfp.yml` |
+| Weekly Insights composition + email | cron Sundays 12:30 UTC | GHA | `.github/workflows/weekly-insights.yml` |
+| Weekly Consultant RFP brief (7-day + 30-day rollup) | cron Sundays 13:00 UTC | GHA | `.github/workflows/weekly-rfp-brief.yml` |
 | Monthly CAFR refresh + structured extraction (~92 plans) | cron 1st of month 15:00 UTC | GHA | `.github/workflows/monthly-cafr-refresh.yml` |
 | Monthly CAFR refresh + structured extraction (5 WAF-blocked plans) | Task Scheduler | local Windows | `scripts/run_monthly.bat` |
 | Monthly IPS refresh (all 148 plans, auto-discover + verify via Haiku 4.5) | Task Scheduler | local Windows | `scripts/run_ips.bat` |
