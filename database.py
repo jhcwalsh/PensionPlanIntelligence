@@ -4,13 +4,14 @@ SQLite database schema and helper functions using SQLAlchemy.
 
 import gzip
 import os
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy import (
     Column, Integer, String, Text, Float, DateTime, Boolean, Date, JSON,
-    LargeBinary, ForeignKey, create_engine, UniqueConstraint, Index
+    LargeBinary, ForeignKey, create_engine, text, UniqueConstraint, Index
 )
 from sqlalchemy.orm import DeclarativeBase, Session, relationship, sessionmaker
 from sqlalchemy.types import TypeDecorator
@@ -539,10 +540,85 @@ class IpsRefreshLog(Base):
 # Init / helpers
 # ---------------------------------------------------------------------------
 
+# --- Summary full-text search (SQLite FTS5) ---------------------------------
+# External-content FTS5 index over the four searchable summary columns.
+# Triggers keep it in sync with INSERTs/UPDATEs/DELETEs the ORM emits, and
+# `_init_fts` backfills once the first time it sees an unpopulated index.
+# Falls back to ILIKE in `search_summaries` if the SQLite build lacks FTS5.
+
+_FTS_VIRTUAL_TABLE_SQL = """
+CREATE VIRTUAL TABLE IF NOT EXISTS summaries_fts USING fts5(
+    summary_text, key_topics, investment_actions, decisions,
+    content='summaries', content_rowid='id',
+    tokenize='unicode61 remove_diacritics 2'
+);
+"""
+
+_FTS_TRIGGER_SQL = [
+    """
+    CREATE TRIGGER IF NOT EXISTS summaries_ai AFTER INSERT ON summaries BEGIN
+        INSERT INTO summaries_fts(rowid, summary_text, key_topics,
+                                  investment_actions, decisions)
+        VALUES (new.id, new.summary_text, new.key_topics,
+                new.investment_actions, new.decisions);
+    END;
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS summaries_ad AFTER DELETE ON summaries BEGIN
+        INSERT INTO summaries_fts(summaries_fts, rowid, summary_text,
+                                  key_topics, investment_actions, decisions)
+        VALUES ('delete', old.id, old.summary_text, old.key_topics,
+                old.investment_actions, old.decisions);
+    END;
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS summaries_au AFTER UPDATE ON summaries BEGIN
+        INSERT INTO summaries_fts(summaries_fts, rowid, summary_text,
+                                  key_topics, investment_actions, decisions)
+        VALUES ('delete', old.id, old.summary_text, old.key_topics,
+                old.investment_actions, old.decisions);
+        INSERT INTO summaries_fts(rowid, summary_text, key_topics,
+                                  investment_actions, decisions)
+        VALUES (new.id, new.summary_text, new.key_topics,
+                new.investment_actions, new.decisions);
+    END;
+    """,
+]
+
+
+def _init_fts(engine_) -> bool:
+    """Create the FTS5 virtual table, sync triggers, and backfill once.
+
+    Returns True when FTS5 is set up, False when the SQLite build lacks
+    the FTS5 module (callers fall back to ILIKE search).
+    """
+    with engine_.begin() as conn:
+        try:
+            conn.exec_driver_sql(_FTS_VIRTUAL_TABLE_SQL)
+        except Exception:
+            return False
+        for stmt in _FTS_TRIGGER_SQL:
+            conn.exec_driver_sql(stmt)
+        row = conn.exec_driver_sql(
+            "SELECT (SELECT COUNT(*) FROM summaries_fts), "
+            "       (SELECT COUNT(*) FROM summaries)"
+        ).fetchone()
+        fts_count, src_count = row[0], row[1]
+        if fts_count == 0 and src_count > 0:
+            conn.exec_driver_sql(
+                "INSERT INTO summaries_fts(rowid, summary_text, key_topics, "
+                "                          investment_actions, decisions) "
+                "SELECT id, summary_text, key_topics, "
+                "       investment_actions, decisions FROM summaries"
+            )
+        return True
+
+
 def init_db():
     """Create all tables if they don't exist."""
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     Base.metadata.create_all(engine)
+    _init_fts(engine)
 
 
 def get_session() -> Session:
@@ -659,9 +735,30 @@ def get_new_meetings(session: Session, days: int = 7) -> list[dict]:
     return sorted(seen.values(), key=lambda e: e["meeting_date"] or datetime.min, reverse=True)
 
 
-def search_summaries(session: Session, query: str, plan_id: str = None,
-                     limit: int = 20) -> list[tuple[Document, Summary]]:
-    """Simple full-text search across summary_text and key_topics."""
+# Characters that have meaning in an FTS5 MATCH expression. We strip them
+# from user input and rebuild a safe AND-of-quoted-tokens query — users get
+# multi-term ranked search without having to learn FTS5 syntax.
+_FTS_STRIP_RE = re.compile(r'[\"\*\(\):\^]')
+
+
+def _build_fts_match(query: str) -> Optional[str]:
+    """Turn raw user input into a safe FTS5 MATCH expression.
+
+    Each whitespace-separated token becomes a quoted string-literal term
+    (so reserved words like AND/OR/NOT pass through as plain terms) and
+    the tokens are AND-joined. Returns None if nothing usable remains.
+    """
+    if not query:
+        return None
+    cleaned = _FTS_STRIP_RE.sub(" ", query).strip()
+    tokens = [t for t in cleaned.split() if t]
+    if not tokens:
+        return None
+    return " ".join(f'"{t}"' for t in tokens)
+
+
+def _ilike_search_query(session: Session, query: str, plan_id: Optional[str]):
+    """Legacy substring search — used as the FTS5 fallback path."""
     q = (
         session.query(Document, Summary)
         .join(Summary, Document.id == Summary.document_id)
@@ -671,26 +768,88 @@ def search_summaries(session: Session, query: str, plan_id: str = None,
     )
     if plan_id:
         q = q.filter(Document.plan_id == plan_id)
-    return q.order_by(Document.meeting_date.desc()).limit(limit).all()
+    return q
+
+
+def search_summaries(session: Session, query: str, plan_id: str = None,
+                     limit: int = 20) -> list[tuple[Document, Summary]]:
+    """Ranked full-text search across summary_text, key_topics,
+    investment_actions, and decisions.
+
+    Uses SQLite FTS5 with bm25 ranking when available; falls back to the
+    legacy ILIKE substring scan if FTS5 is missing or the query reduces to
+    nothing after sanitisation. Tied bm25 scores break by meeting_date desc.
+    """
+    if not query or not query.strip():
+        return []
+    match = _build_fts_match(query)
+    if match is not None:
+        sql = (
+            "SELECT s.id "
+            "FROM summaries_fts f "
+            "JOIN summaries s ON s.id = f.rowid "
+            "JOIN documents d ON d.id = s.document_id "
+            "WHERE summaries_fts MATCH :match "
+        )
+        params = {"match": match, "lim": limit}
+        if plan_id:
+            sql += "AND d.plan_id = :pid "
+            params["pid"] = plan_id
+        sql += "ORDER BY bm25(summaries_fts), d.meeting_date DESC LIMIT :lim"
+        try:
+            rows = session.execute(text(sql), params).fetchall()
+        except Exception:
+            rows = None
+        if rows is not None:
+            ids = [r[0] for r in rows]
+            if not ids:
+                return []
+            order = {sid: i for i, sid in enumerate(ids)}
+            pairs = (
+                session.query(Document, Summary)
+                .join(Summary, Document.id == Summary.document_id)
+                .filter(Summary.id.in_(ids))
+                .all()
+            )
+            pairs.sort(key=lambda p: order[p[1].id])
+            return pairs
+
+    return (
+        _ilike_search_query(session, query, plan_id)
+        .order_by(Document.meeting_date.desc())
+        .limit(limit)
+        .all()
+    )
 
 
 def count_search_summaries(session: Session, query: str,
                            plan_id: str = None) -> int:
     """Total matching documents for a search query, ignoring the row limit.
 
-    Mirrors ``search_summaries``'s WHERE clause exactly so the count and the
-    paged results stay consistent.
+    Mirrors ``search_summaries`` so the count and the paged results stay
+    consistent across both the FTS5 and ILIKE paths.
     """
-    q = (
-        session.query(Document.id)
-        .join(Summary, Document.id == Summary.document_id)
-        .filter(Summary.summary_text.ilike(f"%{query}%") |
-                Summary.key_topics.ilike(f"%{query}%") |
-                Summary.investment_actions.ilike(f"%{query}%"))
-    )
-    if plan_id:
-        q = q.filter(Document.plan_id == plan_id)
-    return q.count()
+    if not query or not query.strip():
+        return 0
+    match = _build_fts_match(query)
+    if match is not None:
+        sql = (
+            "SELECT COUNT(*) "
+            "FROM summaries_fts f "
+            "JOIN summaries s ON s.id = f.rowid "
+            "JOIN documents d ON d.id = s.document_id "
+            "WHERE summaries_fts MATCH :match "
+        )
+        params = {"match": match}
+        if plan_id:
+            sql += "AND d.plan_id = :pid"
+            params["pid"] = plan_id
+        try:
+            return session.execute(text(sql), params).scalar() or 0
+        except Exception:
+            pass
+
+    return _ilike_search_query(session, query, plan_id).count()
 
 
 def aggregate_managers(session: Session) -> list[dict]:
