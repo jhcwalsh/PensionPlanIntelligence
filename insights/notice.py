@@ -122,12 +122,21 @@ def _make_preview(draft_markdown: str) -> str:
 
 
 def _format_period(start: date, end: date) -> str:
-    """E.g. 'Apr 26 – May 2, 2026' for a weekly span; '2026-04' for monthly."""
+    """E.g. 'Apr 26 – May 2, 2026' for a weekly span; '2026-04' for monthly.
+
+    Uses ``%d`` then strips leading zero rather than ``%-d`` because the
+    latter is a glibc extension and ValueErrors on Windows.
+    """
+    def _no_leading_zero_day(d: date) -> str:
+        return d.strftime("%d").lstrip("0") or "0"
+    s_day = _no_leading_zero_day(start)
+    e_day = _no_leading_zero_day(end)
     if start.year == end.year and start.month == end.month:
-        return f"{start.strftime('%b %-d')}–{end.strftime('%-d, %Y')}"
+        return f"{start.strftime('%b')} {s_day}–{e_day}, {end.year}"
     if start.year == end.year:
-        return f"{start.strftime('%b %-d')} – {end.strftime('%b %-d, %Y')}"
-    return f"{start.strftime('%b %-d, %Y')} – {end.strftime('%b %-d, %Y')}"
+        return f"{start.strftime('%b')} {s_day} – {end.strftime('%b')} {e_day}, {end.year}"
+    return (f"{start.strftime('%b')} {s_day}, {start.year} – "
+            f"{end.strftime('%b')} {e_day}, {end.year}")
 
 
 def render_publication_notice(publication: Publication) -> ApprovalEmail:
