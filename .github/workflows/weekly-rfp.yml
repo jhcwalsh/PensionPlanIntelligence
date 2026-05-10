@@ -5,13 +5,15 @@ name: Weekly RFP backfill (GHA edition)
 # Idempotent on (document_id, prompt_version), so re-runs are no-ops
 # until new documents arrive.
 #
-# Runs Sundays at 11:30 UTC (~7:30 AM EDT / 6:30 AM EST), 30 minutes
-# after weekly-insights to avoid pushing the same DB at the same time.
+# Runs Sundays at 12:00 UTC (~8:00 AM EDT / 7:00 AM EST), staggered
+# after daily-pipeline (11:00 UTC, ~30 min typical) so extraction sees
+# today's freshly-fetched documents. weekly-insights then runs at 12:30
+# UTC against the populated rfp_records.
 # Replaces the local Task Scheduler entry in scripts/run_weekly.bat.
 
 on:
   schedule:
-    - cron: "30 11 * * 0"   # Sundays at 11:30 UTC = 7:30 AM EDT / 6:30 AM EST
+    - cron: "0 12 * * 0"   # Sundays at 12:00 UTC = 8:00 AM EDT / 7:00 AM EST
   workflow_dispatch:
     inputs:
       limit:

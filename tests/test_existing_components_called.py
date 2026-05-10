@@ -32,6 +32,7 @@ def _fake_data(date_range):
         "date_range": date_range,
         "plans_with_activity": 1,
         "total_aum": 0,
+        "new_doc_count": 0,
     }
 
 

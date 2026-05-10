@@ -7,7 +7,9 @@ two stand-alone performance reports. CAFRs are unaffected here, and
 IPS lives in its own ips_documents table.
 
 Idempotent: re-running after the prune is a no-op since the candidate
-rows are already gone.
+rows are already gone. Pruned URLs are also recorded in
+``pruned_documents`` so the fetcher won't re-download them on the next
+pipeline run (see database.PrunedDocument).
 
 Run:
     python -m scripts.prune_pre_2026_docs           # dry-run preview
@@ -20,6 +22,7 @@ import argparse
 import os
 import sqlite3
 import sys
+from datetime import datetime
 from pathlib import Path
 
 DB_PATH = (
@@ -28,6 +31,7 @@ DB_PATH = (
 )
 DOC_TYPES = ("agenda", "performance")
 CUTOFF_ISO = "2026-01-01"
+PRUNE_REASON = "pre-2026-agenda-prune"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -66,6 +70,19 @@ def main(argv: list[str] | None = None) -> int:
         if not args.apply:
             print("\nDry-run only. Re-run with --apply to execute.")
             return 0
+
+        # Record URLs in pruned_documents so the fetcher's document_pruned()
+        # gate skips them on future runs. INSERT OR IGNORE keeps this
+        # idempotent across re-runs and tolerant of pre-existing rows.
+        now_iso = datetime.utcnow().isoformat()
+        n_pruned = conn.execute(
+            f"INSERT OR IGNORE INTO pruned_documents "
+            f"(url, plan_id, doc_type, meeting_date, pruned_at, reason) "
+            f"SELECT url, plan_id, doc_type, meeting_date, ?, ? "
+            f"FROM documents WHERE id IN ({ph})",
+            (now_iso, PRUNE_REASON, *ids),
+        ).rowcount
+        print(f"recorded pruned URLs:     {n_pruned}")
 
         # FKs are NO ACTION (not CASCADE), so delete children first.
         conn.execute("PRAGMA foreign_keys=OFF")

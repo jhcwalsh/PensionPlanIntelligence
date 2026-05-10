@@ -63,21 +63,22 @@ def run_annual_cycle(year: Optional[int] = None,
             source_publication_ids=[m.id for m in monthlies],
         )
 
-        if force and publication.status == "awaiting_approval":
-            cycle_common.transition_status(publication, "expired")
-            session.flush()
-            publication = cycle_common.find_or_create_publication(
-                session,
-                cadence="annual",
-                period_start=period_start,
-                period_end=period_end,
-                source_publication_ids=[m.id for m in monthlies],
-            )
-            publication.status = "generating"
-            publication.draft_markdown = None
-            publication.composed_at = None
-            publication.expires_at = None
-            session.flush()
+        # Auto-reclaim stale rows. ``expired`` always; ``awaiting_approval``
+        # only with --force (see weekly.py for the same pattern).
+        if publication.status == "expired" or (
+            force and publication.status == "awaiting_approval"
+        ):
+            if publication.status == "awaiting_approval":
+                cycle_common.transition_status(publication, "expired")
+                session.flush()
+                publication = cycle_common.find_or_create_publication(
+                    session,
+                    cadence="annual",
+                    period_start=period_start,
+                    period_end=period_end,
+                    source_publication_ids=[m.id for m in monthlies],
+                )
+            cycle_common.reset_to_generating(session, publication)
 
         if publication.status in ("awaiting_approval", "approved", "published"):
             logger.info(
