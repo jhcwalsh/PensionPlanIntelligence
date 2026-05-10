@@ -25,6 +25,15 @@ logger = logging.getLogger(__name__)
 NOTES_DIR = config.REPO_ROOT / "notes"
 DEPLOY_BRANCH = "master"
 
+# Inline identity for the publish commit. Render's Streamlit container
+# runs git as ``render@srv-...(none)`` which git refuses to use as an
+# author. Setting these via ``git -c user.email=... -c user.name=...``
+# on the commit invocation avoids relying on host git config (which the
+# container doesn't have) and keeps the audit trail consistent with the
+# GHA bot identity used elsewhere in the repo.
+_GIT_AUTHOR_EMAIL = "41898282+github-actions[bot]@users.noreply.github.com"
+_GIT_AUTHOR_NAME = "github-actions[bot]"
+
 
 def _filename_for(publication: Publication) -> str:
     """Map a publication to its canonical ``notes/<file>.md`` path.
@@ -100,5 +109,10 @@ def _git_commit_and_push(path: Path, publication: Publication) -> None:
         logger.info("No staged changes after git add; skipping commit/push.")
         return
 
-    run(["git", "commit", "-m", msg])
+    run([
+        "git",
+        "-c", f"user.email={_GIT_AUTHOR_EMAIL}",
+        "-c", f"user.name={_GIT_AUTHOR_NAME}",
+        "commit", "-m", msg,
+    ])
     run(["git", "push", "origin", DEPLOY_BRANCH])
