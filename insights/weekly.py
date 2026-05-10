@@ -167,22 +167,22 @@ def run_weekly_cycle(period_start: Optional[date] = None,
             period_end=period_end,
         )
 
-        if force and publication.status == "awaiting_approval":
-            cycle_common.transition_status(publication, "expired")
-            session.flush()
-            publication = cycle_common.find_or_create_publication(
-                session,
-                cadence="weekly",
-                period_start=period_start,
-                period_end=period_end,
-            )
-            # The unique constraint will return the just-expired row;
-            # bump it back to generating so the cycle can re-fill it.
-            publication.status = "generating"
-            publication.draft_markdown = None
-            publication.composed_at = None
-            publication.expires_at = None
-            session.flush()
+        # Auto-reclaim stale rows. ``expired`` always (TTL elapsed without
+        # action — safe to recompose). ``awaiting_approval`` only with
+        # --force, so the cron doesn't blast a pending magic link.
+        if publication.status == "expired" or (
+            force and publication.status == "awaiting_approval"
+        ):
+            if publication.status == "awaiting_approval":
+                cycle_common.transition_status(publication, "expired")
+                session.flush()
+                publication = cycle_common.find_or_create_publication(
+                    session,
+                    cadence="weekly",
+                    period_start=period_start,
+                    period_end=period_end,
+                )
+            cycle_common.reset_to_generating(session, publication)
 
         if publication.status in ("awaiting_approval", "approved", "published"):
             logger.info(
