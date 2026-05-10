@@ -42,7 +42,7 @@ FIXTURES = [
 def seeded_with_documents(seeded_session, monkeypatch):
     monkeypatch.setenv("LLM_FIXTURE_DIR", str(FIXTURE_RESPONSES))
     for doc_id, plan_id, fname, url, _expected in FIXTURES:
-        text = (FIXTURE_DOCS / fname).read_text()
+        text = (FIXTURE_DOCS / fname).read_text(encoding="utf-8")
         seeded_session.add(Document(
             id=doc_id,
             plan_id=plan_id,

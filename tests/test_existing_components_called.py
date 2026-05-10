@@ -32,6 +32,9 @@ def _fake_data(date_range):
         "date_range": date_range,
         "plans_with_activity": 1,
         "total_aum": 0,
+        # compose_weekly reads new_doc_count to render the preamble; missing
+        # the key would KeyError before we reach the H1 assertions.
+        "new_doc_count": 0,
     }
 
 
