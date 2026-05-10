@@ -169,6 +169,111 @@ def markdown_to_pdf_bytes(title: str, date_str: str, markdown_text: str) -> byte
     return buf.getvalue()
 
 
+def markdown_to_email_html(markdown_text: str) -> str:
+    """Convert a markdown note body to inline HTML for an email digest.
+
+    Handles the same subset that ``markdown_to_pdf_bytes`` parses: H1/H2
+    headings, bullet lists, GitHub-style tables, links, bold, italic,
+    paragraphs. Relative links are rewritten via ``absolute_url`` so the
+    email works when opened outside the app. Output is a fragment, not a
+    full document — the caller wraps it in its own ``<html>`` envelope.
+    """
+    def esc(s: str) -> str:
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    def inline(text: str) -> str:
+        text = esc(text)
+        text = re.sub(
+            r"\[([^\]]+)\]\(([^)]+)\)",
+            lambda m: f'<a href="{absolute_url(m.group(2))}">{m.group(1)}</a>',
+            text,
+        )
+        text = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
+        text = re.sub(r"\*(.+?)\*", r"<em>\1</em>", text)
+        return text
+
+    def split_row(s: str) -> list[str]:
+        inner = s.strip().strip("|")
+        return [c.strip() for c in inner.split("|")]
+
+    def is_table_separator(s: str) -> bool:
+        if "|" not in s:
+            return False
+        return all(re.fullmatch(r":?-{3,}:?", c) for c in split_row(s) if c)
+
+    lines = markdown_text.splitlines()
+    out: list[str] = []
+    i = 0
+    in_list = False
+
+    def close_list() -> None:
+        nonlocal in_list
+        if in_list:
+            out.append("</ul>")
+            in_list = False
+
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
+
+        if (
+            "|" in stripped
+            and i + 1 < len(lines)
+            and is_table_separator(lines[i + 1])
+        ):
+            close_list()
+            headers = split_row(stripped)
+            i += 2
+            rows: list[list[str]] = []
+            while i < len(lines) and "|" in lines[i] and lines[i].strip():
+                rows.append(split_row(lines[i]))
+                i += 1
+            out.append('<table border="1" cellpadding="6" cellspacing="0" '
+                       'style="border-collapse:collapse;margin:12px 0;">')
+            out.append("<thead><tr>")
+            for h in headers:
+                out.append(f'<th style="background:#003366;color:#fff;text-align:left;">'
+                           f'{inline(h)}</th>')
+            out.append("</tr></thead><tbody>")
+            for row in rows:
+                out.append("<tr>")
+                for c in row:
+                    out.append(f"<td>{inline(c)}</td>")
+                out.append("</tr>")
+            out.append("</tbody></table>")
+            continue
+
+        if not stripped:
+            close_list()
+            i += 1
+            continue
+        if stripped.startswith("---"):
+            close_list()
+            out.append("<hr>")
+        elif stripped.startswith("## "):
+            close_list()
+            out.append(f'<h2 style="color:#003366;">{inline(stripped[3:])}</h2>')
+        elif stripped.startswith("# "):
+            close_list()
+            out.append(f'<h1 style="color:#003366;">{inline(stripped[2:])}</h1>')
+        elif stripped.startswith("- ") or stripped.startswith("* "):
+            if not in_list:
+                out.append("<ul>")
+                in_list = True
+            out.append(f"<li>{inline(stripped[2:])}</li>")
+        elif stripped.startswith("> "):
+            close_list()
+            out.append(f'<blockquote style="border-left:4px solid #0066cc;'
+                       f'padding-left:12px;color:#444;">{inline(stripped[2:])}</blockquote>')
+        else:
+            close_list()
+            out.append(f"<p>{inline(stripped)}</p>")
+        i += 1
+
+    close_list()
+    return "\n".join(out)
+
+
 def write_pdf(publication_id: int, title: str, date_str: str,
               markdown_text: str, out_dir: Path | None = None) -> Path:
     """Render the markdown to PDF and write it to disk.
