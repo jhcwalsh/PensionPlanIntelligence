@@ -103,6 +103,15 @@ def _load_baseline_accuracy() -> float | None:
         return None
 
 
+def _load_baseline_field_accuracy() -> dict[str, float]:
+    if not BASELINE.exists():
+        return {}
+    try:
+        return dict(json.loads(BASELINE.read_text()).get("field_accuracy", {}))
+    except (ValueError, json.JSONDecodeError):
+        return {}
+
+
 def _write_baseline(accuracy: float, field_accuracy: dict[str, float]) -> None:
     BASELINE.write_text(json.dumps({
         "overall_accuracy": accuracy,
@@ -155,8 +164,13 @@ def main() -> int:
         return 1
 
     if args.update_baseline:
-        _write_baseline(result.overall_accuracy, result.field_accuracy)
-        print(f"Updated baseline at {BASELINE}")
+        prior_field = _load_baseline_field_accuracy()
+        if (result.overall_accuracy == baseline
+                and result.field_accuracy == prior_field):
+            print(f"Baseline unchanged; leaving {BASELINE} as-is.")
+        else:
+            _write_baseline(result.overall_accuracy, result.field_accuracy)
+            print(f"Updated baseline at {BASELINE}")
 
     return 0
 
