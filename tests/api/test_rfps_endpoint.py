@@ -30,7 +30,7 @@ def populated_db(seeded_session, monkeypatch):
          "https://www.calpers.ca.gov/governance/2024-02/packet.pdf"),
     ]
     for doc_id, plan_id, fname, url in fixtures:
-        text = (FIXTURE_DOCS / fname).read_text()
+        text = (FIXTURE_DOCS / fname).read_text(encoding="utf-8")
         seeded_session.add(db.Document(
             id=doc_id, plan_id=plan_id, url=url, filename=fname,
             doc_type="board_pack",
