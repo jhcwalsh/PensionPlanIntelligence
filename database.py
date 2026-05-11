@@ -247,6 +247,7 @@ class Publication(Base):
     expires_at = Column(DateTime)               # 7 days after composed_at
     error_message = Column(Text)                # if status='failed'
     reminder_sent_at = Column(DateTime)         # 72-hour nudge
+    subscribers_notified_at = Column(DateTime)  # set once subscriber fan-out has run
 
     # For monthly/annual: the publication ids of the lower-cadence inputs
     source_publication_ids = Column(JSON)       # list[int] or null
@@ -281,6 +282,66 @@ class ApprovalToken(Base):
 
     __table_args__ = (
         Index("ix_approval_token_pub", "publication_id"),
+    )
+
+
+class Subscriber(Base):
+    """A public subscriber to one or more insights cadences.
+
+    Sign-up flow is double opt-in: the row lands in ``status="pending"``
+    until the user clicks the confirmation magic link, at which point it
+    flips to ``"confirmed"``. The admin can flip a confirmed row to
+    ``"disabled"`` to suppress sends without losing the history. The
+    user themselves can flip to ``"unsubscribed"`` via the unsubscribe
+    link in any digest email.
+    """
+    __tablename__ = "subscribers"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    email = Column(String, nullable=False, unique=True)
+    weekly = Column(Boolean, default=False, nullable=False)
+    monthly = Column(Boolean, default=False, nullable=False)
+    quarterly = Column(Boolean, default=False, nullable=False)
+    status = Column(String, nullable=False, default="pending")
+    # status values: pending, confirmed, disabled, unsubscribed
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    confirmed_at = Column(DateTime)
+    unsubscribed_at = Column(DateTime)
+    last_email_sent_at = Column(DateTime)
+    signup_ip = Column(String)
+
+    tokens = relationship("SubscriberToken", back_populates="subscriber",
+                          cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index("ix_subscribers_status", "status"),
+    )
+
+
+class SubscriberToken(Base):
+    """Magic-link tokens for the subscriber lifecycle.
+
+    Mirrors ``ApprovalToken`` but keyed on a subscriber, with a wider
+    action vocabulary: ``confirm`` (double opt-in), ``unsubscribe``
+    (one-click off in every digest footer), and ``update_preferences``
+    (rare; emailed on request to flip cadence checkboxes).
+
+    Like approval tokens these are single-use and SHA-256-hashed at rest.
+    """
+    __tablename__ = "subscriber_tokens"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    subscriber_id = Column(Integer, ForeignKey("subscribers.id"), nullable=False)
+    token_hash = Column(String, nullable=False, unique=True)
+    action = Column(String, nullable=False)     # 'confirm' | 'unsubscribe' | 'update_preferences'
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    consumed_at = Column(DateTime)
+
+    subscriber = relationship("Subscriber", back_populates="tokens")
+
+    __table_args__ = (
+        Index("ix_subscriber_token_sub", "subscriber_id"),
     )
 
 

@@ -2965,9 +2965,10 @@ def page_admin():
     """Admin views: pipeline / data-quality diagnostics for the site owner."""
     st.title("Admin")
     (tab_runs, tab_coverage, tab_backlog, tab_failed,
-     tab_cafr, tab_cafr_refreshes) = st.tabs(
+     tab_cafr, tab_cafr_refreshes, tab_subscribers) = st.tabs(
         ["Recent Runs", "Plan Coverage", "Pipeline Backlog",
-         "Failed Docs", "CAFR Coverage", "CAFR Refreshes"]
+         "Failed Docs", "CAFR Coverage", "CAFR Refreshes",
+         "Subscribers"]
     )
 
     with tab_runs:
@@ -3067,6 +3068,245 @@ def page_admin():
     with tab_cafr_refreshes:
         _render_cafr_refreshes()
 
+    with tab_subscribers:
+        _render_admin_subscribers()
+
+
+def _render_admin_subscribers() -> None:
+    """Moderation table for the public subscriber list.
+
+    Shows every row regardless of status; lets the admin disable / enable /
+    delete individual rows. Sign-ups are auto-confirmed via the email link,
+    so this view is for after-the-fact moderation rather than gatekeeping.
+    """
+    from insights import subscribers as _subs
+
+    st.caption(
+        "Public mailing-list subscribers. Sign-up auto-confirms via the "
+        "double-opt-in email; use the actions here to suppress an address "
+        "without losing its history."
+    )
+
+    rows = _subs.list_all_subscribers()
+    if not rows:
+        st.info("No subscribers yet.")
+        return
+
+    # Headline metrics
+    confirmed = sum(1 for r in rows if r.status == "confirmed")
+    pending = sum(1 for r in rows if r.status == "pending")
+    disabled = sum(1 for r in rows if r.status == "disabled")
+    unsubscribed = sum(1 for r in rows if r.status == "unsubscribed")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Confirmed", confirmed)
+    c2.metric("Pending", pending)
+    c3.metric("Disabled", disabled)
+    c4.metric("Unsubscribed", unsubscribed)
+
+    import pandas as pd
+    df = pd.DataFrame([
+        {
+            "id": r.id,
+            "email": r.email,
+            "status": r.status,
+            "weekly": r.weekly,
+            "monthly": r.monthly,
+            "quarterly": r.quarterly,
+            "signed up": r.created_at.strftime("%Y-%m-%d") if r.created_at else "",
+            "confirmed": r.confirmed_at.strftime("%Y-%m-%d") if r.confirmed_at else "",
+            "last sent": r.last_email_sent_at.strftime("%Y-%m-%d %H:%M")
+                if r.last_email_sent_at else "",
+        }
+        for r in rows
+    ])
+    st.dataframe(df, use_container_width=True, hide_index=True)
+
+    st.markdown("#### Per-subscriber actions")
+    options = {f"#{r.id} — {r.email} ({r.status})": r for r in rows}
+    label = st.selectbox(
+        "Subscriber", list(options.keys()), key="admin_sub_pick"
+    )
+    target = options[label]
+    a1, a2, a3 = st.columns(3)
+    if a1.button("Disable", key=f"sub_disable_{target.id}",
+                 disabled=target.status == "disabled"):
+        _subs.set_status(target.id, "disabled")
+        st.success(f"Disabled {target.email}.")
+        st.rerun()
+    if a2.button("Enable (confirmed)", key=f"sub_enable_{target.id}",
+                 disabled=target.status == "confirmed"):
+        _subs.set_status(target.id, "confirmed")
+        st.success(f"Re-enabled {target.email}.")
+        st.rerun()
+    if a3.button("Delete", key=f"sub_delete_{target.id}", type="secondary"):
+        _subs.delete_subscriber(target.id)
+        st.success(f"Deleted {target.email}.")
+        st.rerun()
+
+
+# ---------------------------------------------------------------------------
+# Subscriber sign-up tab and magic-link landing pages
+# ---------------------------------------------------------------------------
+
+def page_subscribe() -> None:
+    """Public sign-up form for the digest mailing list."""
+    from insights import subscribers as _subs
+
+    st.title("Subscribe to Pension Plan Intelligence")
+    st.caption(
+        "Get the weekly, monthly, or quarterly briefing as soon as it's "
+        "published. Double opt-in: we'll email you a confirmation link to "
+        "verify the address."
+    )
+
+    with st.form("subscribe_form"):
+        email = st.text_input("Email address", placeholder="you@example.com")
+        st.write("Send me the:")
+        c1, c2, c3 = st.columns(3)
+        weekly = c1.checkbox("Weekly briefing", value=True)
+        monthly = c2.checkbox("Monthly briefing", value=True)
+        quarterly = c3.checkbox("Quarterly briefing", value=True)
+        submitted = st.form_submit_button("Subscribe", use_container_width=True)
+
+    if not submitted:
+        return
+
+    email_clean = (email or "").strip()
+    if not email_clean or "@" not in email_clean:
+        st.error("Please enter a valid email address.")
+        return
+    if not (weekly or monthly or quarterly):
+        st.error("Pick at least one cadence.")
+        return
+    if _subs.recent_signup_count(email_clean) >= _subs.RECENT_SIGNUP_LIMIT:
+        st.warning(
+            "We've already sent a confirmation link to that address recently. "
+            "Check your inbox (and spam folder) — if you didn't get it, try "
+            "again in an hour."
+        )
+        return
+
+    try:
+        sub, raw_token = _subs.create_pending_subscriber(
+            email_clean,
+            weekly=weekly, monthly=monthly, quarterly=quarterly,
+        )
+        email_obj = _subs.render_confirmation_email(sub, raw_token)
+        _subs.send_email(email_obj, to=sub.email)
+    except _subs.SubscriberError as exc:
+        st.error(str(exc))
+        return
+    except Exception as exc:
+        st.error(f"Sign-up failed: {exc}")
+        return
+
+    st.success(
+        "Check your inbox. We sent a confirmation link to "
+        f"**{email_clean}** — click it to start receiving briefings."
+    )
+
+
+def page_subscriber_confirm(raw_token: str) -> None:
+    """Handle ?confirm=<token>: flip subscriber to ``confirmed``, send welcome."""
+    from insights import subscribers as _subs
+
+    try:
+        sub = _subs.consume_confirm_token(raw_token)
+    except _subs.SubscriberError as exc:
+        st.title("Confirmation link error")
+        st.error(str(exc))
+        st.caption(
+            "Your link may have expired or already been used. Sign up "
+            "again from the Subscribe tab to get a fresh confirmation email."
+        )
+        if st.button("Back to dashboard"):
+            st.query_params.clear()
+            st.rerun()
+        return
+
+    # Welcome email — best effort, don't block the confirmation page.
+    try:
+        welcome = _subs.render_welcome_email(sub)
+        _subs.send_email(welcome, to=sub.email)
+    except Exception as exc:
+        import logging as _logging
+        _logging.getLogger(__name__).warning(
+            "Welcome email failed for %s: %s", sub.email, exc
+        )
+
+    st.title("You're subscribed")
+    cadences = [c for c in _subs.CADENCES if getattr(sub, c)]
+    label = ", ".join(cadences) if cadences else "no cadence"
+    st.success(
+        f"**{sub.email}** is now confirmed for the **{label}** briefing(s)."
+    )
+    st.caption("Every email will include an unsubscribe link in the footer.")
+    if st.button("Back to dashboard"):
+        st.query_params.clear()
+        st.rerun()
+
+
+def page_subscriber_unsubscribe(raw_token: str) -> None:
+    """Handle ?unsub=<token>: flip subscriber to ``unsubscribed``."""
+    from insights import subscribers as _subs
+
+    try:
+        sub = _subs.consume_unsubscribe_token(raw_token)
+    except _subs.SubscriberError as exc:
+        st.title("Unsubscribe link error")
+        st.error(str(exc))
+        if st.button("Back to dashboard"):
+            st.query_params.clear()
+            st.rerun()
+        return
+
+    st.title("You're unsubscribed")
+    st.info(f"**{sub.email}** will no longer receive briefings.")
+    st.caption(
+        "Changed your mind? Sign up again from the Subscribe tab — "
+        "we'll send a fresh confirmation link."
+    )
+    if st.button("Back to dashboard"):
+        st.query_params.clear()
+        st.rerun()
+
+
+def page_subscriber_preferences(raw_token: str) -> None:
+    """Handle ?prefs=<token>: edit cadence checkboxes for an existing subscriber."""
+    from insights import subscribers as _subs
+
+    try:
+        sub = _subs.consume_preferences_token(raw_token)
+    except _subs.SubscriberError as exc:
+        st.title("Preferences link error")
+        st.error(str(exc))
+        if st.button("Back to dashboard"):
+            st.query_params.clear()
+            st.rerun()
+        return
+
+    st.title("Update your subscription")
+    st.caption(f"Editing preferences for **{sub.email}**.")
+
+    with st.form("prefs_form"):
+        weekly = st.checkbox("Weekly briefing", value=bool(sub.weekly))
+        monthly = st.checkbox("Monthly briefing", value=bool(sub.monthly))
+        quarterly = st.checkbox("Quarterly briefing", value=bool(sub.quarterly))
+        submitted = st.form_submit_button("Save", use_container_width=True)
+
+    if submitted:
+        updated = _subs.set_preferences(
+            sub.id, weekly=weekly, monthly=monthly, quarterly=quarterly,
+        )
+        if updated.status == "unsubscribed":
+            st.info("All cadences cleared — you've been unsubscribed.")
+        else:
+            picks = [c for c in _subs.CADENCES if getattr(updated, c)]
+            st.success(f"Saved. You'll receive: {', '.join(picks)}.")
+        if st.button("Back to dashboard"):
+            st.query_params.clear()
+            st.rerun()
+
 
 def page_approval_action(raw_token: str, action: str):
     """Handle ?approve=<token> / ?reject=<token>.
@@ -3114,6 +3354,29 @@ def page_approval_action(raw_token: str, action: str):
                 "the publish step manually."
             )
             return
+
+        # Public subscriber fan-out. Runs for every cadence in
+        # ``subscribers.CADENCES``; idempotent via the
+        # ``Publication.subscribers_notified_at`` timestamp. Per-recipient
+        # failures are logged inside the helper and don't abort the loop.
+        try:
+            from insights import subscribers as _subs
+            result = _subs.fan_out_digest(publication)
+            if result.get("failed"):
+                st.warning(
+                    f"Digest sent to {result['sent']} subscriber(s); "
+                    f"{result['failed']} send(s) failed — check Resend logs."
+                )
+        except Exception as exc:
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                "Publication %s published but subscriber fan-out failed: %s",
+                publication.id, exc,
+            )
+            st.warning(
+                f"Briefing published, but subscriber fan-out failed: {exc}. "
+                f"Check Resend logs."
+            )
 
         # Post-publish notice email (currently only for weekly cadence;
         # extend by removing the gate once monthly/annual want it too).
@@ -3265,6 +3528,21 @@ def main():
         page_cafr_plan_detail(cafr_plan_param)
         return
 
+    confirm_param = st.query_params.get("confirm")
+    if confirm_param:
+        page_subscriber_confirm(confirm_param)
+        return
+
+    unsub_param = st.query_params.get("unsub")
+    if unsub_param:
+        page_subscriber_unsubscribe(unsub_param)
+        return
+
+    prefs_param = st.query_params.get("prefs")
+    if prefs_param:
+        page_subscriber_preferences(prefs_param)
+        return
+
     # Sidebar admin login affordance — no-op when ADMIN_PASSWORD is unset
     # (local dev) or when already unlocked (shows a "lock" button instead).
     _render_admin_login_sidebar()
@@ -3282,6 +3560,7 @@ def main():
         ("CAFR",                lambda: page_cafr()),
         ("Asset Allocation",    lambda: page_asset_allocation()),
         ("Plans",               lambda: page_plans()),
+        ("Subscribe",           lambda: page_subscribe()),
     ]
     if _admin_unlocked():
         tab_specs.append(("Archive", lambda: page_archive()))
