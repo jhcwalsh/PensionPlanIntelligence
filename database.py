@@ -627,6 +627,168 @@ class IpsRefreshLog(Base):
 
 
 # ---------------------------------------------------------------------------
+# Meeting-video / recording tables
+# ---------------------------------------------------------------------------
+# Captures the directory of where each plan publishes meeting video — live
+# stream and/or archived recordings — plus a per-recording row for download
+# and alerting workflows. Designed to mirror the IPS pattern: discovery via
+# mining existing extracted documents and site-crawling, optional LLM
+# verification of candidates, idempotent on (platform, video_id) for the
+# recordings themselves.
+
+# Platform values used across the video tables. Kept loose (string column,
+# not enum) so we can add new ones without a schema change.
+VIDEO_PLATFORMS = (
+    "youtube",     # YouTube channel or watch URL
+    "vimeo",       # Vimeo channel/showcase or watch URL
+    "granicus",    # granicus.com viewer (very common for muni/state)
+    "swagit",      # swagit.com viewer
+    "cablecast",   # cablecast.tv (Tightrope)
+    "civicplus",   # civicplus / civicclerk video player
+    "boxcast",     # boxcast.com livestream
+    "zoom",        # public Zoom meeting / archive
+    "facebook",    # FB live or page video
+    "website",     # plan-hosted player on their own domain
+    "other",
+    "none",        # confirmed: this plan does NOT post video
+    "unknown",     # not yet researched
+)
+
+
+class PlanVideoSource(Base):
+    """Where a given plan publishes meeting video.
+
+    A plan can have multiple sources (e.g. a YouTube channel for full
+    board meetings AND a Granicus archive for committee meetings), so
+    this is a 1-to-many on plan_id rather than a column on Plan.
+
+    Uniqueness is on (plan_id, platform, source_url): the same channel
+    discovered twice (mining + crawl) collapses to one row, while a
+    plan with two YouTube channels gets two rows. Discovery scripts
+    upsert; manual edits are safe.
+    """
+    __tablename__ = "plan_video_sources"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    plan_id = Column(String, ForeignKey("plans.id"), nullable=False)
+    platform = Column(String, nullable=False)            # see VIDEO_PLATFORMS
+    source_url = Column(String, nullable=False)          # archive/channel page
+    channel_id = Column(String)                          # platform-native id (yt UC..., vimeo user id, granicus client)
+    live_streamed = Column(Boolean)                      # does the plan stream meetings live? (None = unknown)
+    recording_policy = Column(String)                    # 'always' | 'sometimes' | 'never' | 'unknown'
+    typical_lag_days = Column(Integer)                   # observed lag between meeting and recording publish
+    discovery_method = Column(String, nullable=False)    # 'override' | 'mined' | 'site_crawl' | 'manual'
+    verification_verdict = Column(String)                # 'yes' | 'no' | 'partial' | null (not yet verified)
+    verification_confidence = Column(String)             # 'high' | 'medium' | 'low'
+    verification_notes = Column(Text)
+    status = Column(String, nullable=False, default="active")  # 'active' | 'inactive' | 'broken'
+    last_checked_at = Column(DateTime)                   # last time we polled this source for new recordings
+    last_recording_seen_at = Column(DateTime)            # newest recording publish_at observed here
+    notes = Column(Text)
+    created_at = Column(DateTime, default=_utcnow, nullable=False)
+    updated_at = Column(DateTime, default=_utcnow, nullable=False)
+
+    plan = relationship("Plan")
+    recordings = relationship("MeetingRecording", back_populates="video_source",
+                              cascade="all, delete-orphan")
+
+    __table_args__ = (
+        UniqueConstraint("plan_id", "platform", "source_url", name="uq_plan_video_source"),
+        Index("ix_plan_video_source_plan", "plan_id"),
+        Index("ix_plan_video_source_status", "status"),
+    )
+
+
+class MeetingRecording(Base):
+    """One row per meeting recording (or live stream) we know about.
+
+    Idempotency: (platform, video_id) is unique — the same YouTube video
+    discovered via two different sources collapses to one row. video_id
+    is the platform-native identifier (yt watch id, vimeo numeric id,
+    granicus clip_id, etc.); video_url is the canonical viewer URL.
+
+    download_status drives the Phase-2 downloader; alert_sent_at gates
+    the Phase-3 notification. meeting_id is best-effort linkage to the
+    existing meetings table — null until/unless we can match the
+    recording to a board-meeting agenda by date.
+    """
+    __tablename__ = "meeting_recordings"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    plan_id = Column(String, ForeignKey("plans.id"), nullable=False)
+    video_source_id = Column(Integer, ForeignKey("plan_video_sources.id"))
+    meeting_id = Column(Integer, ForeignKey("meetings.id"))
+    platform = Column(String, nullable=False)            # see VIDEO_PLATFORMS
+    video_id = Column(String, nullable=False)            # platform-native id
+    video_url = Column(String, nullable=False)           # canonical viewer URL
+    title = Column(String)
+    description = Column(Text)
+    thumbnail_url = Column(String)
+    published_at = Column(DateTime)                      # platform-reported publish time
+    meeting_date_inferred = Column(DateTime)             # parsed from title or filename
+    duration_seconds = Column(Integer)
+    is_livestream = Column(Boolean, default=False)       # ongoing or scheduled live event
+    livestream_start = Column(DateTime)                  # scheduled start, when applicable
+
+    # Downloader fields (Phase 2)
+    download_status = Column(String, nullable=False, default="pending")
+    # values: 'pending' | 'downloading' | 'done' | 'failed' | 'skipped' | 'unavailable'
+    local_path = Column(String)
+    file_size_bytes = Column(Integer)
+    content_hash = Column(String(64))                    # sha256 of downloaded file
+    download_attempts = Column(Integer, default=0)
+    last_download_attempt_at = Column(DateTime)
+    download_error = Column(Text)
+
+    # Alerting fields (Phase 3)
+    alert_sent_at = Column(DateTime)
+
+    discovered_at = Column(DateTime, default=_utcnow, nullable=False)
+    updated_at = Column(DateTime, default=_utcnow, nullable=False)
+
+    plan = relationship("Plan")
+    video_source = relationship("PlanVideoSource", back_populates="recordings")
+    meeting = relationship("Meeting")
+
+    __table_args__ = (
+        UniqueConstraint("platform", "video_id", name="uq_meeting_recording_video"),
+        Index("ix_meeting_recording_plan_pub", "plan_id", "published_at"),
+        Index("ix_meeting_recording_download_status", "download_status"),
+        Index("ix_meeting_recording_alert", "alert_sent_at"),
+    )
+
+
+class VideoRefreshLog(Base):
+    """Per-plan-per-source outcome from each video refresh run.
+
+    Mirrors ips_refresh_log / cafr_refresh_log. Status values:
+      no_source           — plan has no active video source row
+      checked_no_new      — polled the source, nothing new since last run
+      new_recordings      — new recording rows were inserted
+      fetch_failed        — could not load the source URL
+      parse_failed        — loaded but couldn't extract recording list
+      verification_failed — discovery candidate was rejected by LLM gate
+      error               — unexpected exception
+    """
+    __tablename__ = "video_refresh_log"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    plan_id = Column(String, ForeignKey("plans.id"), nullable=False)
+    video_source_id = Column(Integer, ForeignKey("plan_video_sources.id"))
+    run_at = Column(DateTime, nullable=False)
+    status = Column(String, nullable=False)
+    recordings_found = Column(Integer, default=0)        # total seen on this poll
+    recordings_new = Column(Integer, default=0)          # new rows inserted
+    url_tried = Column(String)
+    discovery_source = Column(String)                    # 'override' | 'mined' | 'site_crawl' | 'poll'
+    notes = Column(Text)
+
+    __table_args__ = (
+        Index("ix_video_refresh_plan_run", "plan_id", "run_at"),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Init / helpers
 # ---------------------------------------------------------------------------
 
