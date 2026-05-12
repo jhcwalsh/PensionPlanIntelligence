@@ -10,6 +10,7 @@ from database import (
     _build_fts_match,
     count_search_summaries,
     search_summaries,
+    tokenize_search_query,
 )
 
 
@@ -80,14 +81,14 @@ def test_search_ranks_more_relevant_first(session):
           summary_text=("Infrastructure infrastructure infrastructure — board "
                         "approved a new infrastructure mandate."))
     results = search_summaries(session, "infrastructure")
-    assert [doc.id for doc, _ in results] == [2, 1], "bm25 should rank doc 2 first"
+    assert [doc.id for doc, _, _ in results] == [2, 1], "bm25 should rank doc 2 first"
 
 
 def test_search_and_joins_multiple_terms(session):
     _seed(session, doc_id=1, summary_text="Private equity mandate awarded.")
     _seed(session, doc_id=2, summary_text="Private credit allocation increased.")
     results = search_summaries(session, "private equity")
-    assert [doc.id for doc, _ in results] == [1]
+    assert [doc.id for doc, _, _ in results] == [1]
 
 
 def test_search_searches_key_topics_and_investment_actions(session):
@@ -98,9 +99,9 @@ def test_search_searches_key_topics_and_investment_actions(session):
           summary_text="Portfolio rebalancing.",
           investment_actions='[{"manager": "Vanguard", "action": "hire"}]')
     results = search_summaries(session, "Vanguard")
-    assert [doc.id for doc, _ in results] == [2]
+    assert [doc.id for doc, _, _ in results] == [2]
     results = search_summaries(session, "divestment")
-    assert [doc.id for doc, _ in results] == [1]
+    assert [doc.id for doc, _, _ in results] == [1]
 
 
 def test_search_handles_special_characters_safely(session):
@@ -116,9 +117,9 @@ def test_search_filters_by_plan(session):
     _seed(session, plan_id="calstrs", doc_id=2,
           summary_text="Infrastructure allocation review.")
     cal = search_summaries(session, "infrastructure", plan_id="calpers")
-    assert [doc.plan_id for doc, _ in cal] == ["calpers"]
+    assert [doc.plan_id for doc, _, _ in cal] == ["calpers"]
     strs = search_summaries(session, "infrastructure", plan_id="calstrs")
-    assert [doc.plan_id for doc, _ in strs] == ["calstrs"]
+    assert [doc.plan_id for doc, _, _ in strs] == ["calstrs"]
 
 
 def test_count_matches_search_results(session):
@@ -162,8 +163,50 @@ def test_falls_back_to_ilike_when_fts_missing(session):
     session.commit()
     # FTS path raises in execute() — search_summaries falls back to ILIKE.
     results = search_summaries(session, "substring")
-    assert [doc.id for doc, _ in results] == [1]
+    assert [doc.id for doc, _, _ in results] == [1]
     assert count_search_summaries(session, "substring") == 1
+
+
+def test_search_returns_snippet_with_mark_tags(session):
+    _seed(session, doc_id=1,
+          summary_text=("The board approved a sizeable allocation to "
+                        "infrastructure during the quarterly review session."))
+    results = search_summaries(session, "infrastructure")
+    assert len(results) == 1
+    _, _, snippet = results[0]
+    assert "<mark>infrastructure</mark>" in snippet
+
+
+def test_search_snippet_marks_each_query_token(session):
+    _seed(session, doc_id=1,
+          summary_text=("Private equity mandate awarded to mid-market manager "
+                        "after a competitive RFP process."))
+    results = search_summaries(session, "private equity")
+    assert len(results) == 1
+    _, _, snippet = results[0]
+    assert "<mark>Private</mark>" in snippet or "<mark>private</mark>" in snippet
+    assert "<mark>equity</mark>" in snippet
+
+
+def test_ilike_fallback_returns_empty_snippet(session):
+    _seed(session, doc_id=1, summary_text="Fallback substring test.")
+    session.execute(database.text("DROP TRIGGER IF EXISTS summaries_ai"))
+    session.execute(database.text("DROP TRIGGER IF EXISTS summaries_au"))
+    session.execute(database.text("DROP TRIGGER IF EXISTS summaries_ad"))
+    session.execute(database.text("DROP TABLE IF EXISTS summaries_fts"))
+    session.commit()
+    results = search_summaries(session, "substring")
+    assert len(results) == 1
+    assert results[0][2] == ""
+
+
+def test_tokenize_search_query_unit():
+    assert tokenize_search_query("") == []
+    assert tokenize_search_query("   ") == []
+    assert tokenize_search_query("BlackRock") == ["BlackRock"]
+    assert tokenize_search_query("private equity") == ["private", "equity"]
+    assert tokenize_search_query('(foo bar)') == ["foo", "bar"]
+    assert tokenize_search_query('foo*') == ["foo"]
 
 
 def test_build_fts_match_unit():

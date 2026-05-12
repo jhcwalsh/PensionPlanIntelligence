@@ -37,6 +37,7 @@ from database import (
     get_session,
     init_db,
     search_summaries,
+    tokenize_search_query,
 )
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
@@ -170,15 +171,24 @@ def _safe_md(text: str) -> str:
 
 
 def _highlight(text: str, query: str | None) -> str:
-    """Wrap case-insensitive matches of ``query`` in <mark> tags.
+    """Wrap case-insensitive matches of each search token in <mark> tags.
 
-    Preserves the original casing of the matched substring. Caller must
-    render with ``unsafe_allow_html=True`` for the tags to take effect.
-    Safe against regex-special characters in the query via re.escape.
+    Tokenises the query the same way FTS5 search does (via
+    ``database.tokenize_search_query``) so a multi-word query highlights
+    every term independently rather than only the literal phrase.
+    Longer tokens are matched first so a shorter token can't shadow an
+    overlapping longer one. Caller must render with
+    ``unsafe_allow_html=True``.
     """
     if not query or not text:
         return text
-    pattern = re.compile(re.escape(query), re.IGNORECASE)
+    tokens = tokenize_search_query(query)
+    if not tokens:
+        return text
+    pattern = re.compile(
+        "|".join(re.escape(t) for t in sorted(tokens, key=len, reverse=True)),
+        re.IGNORECASE,
+    )
     return pattern.sub(lambda m: f"<mark>{m.group(0)}</mark>", text)
 
 
@@ -253,7 +263,8 @@ def render_sidebar():
 # Result card rendering
 # ---------------------------------------------------------------------------
 
-def render_summary_card(doc: Document, summary: Summary, highlight: str = None):
+def render_summary_card(doc: Document, summary: Summary, highlight: str = None,
+                        snippet_html: str | None = None):
     plan_name = doc.plan_id.upper()
     date_str = doc.meeting_date.strftime("%b %d, %Y") if doc.meeting_date else "Date unknown"
     doc_type = (doc.doc_type or "document").replace("_", " ").title()
@@ -263,6 +274,12 @@ def render_summary_card(doc: Document, summary: Summary, highlight: str = None):
     decisions = parse_json_field(summary.decisions)
     performance = parse_json_field(summary.performance_data)
 
+    if snippet_html:
+        st.markdown(
+            f"<div style='color:#555;font-size:0.9em;margin:0 0 -0.4em 0.4em;'>"
+            f"{_safe_md(snippet_html)}</div>",
+            unsafe_allow_html=True,
+        )
     with st.expander(f"**{plan_name}** — {doc_type} — {date_str}", expanded=False):
         summary_md = _highlight(_safe_md(summary.summary_text or ""), highlight)
         st.markdown(f"**Summary**\n\n{summary_md}", unsafe_allow_html=True)
@@ -362,8 +379,8 @@ def page_search(plan_id, plan_label):
         f"**{query}**{plan_suffix}"
     )
 
-    for doc, summary in results:
-        render_summary_card(doc, summary, highlight=query)
+    for doc, summary, snippet_html in results:
+        render_summary_card(doc, summary, highlight=query, snippet_html=snippet_html)
 
     if len(results) < total:
         remaining = total - len(results)

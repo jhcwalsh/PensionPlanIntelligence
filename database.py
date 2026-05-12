@@ -834,6 +834,26 @@ def get_new_meetings(session: Session, days: int = 7) -> list[dict]:
 # multi-term ranked search without having to learn FTS5 syntax.
 _FTS_STRIP_RE = re.compile(r'[\"\*\(\):\^]')
 
+# Width of FTS5 snippet excerpts shown alongside each search hit. 24 tokens is
+# roughly one short sentence — enough context to judge relevance without
+# dominating the result card.
+_FTS_SNIPPET_TOKENS = 24
+_FTS_SNIPPET_MARK_OPEN = "<mark>"
+_FTS_SNIPPET_MARK_CLOSE = "</mark>"
+_FTS_SNIPPET_ELLIPSIS = "…"
+
+
+def tokenize_search_query(query: str) -> list[str]:
+    """Return the searchable tokens extracted from ``query``.
+
+    Strips FTS5 operator characters and splits on whitespace so callers
+    (FTS5 MATCH builder, UI highlighter) treat the same set of terms.
+    """
+    if not query:
+        return []
+    cleaned = _FTS_STRIP_RE.sub(" ", query)
+    return [t for t in cleaned.split() if t]
+
 
 def _build_fts_match(query: str) -> Optional[str]:
     """Turn raw user input into a safe FTS5 MATCH expression.
@@ -842,10 +862,7 @@ def _build_fts_match(query: str) -> Optional[str]:
     (so reserved words like AND/OR/NOT pass through as plain terms) and
     the tokens are AND-joined. Returns None if nothing usable remains.
     """
-    if not query:
-        return None
-    cleaned = _FTS_STRIP_RE.sub(" ", query).strip()
-    tokens = [t for t in cleaned.split() if t]
+    tokens = tokenize_search_query(query)
     if not tokens:
         return None
     return " ".join(f'"{t}"' for t in tokens)
@@ -866,9 +883,14 @@ def _ilike_search_query(session: Session, query: str, plan_id: Optional[str]):
 
 
 def search_summaries(session: Session, query: str, plan_id: str = None,
-                     limit: int = 20) -> list[tuple[Document, Summary]]:
+                     limit: int = 20) -> list[tuple[Document, Summary, str]]:
     """Ranked full-text search across summary_text, key_topics,
     investment_actions, and decisions.
+
+    Returns ``(document, summary, snippet_html)`` triples. ``snippet_html``
+    is an FTS5-generated excerpt with matched terms wrapped in ``<mark>``
+    tags (the caller renders it with ``unsafe_allow_html=True``); the
+    ILIKE fallback path returns an empty string.
 
     Uses SQLite FTS5 with bm25 ranking when available; falls back to the
     legacy ILIKE substring scan if FTS5 is missing or the query reduces to
@@ -879,13 +901,17 @@ def search_summaries(session: Session, query: str, plan_id: str = None,
     match = _build_fts_match(query)
     if match is not None:
         sql = (
-            "SELECT s.id "
+            "SELECT s.id, snippet(summaries_fts, -1, :so, :sc, :el, :sn) "
             "FROM summaries_fts f "
             "JOIN summaries s ON s.id = f.rowid "
             "JOIN documents d ON d.id = s.document_id "
             "WHERE summaries_fts MATCH :match "
         )
-        params = {"match": match, "lim": limit}
+        params = {
+            "match": match, "lim": limit,
+            "so": _FTS_SNIPPET_MARK_OPEN, "sc": _FTS_SNIPPET_MARK_CLOSE,
+            "el": _FTS_SNIPPET_ELLIPSIS, "sn": _FTS_SNIPPET_TOKENS,
+        }
         if plan_id:
             sql += "AND d.plan_id = :pid "
             params["pid"] = plan_id
@@ -895,9 +921,10 @@ def search_summaries(session: Session, query: str, plan_id: str = None,
         except Exception:
             rows = None
         if rows is not None:
-            ids = [r[0] for r in rows]
-            if not ids:
+            if not rows:
                 return []
+            ids = [r[0] for r in rows]
+            snippets = {r[0]: (r[1] or "") for r in rows}
             order = {sid: i for i, sid in enumerate(ids)}
             pairs = (
                 session.query(Document, Summary)
@@ -906,14 +933,17 @@ def search_summaries(session: Session, query: str, plan_id: str = None,
                 .all()
             )
             pairs.sort(key=lambda p: order[p[1].id])
-            return pairs
+            return [(doc, summ, snippets[summ.id]) for doc, summ in pairs]
 
-    return (
-        _ilike_search_query(session, query, plan_id)
-        .order_by(Document.meeting_date.desc())
-        .limit(limit)
-        .all()
-    )
+    return [
+        (doc, summ, "")
+        for doc, summ in (
+            _ilike_search_query(session, query, plan_id)
+            .order_by(Document.meeting_date.desc())
+            .limit(limit)
+            .all()
+        )
+    ]
 
 
 def count_search_summaries(session: Session, query: str,
