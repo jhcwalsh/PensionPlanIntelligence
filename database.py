@@ -689,17 +689,23 @@ def _init_fts(engine_) -> bool:
             return False
         for stmt in _FTS_TRIGGER_SQL:
             conn.exec_driver_sql(stmt)
+        # External-content FTS5: ``SELECT COUNT(*) FROM summaries_fts``
+        # reads from the content table (``summaries``), so it can't tell
+        # whether the index is empty. ``summaries_fts_docsize`` is the
+        # shadow table that holds one row per indexed document — that's
+        # the real index size. When it's short of the source row count
+        # (typically because the FTS table was created against an
+        # already-populated ``summaries`` and the triggers only fire on
+        # subsequent writes), rebuild the index from the external
+        # content in one pass.
         row = conn.exec_driver_sql(
-            "SELECT (SELECT COUNT(*) FROM summaries_fts), "
+            "SELECT (SELECT COUNT(*) FROM summaries_fts_docsize), "
             "       (SELECT COUNT(*) FROM summaries)"
         ).fetchone()
-        fts_count, src_count = row[0], row[1]
-        if fts_count == 0 and src_count > 0:
+        indexed_count, src_count = row[0], row[1]
+        if indexed_count < src_count:
             conn.exec_driver_sql(
-                "INSERT INTO summaries_fts(rowid, summary_text, key_topics, "
-                "                          investment_actions, decisions) "
-                "SELECT id, summary_text, key_topics, "
-                "       investment_actions, decisions FROM summaries"
+                "INSERT INTO summaries_fts(summaries_fts) VALUES('rebuild')"
             )
         return True
 

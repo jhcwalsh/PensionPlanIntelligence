@@ -154,6 +154,37 @@ def test_empty_query_returns_no_results(session):
     assert count_search_summaries(session, "") == 0
 
 
+def test_init_fts_backfills_preexisting_summaries(session):
+    """Regression: when ``_init_fts`` runs against a DB whose
+    ``summaries`` table is already populated (the typical state on
+    Render when FTS5 was first added), the index must be backfilled.
+    The original implementation gated backfill on ``COUNT(*) FROM
+    summaries_fts`` which with external-content FTS5 reads from the
+    content table, not the index, so the gate always saw the counts as
+    equal and skipped the rebuild — leaving production search empty.
+    """
+    # Seed rows, then tear the FTS index down to simulate the
+    # "summaries existed before FTS was added" state.
+    _seed(session, doc_id=1, summary_text="Approved a new infrastructure mandate.")
+    _seed(session, doc_id=2, summary_text="Quarterly review of carbon strategy.")
+    session.execute(database.text("DROP TRIGGER IF EXISTS summaries_ai"))
+    session.execute(database.text("DROP TRIGGER IF EXISTS summaries_au"))
+    session.execute(database.text("DROP TRIGGER IF EXISTS summaries_ad"))
+    session.execute(database.text("DROP TABLE IF EXISTS summaries_fts"))
+    session.commit()
+
+    # Re-init: should recreate the FTS table, triggers, AND backfill.
+    assert database._init_fts(database.engine) is True
+
+    indexed = session.execute(database.text(
+        "SELECT COUNT(*) FROM summaries_fts_docsize"
+    )).scalar()
+    assert indexed == 2, "init_fts must backfill pre-existing summaries"
+
+    assert [doc.id for doc, _, _ in search_summaries(session, "infrastructure")] == [1]
+    assert [doc.id for doc, _, _ in search_summaries(session, "carbon")] == [2]
+
+
 def test_falls_back_to_ilike_when_fts_missing(session):
     _seed(session, doc_id=1, summary_text="Fallback substring test.")
     session.execute(database.text("DROP TRIGGER IF EXISTS summaries_ai"))
