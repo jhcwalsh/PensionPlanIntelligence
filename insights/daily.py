@@ -20,8 +20,8 @@ from typing import Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from database import DailyRun, Document, Plan, get_session
-from insights import config
+from database import DailyRun, Document, Plan, Publication, get_session
+from insights import config, cycle_common
 
 logger = logging.getLogger(__name__)
 
@@ -260,3 +260,102 @@ def record_daily_run(
     session.add(row)
     session.flush()
     return row
+
+
+def run_cycle(
+    *,
+    now: Optional[datetime] = None,
+    force: bool = False,
+) -> Publication:
+    """Run one daily-digest cycle.
+
+    Steps:
+        1. find/create today's Publication (cadence='daily').
+        2. select_new_docs since last_sent_at.
+        3. apply_triggers → reasons.
+        4. compose_daily(docs, reasons).
+        5. if reasons: finalize_for_approval; else: finalize_and_send.
+        6. record_daily_run.
+
+    Returns the Publication for the CLI to print. ``--force`` expires any
+    existing publication for today (including auto-sent ones) and starts
+    over.
+    """
+    now_utc = now if now is not None else datetime.utcnow()
+    today = now_utc.date()
+
+    session = get_session()
+    publication: Optional[Publication] = None
+    try:
+        publication = cycle_common.find_or_create_publication(
+            session,
+            cadence="daily",
+            period_start=today,
+            period_end=today,
+        )
+
+        if force and publication.status in (
+            "awaiting_approval", "approved", "published"
+        ):
+            cycle_common.transition_status(publication, "expired")
+            session.flush()
+            # Re-create — the unique constraint returns the just-expired
+            # row, so we bump it back to generating to refill it.
+            publication = cycle_common.find_or_create_publication(
+                session,
+                cadence="daily",
+                period_start=today,
+                period_end=today,
+            )
+            publication.status = "generating"
+            publication.draft_markdown = None
+            publication.composed_at = None
+            publication.pdf_path = None
+            session.flush()
+
+        if publication.status != "generating":
+            logger.info(
+                "Daily publication %s already at status '%s' — skipping.",
+                publication.id, publication.status,
+            )
+            return cycle_common.detach_for_caller(session, publication)
+
+        since = last_sent_at(session)
+        docs = select_new_docs(since=since, now_utc=now_utc, session=session)
+        triggers = apply_triggers(docs, now_utc=now_utc, session=session)
+        draft = compose_daily(docs, triggers=triggers, digest_date=now_utc, session=session)
+
+        approval_gated = bool(triggers)
+        title_for_pdf = f"Daily Pension Digest — {today.isoformat()}"
+
+        if approval_gated:
+            cycle_common.finalize_for_approval(
+                session, publication, draft, title_for_pdf=title_for_pdf,
+            )
+        else:
+            cycle_common.finalize_and_send(
+                session, publication, draft, title_for_pdf=title_for_pdf,
+            )
+
+        record_daily_run(
+            session,
+            sent_at=now_utc,
+            publication_id=publication.id,
+            docs_count=len(docs),
+            triggers=triggers,
+            approval_gated=approval_gated,
+        )
+        session.commit()
+        return cycle_common.detach_for_caller(session, publication)
+
+    except Exception:
+        session.rollback()
+        if publication is not None and publication.status == "generating":
+            try:
+                cycle_common.transition_status(publication, "failed")
+                session.commit()
+            except Exception:  # noqa: BLE001
+                session.rollback()
+        raise
+    finally:
+        session.close()
