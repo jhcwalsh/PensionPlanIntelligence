@@ -43,6 +43,23 @@ RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL", "")
 
 # ---------------------------------------------------------------------------
+# Daily digest tuning
+# ---------------------------------------------------------------------------
+
+DAILY_APPROVAL_DOC_THRESHOLD = int(
+    os.environ.get("DAILY_APPROVAL_DOC_THRESHOLD", "10")
+)
+DAILY_APPROVAL_KEYWORDS = [
+    k.strip()
+    for k in os.environ.get(
+        "DAILY_APPROVAL_KEYWORDS",
+        "RFP,manager,search,investment policy",
+    ).split(",")
+    if k.strip()
+]
+DAILY_REAPPEAR_DAYS = int(os.environ.get("DAILY_REAPPEAR_DAYS", "30"))
+
+# ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
 
@@ -58,6 +75,30 @@ def is_mock() -> bool:
     Re-evaluated on each call so tests can flip the env var.
     """
     return os.environ.get("INSIGHTS_MODE", "live").lower() == "mock"
+
+
+# ---------------------------------------------------------------------------
+# Per-cadence display: (subject_prefix, product_name, slug).
+# The slug is used as a filename prefix for PDFs and published notes.
+# Unknown cadences fall back to "{cadence.title()} CIO Insights" /
+# "{cadence}_cio_insights".
+# ---------------------------------------------------------------------------
+
+_CADENCE_DISPLAY: dict[str, tuple[str, str, str]] = {
+    "weekly":     ("Weekly",  "CIO Insights",         "weekly_cio_insights"),
+    "monthly":    ("Monthly", "CIO Insights",         "monthly_cio_insights"),
+    "annual":     ("Annual",  "CIO Insights",         "annual_cio_insights"),
+    "rfp_weekly": ("Weekly",  "Consultant RFP Brief", "weekly_consultant_rfps"),
+    "daily":      ("Daily",   "Pension Digest",       "daily_digest"),
+}
+
+
+def cadence_display(cadence: str) -> tuple[str, str, str]:
+    """``(subject_prefix, product_name, slug)`` for the given cadence."""
+    return _CADENCE_DISPLAY.get(
+        cadence,
+        (cadence.title(), "CIO Insights", f"{cadence}_cio_insights"),
+    )
 
 
 def expires_at_default(now: datetime | None = None) -> datetime:
