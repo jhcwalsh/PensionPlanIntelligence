@@ -284,6 +284,29 @@ class ApprovalToken(Base):
     )
 
 
+class DailyRun(Base):
+    """One row per successfully-sent daily digest.
+
+    The lookback window for "what's new" is anchored on
+    ``MAX(sent_at)``. Recording the row advances the window even on
+    approval-gated days, so an unapproved day doesn't block subsequent
+    digests.
+    """
+    __tablename__ = "daily_runs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    sent_at = Column(DateTime, nullable=False)
+    publication_id = Column(Integer, ForeignKey("publications.id"), nullable=False)
+    docs_count = Column(Integer, nullable=False)
+    triggers = Column(JSON, nullable=False, default=list)
+    # triggers values: ["volume:14"], ["keyword:RFP", "reappear:txteachers"], etc.
+    approval_gated = Column(Boolean, nullable=False, default=False)
+
+    __table_args__ = (
+        Index("ix_daily_runs_sent_at", "sent_at"),
+    )
+
+
 class WeeklyRun(Base):
     """One row per weekly scrape/extract run, for resumability and audit."""
     __tablename__ = "weekly_runs"
