@@ -20,7 +20,7 @@ from typing import Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from database import Document, Plan, get_session
+from database import DailyRun, Document, Plan, get_session
 from insights import config
 
 logger = logging.getLogger(__name__)
@@ -233,3 +233,30 @@ def _synthesize_via_anthropic(plan_name: str, docs: list[Document]) -> str:
         messages=[{"role": "user", "content": user}],
     )
     return resp.content[0].text.strip()
+
+
+def last_sent_at(session: Session) -> Optional[datetime]:
+    """Return ``MAX(sent_at)`` over ``daily_runs`` or ``None`` if empty."""
+    return session.query(func.max(DailyRun.sent_at)).scalar()
+
+
+def record_daily_run(
+    session: Session,
+    *,
+    sent_at: datetime,
+    publication_id: int,
+    docs_count: int,
+    triggers: list[str],
+    approval_gated: bool,
+) -> DailyRun:
+    """Insert one ``DailyRun`` row. Caller commits."""
+    row = DailyRun(
+        sent_at=sent_at,
+        publication_id=publication_id,
+        docs_count=docs_count,
+        triggers=list(triggers),
+        approval_gated=approval_gated,
+    )
+    session.add(row)
+    session.flush()
+    return row
