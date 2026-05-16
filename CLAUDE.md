@@ -38,6 +38,11 @@ INSIGHTS_MODE=mock python -m insights.scheduler weekly --skip-scrape         # w
 INSIGHTS_MODE=live python -m insights.scheduler weekly --skip-scrape         # real send via Resend
 python -m insights.scheduler weekly --period 2026-04-19 --skip-scrape --force # force re-compose
 
+# Daily Pension Digest (runs from GitHub Actions, not local Task Scheduler)
+INSIGHTS_MODE=mock python -m insights.scheduler daily          # dry-run; writes to tmp/sent_emails/
+INSIGHTS_MODE=live python -m insights.scheduler daily          # real send via Resend
+python -m insights.scheduler daily --force                     # re-send today's digest
+
 # RFP pipeline (against fixtures in mock mode; against pension.db in live)
 LLM_MODE=mock python -m scripts.run_rfp_extraction
 LLM_MODE=mock python -m scripts.run_eval
@@ -85,6 +90,19 @@ Magic-link emails contain `?approve=<token>` and `?reject=<token>`. The Streamli
 - `finalize_for_approval()` raises if status isn't `"generating"`. So once a publication is `awaiting_approval`, the cycle won't resend its email.
 - To force a re-send, expire the existing publication first (or use `--force` on the scheduler CLI). Setting it back to `"generating"` directly works but bypasses the audit trail.
 - The same idempotency pattern applies to `WeeklyRun` (unique on `period_start`) and the RFP `rfp_id` (deterministic from `sha256(plan_id + doc_id + chunk_id + record_index)`).
+
+### Daily Pension Digest auto-send + conditional approval
+Unlike weekly/monthly/annual (always approval-gated), the `daily` cadence
+auto-sends on quiet/normal days and only routes through `finalize_for_approval`
+when triggers fire (volume / keyword / reappearing-plan). The auto-send path
+uses `cycle_common.finalize_and_send` which is a sibling of `finalize_for_approval`
+that skips token creation and goes straight to `published`. Lookback state lives
+in the `daily_runs` table (anchored on `MAX(sent_at)`); the GitHub Actions cron
+at `.github/workflows/daily-digest.yml` runs at 13:00 UTC daily and commits
+`db/pension.db` back after each successful send. Three env vars tune the trigger
+rules: `DAILY_APPROVAL_DOC_THRESHOLD` (default 10), `DAILY_APPROVAL_KEYWORDS`
+(default `"RFP,manager,search,investment policy"`), `DAILY_REAPPEAR_DAYS`
+(default 30).
 
 ### Where each cadence runs
 Render hosts only two web services now: Streamlit (`pension-plan-intelligence`) and FastAPI (`pension-rfp-api`), both mounting the persistent disk `pension-db` at `/data`. All cron-style work moved off Render — partly to GHA, partly to local Windows Task Scheduler:
