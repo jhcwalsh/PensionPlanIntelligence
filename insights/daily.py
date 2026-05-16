@@ -13,14 +13,12 @@ approval flow is invoked only when ``apply_triggers`` returns reasons
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Optional
 
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from database import DailyRun, Document, Plan, get_session
-from insights import config
+from database import Document
 
 logger = logging.getLogger(__name__)
 
