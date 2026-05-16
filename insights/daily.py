@@ -108,12 +108,17 @@ def compose_daily(
     *,
     triggers: list[str],
     digest_date: datetime,
+    session: Optional[Session] = None,
 ) -> str:
     """Render the daily digest markdown.
 
     Quiet days return a one-line "nothing today" string with no LLM
     call. Non-quiet days group docs by plan, call ``_synthesize_plan_paragraph``
     once per plan, and append a bulleted doc list under each section.
+
+    If ``session`` is provided, it is used for the plan-name lookup (so the
+    orchestrator can own the DB transaction). Otherwise a fresh session is
+    opened and closed locally.
     """
     date_str = digest_date.strftime("%Y-%m-%d")
     if not docs:
@@ -131,14 +136,17 @@ def compose_daily(
         grouped[d.plan_id].append(d)
 
     # Resolve plan names in one query.
-    session = get_session()
+    owns_session = session is None
+    if owns_session:
+        session = get_session()
     try:
         plan_map = {
             p.id: p.name
-            for p in session.query(Plan).filter(Plan.id.in_(grouped.keys())).all()
+            for p in session.query(Plan).filter(Plan.id.in_(list(grouped.keys()))).all()
         }
     finally:
-        session.close()
+        if owns_session:
+            session.close()
 
     base_url = config.APPROVAL_BASE_URL
 
