@@ -16,9 +16,11 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from database import Document
+from insights import config
 
 logger = logging.getLogger(__name__)
 
@@ -49,3 +51,52 @@ def select_new_docs(
         )
     )
     return q.all()
+
+
+def apply_triggers(
+    docs: list[Document],
+    *,
+    now_utc: datetime,
+    session: Session,
+) -> list[str]:
+    """Return a list of trigger reasons; empty list means auto-send.
+
+    Three rules, ORed:
+        1. Volume:   len(docs) > DAILY_APPROVAL_DOC_THRESHOLD
+        2. Keyword:  any doc title matches a DAILY_APPROVAL_KEYWORDS entry
+        3. Reappear: plan's most-recent *prior* document is older than
+                     DAILY_REAPPEAR_DAYS days. A brand-new plan (no prior
+                     docs) does NOT trigger — otherwise the trigger would
+                     fire on every plan's first appearance.
+    """
+    reasons: list[str] = []
+    if not docs:
+        return reasons
+
+    if len(docs) > config.DAILY_APPROVAL_DOC_THRESHOLD:
+        reasons.append(f"volume:{len(docs)}")
+
+    keywords_lower = [k.lower() for k in config.DAILY_APPROVAL_KEYWORDS]
+    for d in docs:
+        title = (d.filename or "").lower()
+        matched = next((k for k in keywords_lower if k in title), None)
+        if matched:
+            reasons.append(f"keyword:{matched}")
+            break  # one keyword reason is enough — avoid spam
+
+    reappear_cutoff = now_utc - timedelta(days=config.DAILY_REAPPEAR_DAYS)
+    plan_ids = sorted({d.plan_id for d in docs})
+    today_min = min(d.downloaded_at for d in docs)
+    for plan_id in plan_ids:
+        prior_max = (
+            session.query(func.max(Document.downloaded_at))
+            .filter(Document.plan_id == plan_id)
+            .filter(Document.downloaded_at.isnot(None))
+            .filter(Document.downloaded_at < today_min)
+            .scalar()
+        )
+        # Brand-new plans (prior_max is None) do NOT trigger reappear.
+        if prior_max is not None and prior_max < reappear_cutoff:
+            reasons.append(f"reappear:{plan_id}")
+
+    return reasons
