@@ -28,5 +28,6 @@ def test_daily_keywords_split_and_stripped(monkeypatch):
     import insights.config as ic
     importlib.reload(ic)
     assert ic.DAILY_APPROVAL_KEYWORDS == ["foo", "bar", "baz"]
-    # Restore module state so later tests don't see the reload.
+    # Restore default state for downstream tests.
+    monkeypatch.delenv("DAILY_APPROVAL_KEYWORDS")
     importlib.reload(ic)
