@@ -13,13 +13,14 @@ approval flow is invoked only when ``apply_triggers`` returns reasons
 from __future__ import annotations
 
 import logging
+from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Optional
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from database import Document
+from database import Document, Plan, get_session
 from insights import config
 
 logger = logging.getLogger(__name__)
@@ -100,3 +101,127 @@ def apply_triggers(
             reasons.append(f"reappear:{plan_id}")
 
     return reasons
+
+
+def compose_daily(
+    docs: list[Document],
+    *,
+    triggers: list[str],
+    digest_date: datetime,
+) -> str:
+    """Render the daily digest markdown.
+
+    Quiet days return a one-line "nothing today" string with no LLM
+    call. Non-quiet days group docs by plan, call ``_synthesize_plan_paragraph``
+    once per plan, and append a bulleted doc list under each section.
+    """
+    date_str = digest_date.strftime("%Y-%m-%d")
+    if not docs:
+        return (
+            f"# Pension Plans — Daily Digest — {date_str}\n\n"
+            f"No new documents fetched in the last 24 hours.\n"
+        )
+
+    parts: list[str] = [f"# Pension Plans — Daily Digest — {date_str}\n"]
+    if triggers:
+        parts.append(f"\nTriggers: {', '.join(triggers)}\n")
+
+    grouped: dict[str, list[Document]] = defaultdict(list)
+    for d in docs:
+        grouped[d.plan_id].append(d)
+
+    # Resolve plan names in one query.
+    session = get_session()
+    try:
+        plan_map = {
+            p.id: p.name
+            for p in session.query(Plan).filter(Plan.id.in_(grouped.keys())).all()
+        }
+    finally:
+        session.close()
+
+    base_url = config.APPROVAL_BASE_URL
+
+    any_llm_failed = False
+    for plan_id in sorted(grouped.keys()):
+        plan_name = plan_map.get(plan_id, plan_id)
+        plan_docs = grouped[plan_id]
+        parts.append(f"\n## {plan_name}\n")
+
+        paragraph, ok = _synthesize_plan_paragraph(plan_name, plan_docs)
+        parts.append(f"{paragraph}\n")
+        if not ok:
+            any_llm_failed = True
+
+        for d in plan_docs:
+            title = d.filename or "(untitled document)"
+            date_label = (
+                d.meeting_date.strftime("%b %d, %Y")
+                if d.meeting_date else "no date"
+            )
+            link = f"{base_url}/?document={d.id}"
+            parts.append(f"- [{title} — {date_label}]({link})\n")
+
+    if any_llm_failed:
+        parts.insert(
+            1,
+            "\n_LLM synthesis unavailable for one or more sections — "
+            "showing document list only._\n",
+        )
+
+    return "".join(parts)
+
+
+def _synthesize_plan_paragraph(
+    plan_name: str,
+    docs: list[Document],
+) -> tuple[str, bool]:
+    """Return ``(paragraph, ok)``. Falls back deterministically on failure.
+
+    Mock mode (``INSIGHTS_MODE=mock``) returns a canned paragraph and
+    never calls Anthropic. Live mode is wired in a separate helper so
+    the test suite can stub it.
+    """
+    if config.is_mock():
+        return (
+            f"{plan_name} posted {len(docs)} document(s) in the last day: "
+            + ", ".join(d.doc_type or "document" for d in docs) + ".",
+            True,
+        )
+
+    try:
+        return (_synthesize_via_anthropic(plan_name, docs), True)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("LLM synthesis failed for %s: %s", plan_name, exc)
+        return (
+            f"{len(docs)} document(s) fetched today; LLM synthesis failed.",
+            False,
+        )
+
+
+def _synthesize_via_anthropic(plan_name: str, docs: list[Document]) -> str:
+    """Live-mode Anthropic call. Imported lazily so mock tests stay light."""
+    from anthropic import Anthropic
+    from summarizer import MODEL_SONNET
+
+    client = Anthropic()
+    doc_lines = "\n".join(
+        f"- {d.filename or '(untitled)'} "
+        f"({d.doc_type or 'document'}, "
+        f"{d.meeting_date.isoformat() if d.meeting_date else 'no date'})"
+        for d in docs
+    )
+    system = (
+        "Produce one factual paragraph describing what these documents are. "
+        "Do not editorialize. Do not infer significance. Do not recommend. "
+        "State only what the documents are and what they cover. Maximum 3 sentences."
+    )
+    user = f"Plan: {plan_name}\nNew documents today:\n{doc_lines}"
+    resp = client.messages.create(
+        model=MODEL_SONNET,
+        max_tokens=500,
+        temperature=0,
+        system=system,
+        messages=[{"role": "user", "content": user}],
+    )
+    return resp.content[0].text.strip()
