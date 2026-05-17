@@ -64,11 +64,17 @@ def apply_triggers(
 
     Three rules, ORed:
         1. Volume:   len(docs) > DAILY_APPROVAL_DOC_THRESHOLD
-        2. Keyword:  any doc title matches a DAILY_APPROVAL_KEYWORDS entry
+        2. Keyword:  any doc filename matches a DAILY_APPROVAL_KEYWORDS entry
         3. Reappear: plan's most-recent *prior* document is older than
                      DAILY_REAPPEAR_DAYS days. A brand-new plan (no prior
                      docs) does NOT trigger — otherwise the trigger would
                      fire on every plan's first appearance.
+
+    Precondition: every doc must have a non-null ``downloaded_at``. The
+    only call site (``run_daily_cycle``) sources docs from
+    ``select_new_docs``, which filters nulls, so this is satisfied. A
+    null ``downloaded_at`` would raise ``TypeError`` from the ``min()``
+    over the reappear-lookback timestamp.
     """
     reasons: list[str] = []
     if not docs:
