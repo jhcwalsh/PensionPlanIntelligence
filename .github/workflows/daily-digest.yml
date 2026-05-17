@@ -42,6 +42,20 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-pipeline.txt
 
+      - name: Verify required secrets are set
+        run: |
+          missing=()
+          [ -z "$ANTHROPIC_API_KEY" ] && missing+=("ANTHROPIC_API_KEY")
+          [ -z "$RESEND_API_KEY" ] && missing+=("RESEND_API_KEY")
+          [ -z "$APPROVAL_EMAIL_FROM" ] && missing+=("APPROVAL_EMAIL_FROM")
+          [ -z "$APPROVAL_EMAIL_RECIPIENT" ] && missing+=("APPROVAL_EMAIL_RECIPIENT")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "Missing required secrets: ${missing[*]}"
+            echo "Set them in Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          echo "All required secrets present."
+
       - name: Send daily digest
         run: python -m insights.scheduler daily
 
