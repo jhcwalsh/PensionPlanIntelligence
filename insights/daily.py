@@ -262,7 +262,7 @@ def record_daily_run(
     return row
 
 
-def run_cycle(
+def run_daily_cycle(
     *,
     now: Optional[datetime] = None,
     force: bool = False,

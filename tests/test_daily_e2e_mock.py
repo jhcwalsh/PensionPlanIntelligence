@@ -43,7 +43,7 @@ def _add_doc(plan_id: str, filename: str, downloaded_at: datetime,
 
 
 def test_e2e_quiet_day_auto_sends_nothing_today(seeded_plans):
-    pub = daily.run_cycle(now=datetime(2026, 5, 16, 13, 0))
+    pub = daily.run_daily_cycle(now=datetime(2026, 5, 16, 13, 0))
     assert pub.cadence == "daily"
     assert pub.status == "published"
     assert "No new documents fetched" in pub.draft_markdown
@@ -70,7 +70,7 @@ def test_e2e_normal_day_auto_sends_with_per_plan_sections(seeded_plans):
     _add_doc("calstrs", "Board Pack.pdf", datetime(2026, 5, 16, 11, 0),
              meeting_date=datetime(2026, 5, 14), doc_type="board_pack")
 
-    pub = daily.run_cycle(now=datetime(2026, 5, 16, 13, 0))
+    pub = daily.run_daily_cycle(now=datetime(2026, 5, 16, 13, 0))
     assert pub.status == "published"
     assert "## CalPERS" in pub.draft_markdown
     assert "## CalSTRS" in pub.draft_markdown
@@ -92,7 +92,7 @@ def test_e2e_triggered_day_goes_to_approval(seeded_plans):
                  datetime(2026, 5, 16, 10, i),
                  meeting_date=datetime(2026, 5, 12))
 
-    pub = daily.run_cycle(now=datetime(2026, 5, 16, 13, 0))
+    pub = daily.run_daily_cycle(now=datetime(2026, 5, 16, 13, 0))
     assert pub.status == "awaiting_approval"
 
     s = get_session()
@@ -114,8 +114,8 @@ def test_e2e_triggered_day_goes_to_approval(seeded_plans):
 
 
 def test_e2e_idempotent_same_day_no_double_send(seeded_plans):
-    daily.run_cycle(now=datetime(2026, 5, 16, 13, 0))
-    daily.run_cycle(now=datetime(2026, 5, 16, 13, 30))
+    daily.run_daily_cycle(now=datetime(2026, 5, 16, 13, 0))
+    daily.run_daily_cycle(now=datetime(2026, 5, 16, 13, 30))
 
     s = get_session()
     try:
@@ -131,17 +131,17 @@ def test_e2e_idempotent_same_day_no_double_send(seeded_plans):
 def test_e2e_lookback_advances_after_send(seeded_plans):
     # Day 1: one doc, gets digested.
     _add_doc("calpers", "Day1.pdf", datetime(2026, 5, 15, 10, 0))
-    daily.run_cycle(now=datetime(2026, 5, 15, 13, 0))
+    daily.run_daily_cycle(now=datetime(2026, 5, 15, 13, 0))
 
     # Day 2: a new doc lands; the old doc must NOT reappear.
     _add_doc("calpers", "Day2.pdf", datetime(2026, 5, 16, 10, 0))
-    pub2 = daily.run_cycle(now=datetime(2026, 5, 16, 13, 0))
+    pub2 = daily.run_daily_cycle(now=datetime(2026, 5, 16, 13, 0))
 
     assert "Day2.pdf" in pub2.draft_markdown
     assert "Day1.pdf" not in pub2.draft_markdown
 
 
 def test_e2e_force_resends_same_day(seeded_plans):
-    daily.run_cycle(now=datetime(2026, 5, 16, 13, 0))
-    daily.run_cycle(now=datetime(2026, 5, 16, 13, 5), force=True)
+    daily.run_daily_cycle(now=datetime(2026, 5, 16, 13, 0))
+    daily.run_daily_cycle(now=datetime(2026, 5, 16, 13, 5), force=True)
     assert len(approval.list_mock_emails()) == 2

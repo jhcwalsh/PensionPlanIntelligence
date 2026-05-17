@@ -107,8 +107,8 @@ def main(argv: list[str] | None = None) -> int:
             stats = run_reminders(datetime.utcnow())
             print(f"reminders complete: {stats}")
         elif args.cycle == "daily":
-            from insights.daily import run_cycle
-            pub = run_cycle(force=args.force)
+            from insights.daily import run_daily_cycle
+            pub = run_daily_cycle(force=args.force)
             print(f"daily cycle complete: publication_id={pub.id} status={pub.status}")
         else:
             parser.error(f"unknown cycle: {args.cycle}")

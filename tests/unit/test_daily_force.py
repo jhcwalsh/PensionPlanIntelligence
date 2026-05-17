@@ -21,17 +21,17 @@ def plan_row():
 
 def test_force_resends_when_publication_already_published(plan_row):
     # First run on a quiet day — auto-send.
-    daily.run_cycle(now=datetime(2026, 5, 16, 13, 0))
+    daily.run_daily_cycle(now=datetime(2026, 5, 16, 13, 0))
     first = approval.list_mock_emails()
     assert len(first) == 1
 
     # Second run same day, no --force → skipped, no new email.
-    daily.run_cycle(now=datetime(2026, 5, 16, 13, 5))
+    daily.run_daily_cycle(now=datetime(2026, 5, 16, 13, 5))
     after_skip = approval.list_mock_emails()
     assert len(after_skip) == 1
 
     # Third run with --force → publication recycled + new email.
-    daily.run_cycle(now=datetime(2026, 5, 16, 13, 10), force=True)
+    daily.run_daily_cycle(now=datetime(2026, 5, 16, 13, 10), force=True)
     after_force = approval.list_mock_emails()
     assert len(after_force) == 2
 
