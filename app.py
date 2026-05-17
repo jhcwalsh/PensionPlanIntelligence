@@ -115,9 +115,36 @@ st.html(
 # Session / DB helpers
 # ---------------------------------------------------------------------------
 
+def _apply_column_migrations() -> None:
+    """Idempotently add columns that exist on the ORM model but not yet
+    on the live ``/data/pension.db`` (the persistent-disk DB on Render).
+
+    Render's Streamlit reads from the persistent disk, which the GHA
+    cron's ``git push`` of ``db/pension.db`` does not update — so any
+    schema change that adds a new column has to be re-applied here on
+    Streamlit startup. ``init_db()`` only creates missing tables, not
+    missing columns. Each guarded ALTER below is safe to re-run on a
+    DB that already has the column.
+    """
+    import sqlite3
+    import os
+    db_path = os.environ.get("DB_PATH", str(Path(__file__).parent / "db" / "pension.db"))
+    if not os.path.exists(db_path):
+        return
+    conn = sqlite3.connect(db_path)
+    try:
+        existing = {row[1] for row in conn.execute("PRAGMA table_info(publications)").fetchall()}
+        if "subscribers_notified_at" not in existing:
+            conn.execute("ALTER TABLE publications ADD COLUMN subscribers_notified_at DATETIME")
+            conn.commit()
+    finally:
+        conn.close()
+
+
 @st.cache_resource
 def get_db_session():
     init_db()
+    _apply_column_migrations()
     return get_session()
 
 
