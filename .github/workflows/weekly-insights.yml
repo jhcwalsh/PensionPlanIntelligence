@@ -1,20 +1,29 @@
 name: Weekly insights (GHA edition)
 
-# Composes the weekly CIO Insights digest and sends the approve/reject
+# Composes the weekly Insights digest and sends the approve/reject
 # magic-link email to APPROVAL_EMAIL_RECIPIENT. Pure composition --
 # uses documents already in the DB (--skip-scrape). Pushes the resulting
 # db/pension.db + notes/ so the production Streamlit can resolve the
 # token when the user clicks the magic link.
 #
-# Runs Sundays at 11:00 UTC (~7 AM EDT / 6 AM EST). The local
-# Task Scheduler still owns the weekly RFP backfill -- see
-# scripts/run_weekly.bat.
+# Runs Sundays at 12:30 UTC (~8:30 AM EDT / 7:30 AM EST), staggered
+# after daily-pipeline (11:00 UTC) and weekly-rfp (12:00 UTC) so the
+# digest sees today's fresh summaries and RFP records.
 
 on:
   schedule:
-    - cron: "0 11 * * 0"   # Sundays at 11:00 UTC = 7 AM EDT / 6 AM EST
+    - cron: "30 12 * * 0"  # Sundays at 12:30 UTC = 8:30 AM EDT / 7:30 AM EST
   workflow_dispatch:
     inputs:
+      period:
+        description: "Week start (Sunday) in YYYY-MM-DD. Blank = auto-pick most recently ended week."
+        required: false
+        default: ""
+      force:
+        description: "Re-compose + re-send even if a publication exists for this period."
+        required: false
+        type: boolean
+        default: false
       dry_run:
         description: "Skip the final commit/push of db/pension.db + notes/"
         required: false
@@ -67,7 +76,15 @@ jobs:
           APPROVAL_EMAIL_RECIPIENT: ${{ secrets.APPROVAL_EMAIL_RECIPIENT }}
           APPROVAL_EMAIL_FROM: ${{ secrets.APPROVAL_EMAIL_FROM }}
           INSIGHTS_MODE: live
-        run: python -m insights.scheduler weekly --skip-scrape
+        run: |
+          ARGS="--skip-scrape"
+          if [ -n "${{ github.event.inputs.period }}" ]; then
+            ARGS="$ARGS --period ${{ github.event.inputs.period }}"
+          fi
+          if [ "${{ github.event.inputs.force }}" = "true" ]; then
+            ARGS="$ARGS --force"
+          fi
+          python -m insights.scheduler weekly $ARGS
 
       # Skip only when the manual dispatch explicitly checks "dry_run".
       # Scheduled runs have no inputs, so this fires for cron and for

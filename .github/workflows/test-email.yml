@@ -1,0 +1,56 @@
+name: Email plumbing test
+
+# One-shot manual workflow that validates the Resend -> inbox path used
+# by the weekly / monthly / quarterly insights approval emails. Doesn't
+# touch the DB, doesn't compose a publication, doesn't issue an approval
+# token. Just checks: secret valid, sender domain verified, DKIM/SPF
+# propagated, recipient reachable.
+
+on:
+  workflow_dispatch:
+    inputs:
+      recipient:
+        description: "Override recipient (blank = APPROVAL_EMAIL_RECIPIENT secret)"
+        required: false
+        default: ""
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Verify required secrets are set
+        env:
+          RESEND: ${{ secrets.RESEND_API_KEY }}
+          RECIPIENT: ${{ secrets.APPROVAL_EMAIL_RECIPIENT }}
+          FROM_ADDR: ${{ secrets.APPROVAL_EMAIL_FROM }}
+        run: |
+          missing=()
+          [ -z "$RESEND" ] && missing+=("RESEND_API_KEY")
+          [ -z "$RECIPIENT" ] && missing+=("APPROVAL_EMAIL_RECIPIENT")
+          [ -z "$FROM_ADDR" ] && missing+=("APPROVAL_EMAIL_FROM")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing repository secret(s): ${missing[*]}"
+            exit 1
+          fi
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-pipeline.txt
+
+      - name: Send test email
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          APPROVAL_EMAIL_RECIPIENT: ${{ secrets.APPROVAL_EMAIL_RECIPIENT }}
+          APPROVAL_EMAIL_FROM: ${{ secrets.APPROVAL_EMAIL_FROM }}
+          INSIGHTS_MODE: live
+        run: python -m scripts.send_test_email ${{ github.event.inputs.recipient }}

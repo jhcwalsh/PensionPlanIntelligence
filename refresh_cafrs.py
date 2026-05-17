@@ -108,6 +108,40 @@ def already_have_cafr_for_year(session, plan_id: str, year: int) -> Document | N
     )
 
 
+def ensure_local_file(session, doc: Document, plan_id: str, abbrev: str) -> bool:
+    """Make sure ``doc.local_path`` exists on the current filesystem.
+
+    Returns True if the file is already present or was successfully
+    re-downloaded; False if the re-download failed.
+
+    PDFs aren't committed to git, so a Document row created by an
+    earlier run on a different host (e.g. a prior GHA runner) will
+    have ``local_path`` pointing at a file that doesn't exist here.
+    Without this helper, downstream steps like
+    ``extract_cafr_investments.py`` would silently report
+    "missing_file" for those rows even after refresh runs in the
+    same workflow.
+    """
+    if doc.local_path and Path(doc.local_path).exists():
+        return True
+    if not doc.url:
+        return False
+    plan_dir = Path(DOWNLOADS_DIR) / plan_id / "cafr"
+    plan_dir.mkdir(parents=True, exist_ok=True)
+    filename = make_cafr_filename(doc.url, abbrev)
+    console.print(
+        f"  [yellow]{abbrev}: doc#{doc.id} local file missing; "
+        f"re-fetching {doc.url}[/yellow]"
+    )
+    local_path, size = download_document(doc.url, plan_dir, filename)
+    if not local_path:
+        return False
+    doc.local_path = str(local_path)
+    doc.file_size_bytes = size
+    session.commit()
+    return True
+
+
 def log_outcome(session, plan_id: str, run_at: datetime, expected_year: int,
                 status: str, url_tried: str | None = None,
                 document_id: int | None = None, notes: str | None = None) -> None:
@@ -154,10 +188,17 @@ def refresh_plan(session, plan: dict, run_at: datetime,
     for target_year in years_to_try:
         existing = already_have_cafr_for_year(session, plan_id, target_year)
         if existing is not None:
-            console.print(f"  [dim]{abbrev}: FY{target_year} already saved (doc {existing.id})[/dim]")
-            log_outcome(session, plan_id, run_at, target_year, "already_have",
-                        document_id=existing.id)
-            return "already_have"
+            # Verify the binary is on disk so downstream extraction
+            # can read it. Re-fetch if it's missing on this runner.
+            if ensure_local_file(session, existing, plan_id, abbrev):
+                console.print(f"  [dim]{abbrev}: FY{target_year} already saved (doc {existing.id})[/dim]")
+                log_outcome(session, plan_id, run_at, target_year, "already_have",
+                            document_id=existing.id)
+                return "already_have"
+            console.print(
+                f"  [yellow]{abbrev}: FY{target_year} row exists (doc {existing.id}) "
+                f"but local file unrecoverable; trying fresh URL[/yellow]"
+            )
 
         url = resolve_cafr_url_for_year(plan, target_year)
         if not url:
@@ -169,10 +210,22 @@ def refresh_plan(session, plan: dict, run_at: datetime,
 
         if document_exists(session, url):
             existing = session.query(Document).filter_by(url=url).first()
-            log_outcome(session, plan_id, run_at, target_year, "already_have",
-                        url_tried=url, document_id=existing.id if existing else None,
-                        notes="URL already in DB under another fiscal_year")
-            return "already_have"
+            if existing is not None and ensure_local_file(
+                    session, existing, plan_id, abbrev):
+                log_outcome(session, plan_id, run_at, target_year, "already_have",
+                            url_tried=url, document_id=existing.id,
+                            notes="URL already in DB under another fiscal_year")
+                return "already_have"
+            # The URL is in the DB but the file can't be re-fetched —
+            # bail with url_failed rather than fall through, which would
+            # try to create a duplicate Document (Document.url is UNIQUE).
+            log_outcome(
+                session, plan_id, run_at, target_year, "url_failed",
+                url_tried=url,
+                document_id=existing.id if existing else None,
+                notes="URL in DB but re-download failed and local file missing",
+            )
+            return "url_failed"
 
         plan_dir = Path(DOWNLOADS_DIR) / plan_id / "cafr"
         plan_dir.mkdir(parents=True, exist_ok=True)

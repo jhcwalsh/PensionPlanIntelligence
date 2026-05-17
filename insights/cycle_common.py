@@ -44,6 +44,22 @@ def transition_status(publication: Publication, new_status: str) -> None:
     publication.status = new_status
 
 
+def reset_to_generating(session, publication: Publication) -> None:
+    """Re-arm a publication for re-composition.
+
+    Direct assignment (bypasses ``transition_status``) — ``expired`` and
+    ``awaiting_approval`` aren't allowed to transition forward to
+    ``generating`` under the strict state machine, but the cycles need to
+    do exactly that when reclaiming a stale row. Clears the draft and
+    timing state so the next compose run starts from a clean slate.
+    """
+    publication.status = "generating"
+    publication.draft_markdown = None
+    publication.composed_at = None
+    publication.expires_at = None
+    session.flush()
+
+
 def find_or_create_publication(session, *, cadence: str, period_start: date,
                                 period_end: date,
                                 source_publication_ids: Optional[list[int]] = None

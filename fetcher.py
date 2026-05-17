@@ -21,7 +21,7 @@ import requests
 from bs4 import BeautifulSoup
 from rich.console import Console
 
-from database import Document, Plan, get_session, init_db, upsert_plan, document_exists
+from database import Document, Plan, get_session, init_db, upsert_plan, document_exists, document_pruned
 
 console = Console(legacy_windows=False)
 
@@ -232,28 +232,79 @@ def is_doc_url(url: str, link_text: str) -> bool:
     return False
 
 
+# Last-path-segment values that don't tell us anything about the document —
+# usually a router endpoint rather than a real filename. When we see one of
+# these we look one level up the path or fall back to the link text.
+_GENERIC_LAST_SEGMENTS = {
+    "open", "download", "view", "file", "default", "page", "show",
+    "documentdownload", "getdocument", "documents",
+}
+
+# ASP.NET / PHP / JSP / CGI handler extensions. Treated as not-a-document
+# extensions: the slug-source logic falls through to parent path / link text.
+_HANDLER_EXTENSIONS = {".ashx", ".aspx", ".php", ".cgi", ".jsp", ".do", ".action"}
+
+
 def make_filename(url: str, link_text: str) -> str:
-    """Generate a clean filename for a document URL."""
+    """Generate a clean filename for a document URL.
+
+    Three messy URL shapes the simple "use the basename" approach gets wrong:
+
+    1. ASP.NET handlers like ``/DocumentDownload.ashx?id=4567`` — basename is
+       ``DocumentDownload.ashx`` which becomes ``DocumentDownload-ashx.ashx``
+       under naive slugification. Recognise handler extensions and treat the
+       URL basename as unhelpful; prefer the parent path segment or link text.
+    2. Generic "router" basenames like ``/.../15-2025-acfr/open`` (NCRS) or
+       ``/.../report/download`` — the basename is meaningless; the parent
+       segment is what carries the document's identity.
+    3. URLs with no extension at all — assume ``.pdf`` (pension sites are
+       overwhelmingly PDF).
+    """
     parsed = urlparse(url)
     name = Path(parsed.path).name
     ext = Path(parsed.path).suffix.lower()
 
-    # If we have a real filename with extension, use it
+    # 1) Real document filename — use it as-is.
     if ext in DOC_EXTENSIONS and name:
         return name
 
-    # Try to extract a meaningful slug from the URL path
-    slug = parsed.path.rstrip("/").split("/")[-2] if "/download" in parsed.path else name
-    slug = re.sub(r"[^\w\-]", "-", slug)[:60].strip("-") or hashlib.md5(url.encode()).hexdigest()[:12]
+    # 2) Pick the best slug source. Order: meaningful basename → parent
+    # segment when basename is unhelpful → link_text → URL hash.
+    parts = [p for p in parsed.path.split("/") if p]
+    last_stem = Path(name).stem.lower() if name else ""
+    basename_unhelpful = (
+        ext in _HANDLER_EXTENSIONS
+        or last_stem in _GENERIC_LAST_SEGMENTS
+        or not last_stem
+    )
 
-    # Determine extension from link text if not in URL
+    if not basename_unhelpful:
+        slug_source = Path(name).stem
+    elif len(parts) >= 2:
+        # Strip any trailing extension on the parent segment too.
+        slug_source = Path(parts[-2]).stem
+    elif link_text and link_text.strip():
+        slug_source = link_text.strip()
+    else:
+        slug_source = ""
+
+    slug = re.sub(r"[^\w\-]", "-", slug_source)[:60].strip("-")
+    if not slug:
+        slug = hashlib.md5(url.encode()).hexdigest()[:12]
+
+    # 3) Final extension: link_text wins if it mentions one, else preserve
+    # a real document extension from the URL, else default to .pdf. We
+    # explicitly DROP handler extensions (.ashx etc.) here — they're not
+    # the actual content type.
     text_ext_match = re.search(r"\.(pdf|docx?|xlsx?)\b", link_text, re.IGNORECASE)
     if text_ext_match:
-        ext = "." + text_ext_match.group(1).lower()
-    elif not ext:
-        ext = ".pdf"  # assume PDF for pension sites
+        final_ext = "." + text_ext_match.group(1).lower()
+    elif ext in DOC_EXTENSIONS:
+        final_ext = ext
+    else:
+        final_ext = ".pdf"
 
-    return f"{slug}{ext}"
+    return f"{slug}{final_ext}"
 
 
 def is_investment_related(url: str, link_text: str, page_url: str = "") -> bool:
@@ -398,12 +449,35 @@ def discover_document_links(plan: dict) -> list[dict]:
 # Download
 # ---------------------------------------------------------------------------
 
+def _is_valid_pdf(path: Path) -> bool:
+    """Return True iff the file starts with the PDF magic header ``%PDF-``.
+
+    Used to reject HTML error pages (404, 403, "Just a moment...") served
+    with a ``.pdf`` URL. Mirrors the check in ``refresh_cafrs.py``.
+    """
+    try:
+        with open(path, "rb") as f:
+            return f.read(5).startswith(b"%PDF-")
+    except OSError:
+        return False
+
+
 def download_document(url: str, dest_dir: Path, filename: str) -> tuple[Path | None, int]:
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / filename
 
     if dest.exists():
-        return dest, dest.stat().st_size
+        if dest.suffix.lower() == ".pdf" and not _is_valid_pdf(dest):
+            console.print(
+                f"  [yellow]Cached file at {dest.name} isn't a valid PDF; "
+                f"re-downloading[/yellow]"
+            )
+            try:
+                dest.unlink()
+            except OSError:
+                pass
+        else:
+            return dest, dest.stat().st_size
 
     try:
         resp = requests.get(url, headers=HEADERS, timeout=60, stream=True)
@@ -418,6 +492,17 @@ def download_document(url: str, dest_dir: Path, filename: str) -> tuple[Path | N
         with open(dest, "wb") as f:
             for chunk in resp.iter_content(chunk_size=8192):
                 f.write(chunk)
+
+        if dest.suffix.lower() == ".pdf" and not _is_valid_pdf(dest):
+            try:
+                dest.unlink()
+            except OSError:
+                pass
+            console.print(
+                f"  [red]Download for {url} returned non-PDF content "
+                f"(likely HTML error page); rejecting[/red]"
+            )
+            return None, 0
 
         return dest, dest.stat().st_size
 
@@ -464,6 +549,9 @@ def run_fetcher(plan_ids: list[str] = None, max_docs_per_plan: int = 50):
                     continue
 
                 if document_exists(session, url):
+                    continue
+
+                if document_pruned(session, url):
                     continue
 
                 local_path, size = download_document(url, plan_dir, doc_info["filename"])

@@ -185,11 +185,11 @@ def render_approval_email(publication: Publication,
     period = f"{publication.period_start.isoformat()} – {publication.period_end.isoformat()}"
 
     if is_expiry:
-        subject = f"[Expired] {cadence} CIO Insights ({period})"
+        subject = f"[Expired] {cadence} Insights ({period})"
     elif is_reminder:
-        subject = f"[Reminder — please review] {cadence} CIO Insights ({period})"
+        subject = f"[Reminder — please review] {cadence} Insights ({period})"
     else:
-        subject = f"[Action required] {cadence} CIO Insights ready to publish ({period})"
+        subject = f"[Action required] {cadence} Insights ready to publish ({period})"
 
     approve_url = _approval_url(approve)
     reject_url = _approval_url(reject)
@@ -211,12 +211,12 @@ def render_approval_email(publication: Publication,
         action_buttons_text = ""
     else:
         body_intro = (
-            "<p>The latest CIO Insights draft is ready for your review. "
+            "<p>The latest Insights draft is ready for your review. "
             "Click <strong>Approve and publish</strong> to push it live, "
             "or <strong>Reject</strong> to discard it.</p>"
         )
         text_intro = (
-            "The latest CIO Insights draft is ready for your review.\n"
+            "The latest Insights draft is ready for your review.\n"
             "Click Approve to push it live, or Reject to discard.\n\n"
         )
         action_buttons_html = f"""\
@@ -285,17 +285,34 @@ def render_approval_email(publication: Publication,
 # Email delivery (Resend in live mode, file in mock mode)
 # ---------------------------------------------------------------------------
 
-def send_email(email: ApprovalEmail, to: Optional[str] = None) -> str:
+def send_email(email: ApprovalEmail,
+               to: Optional[str | list[str]] = None) -> str:
     """Deliver ``email``. Returns a delivery id (Resend id, or filename in mock).
 
     Live mode posts to https://api.resend.com/emails. Mock mode writes
     the rendered email to ``tmp/sent_emails/<timestamp>.eml`` so tests
     can assert on what would have been sent.
+
+    ``to`` accepts a single address, a list, a comma-separated string,
+    or ``None`` (falls back to ``config.APPROVAL_EMAIL_RECIPIENTS``).
+    All recipients receive the same magic-link tokens — first click on
+    approve / reject wins; the rest see the "already actioned" page.
     """
-    recipient = to or config.APPROVAL_EMAIL_RECIPIENT
+    if to is None:
+        recipients = list(config.APPROVAL_EMAIL_RECIPIENTS)
+    elif isinstance(to, str):
+        recipients = [a.strip() for a in to.split(",") if a.strip()]
+    else:
+        recipients = [a.strip() for a in to if a and a.strip()]
+
+    if not recipients:
+        raise RuntimeError(
+            "No approval-email recipients configured. Set APPROVAL_EMAIL_RECIPIENT "
+            "(comma-separate to add more than one)."
+        )
 
     if config.is_mock():
-        return _write_mock_email(email, recipient)
+        return _write_mock_email(email, recipients)
 
     if not config.RESEND_API_KEY:
         raise RuntimeError(
@@ -305,7 +322,7 @@ def send_email(email: ApprovalEmail, to: Optional[str] = None) -> str:
 
     payload = {
         "from": config.APPROVAL_EMAIL_FROM,
-        "to": [recipient],
+        "to": recipients,
         "subject": email.subject,
         "html": email.html,
         "text": email.text,
@@ -330,13 +347,13 @@ def send_email(email: ApprovalEmail, to: Optional[str] = None) -> str:
     return resp.json().get("id", "")
 
 
-def _write_mock_email(email: ApprovalEmail, recipient: str) -> str:
+def _write_mock_email(email: ApprovalEmail, recipients: list[str]) -> str:
     config.SENT_EMAILS_DIR.mkdir(parents=True, exist_ok=True)
     ts = datetime.utcnow().strftime("%Y%m%dT%H%M%S%f")
     base = config.SENT_EMAILS_DIR / f"{ts}"
 
     metadata = {
-        "to": recipient,
+        "to": recipients,
         "from": config.APPROVAL_EMAIL_FROM,
         "subject": email.subject,
         "has_attachment": bool(email.pdf_attachment),
@@ -347,7 +364,7 @@ def _write_mock_email(email: ApprovalEmail, recipient: str) -> str:
 
     eml_path = base.with_suffix(".eml")
     eml_path.write_text(
-        f"To: {recipient}\n"
+        f"To: {', '.join(recipients)}\n"
         f"From: {config.APPROVAL_EMAIL_FROM}\n"
         f"Subject: {email.subject}\n"
         f"Content-Type: text/html\n\n"

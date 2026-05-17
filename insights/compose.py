@@ -7,12 +7,12 @@ Three composition paths:
   to ``python generate_notes.py --highlights-only`` for the same date
   window.
 * **monthly** — net-new prompt that synthesizes 4 approved weekly
-  digests into a monthly CIO Insights briefing.
+  digests into a monthly Insights briefing.
 * **annual** — net-new prompt that synthesizes 12 approved monthlies
   into a year-in-review.
 
 The monthly/annual prompts intentionally mirror the grounding rules
-from the existing CIO Insights prompt in ``generate_notes.py`` so the
+from the existing Insights prompt in ``generate_notes.py`` so the
 voice stays consistent across cadences.
 
 In ``INSIGHTS_MODE=mock`` every compose call returns canned Markdown
@@ -65,6 +65,7 @@ def compose_weekly(session, period_start: date, period_end: date) -> str:
         format_weekly_date_range,
         gather_highlights_data,
         generate_note,
+        inject_highlights_preamble,
     )
     from summarizer import MODEL_SONNET
 
@@ -92,7 +93,7 @@ def compose_weekly(session, period_start: date, period_end: date) -> str:
             f"  expected: {expected_title!r}\n"
             f"  actual:   {actual_title!r}"
         )
-    return markdown
+    return inject_highlights_preamble(markdown, data["new_doc_count"], days)
 
 
 # ---------------------------------------------------------------------------
@@ -125,7 +126,7 @@ Output clean markdown only — no code fences, no JSON, no commentary."""
 
 def compose_monthly(weekly_markdowns: list[str],
                     period_start: date, period_end: date) -> str:
-    """Synthesize 4 approved weekly digests into a monthly CIO Insights.
+    """Synthesize 4 approved weekly digests into a monthly Insights.
 
     The prior weeklies are passed in as their already-approved Markdown
     (``Publication.draft_markdown``). This keeps token cost bounded and
@@ -133,7 +134,7 @@ def compose_monthly(weekly_markdowns: list[str],
     off on.
     """
     if config.is_mock():
-        return _mock_markdown("Monthly CIO Insights", period_start, period_end)
+        return _mock_markdown("Monthly Insights", period_start, period_end)
 
     from generate_notes import generate_note  # noqa: F401  (verifies import path)
     from summarizer import _get_client
@@ -146,7 +147,7 @@ def compose_monthly(weekly_markdowns: list[str],
     )
 
     user_prompt = f"""\
-Write a Monthly CIO Insights briefing for {month_label} synthesizing the four \
+Write a Monthly Insights briefing for {month_label} synthesizing the four \
 approved weekly briefings below into one cohesive narrative for institutional \
 investors.
 
@@ -177,7 +178,7 @@ value with an "as of <date>" qualifier — and use it consistently throughout \
 the monthly. Do not switch values within a single note.
 
 FORMAT REQUIREMENTS:
-- Start with exactly: # Monthly CIO Insights: {month_label}
+- Start with exactly: # Monthly Insights: {month_label}
 - Second line: *Synthesized from four approved weekly briefings ({period_start.isoformat()} – {period_end.isoformat()})*
 - Third line: *Generated: {today_str}*
 - Then a --- horizontal rule
@@ -264,9 +265,9 @@ Output clean markdown only — no code fences, no JSON, no commentary."""
 
 def compose_annual(monthly_markdowns: list[str],
                    period_start: date, period_end: date) -> str:
-    """Synthesize 12 approved monthlies into an annual CIO Insights."""
+    """Synthesize 12 approved monthlies into an annual Insights."""
     if config.is_mock():
-        return _mock_markdown("Annual CIO Insights", period_start, period_end)
+        return _mock_markdown("Annual Insights", period_start, period_end)
 
     from generate_notes import generate_note  # noqa: F401
     from summarizer import _get_client
@@ -279,7 +280,7 @@ def compose_annual(monthly_markdowns: list[str],
     )
 
     user_prompt = f"""\
-Write an Annual CIO Insights year-in-review for {year} synthesizing the \
+Write an Annual Insights year-in-review for {year} synthesizing the \
 twelve approved monthly briefings below.
 
 GROUNDING RULES (non-negotiable):
@@ -306,7 +307,7 @@ qualifier — and use it consistently throughout the annual. Do not switch \
 values within a single note.
 
 FORMAT REQUIREMENTS:
-- Start with exactly: # CIO Insights: {year} Year in Review
+- Start with exactly: # Insights: {year} Year in Review
 - Second line: *Synthesized from twelve approved monthly briefings ({period_start.isoformat()} – {period_end.isoformat()})*
 - Third line: *Generated: {today_str}*
 - Then a --- horizontal rule

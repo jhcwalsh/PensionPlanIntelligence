@@ -4,13 +4,14 @@ SQLite database schema and helper functions using SQLAlchemy.
 
 import gzip
 import os
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy import (
     Column, Integer, String, Text, Float, DateTime, Boolean, Date, JSON,
-    LargeBinary, ForeignKey, create_engine, UniqueConstraint, Index
+    LargeBinary, ForeignKey, create_engine, text, UniqueConstraint, Index
 )
 from sqlalchemy.orm import DeclarativeBase, Session, relationship, sessionmaker
 from sqlalchemy.types import TypeDecorator
@@ -219,7 +220,7 @@ class CafrPerformance(Base):
 
 
 class Publication(Base):
-    """One row per scheduled CIO Insights publication, regardless of status.
+    """One row per scheduled Insights publication, regardless of status.
 
     Lifecycle: generating → awaiting_approval → (approved | rejected | expired)
                                               ↓ approved
@@ -247,6 +248,7 @@ class Publication(Base):
     expires_at = Column(DateTime)               # 7 days after composed_at
     error_message = Column(Text)                # if status='failed'
     reminder_sent_at = Column(DateTime)         # 72-hour nudge
+    subscribers_notified_at = Column(DateTime)  # set once subscriber fan-out has run
 
     # For monthly/annual: the publication ids of the lower-cadence inputs
     source_publication_ids = Column(JSON)       # list[int] or null
@@ -304,6 +306,66 @@ class DailyRun(Base):
 
     __table_args__ = (
         Index("ix_daily_runs_sent_at", "sent_at"),
+    )
+
+
+class Subscriber(Base):
+    """A public subscriber to one or more insights cadences.
+
+    Sign-up flow is double opt-in: the row lands in ``status="pending"``
+    until the user clicks the confirmation magic link, at which point it
+    flips to ``"confirmed"``. The admin can flip a confirmed row to
+    ``"disabled"`` to suppress sends without losing the history. The
+    user themselves can flip to ``"unsubscribed"`` via the unsubscribe
+    link in any digest email.
+    """
+    __tablename__ = "subscribers"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    email = Column(String, nullable=False, unique=True)
+    weekly = Column(Boolean, default=False, nullable=False)
+    monthly = Column(Boolean, default=False, nullable=False)
+    quarterly = Column(Boolean, default=False, nullable=False)
+    status = Column(String, nullable=False, default="pending")
+    # status values: pending, confirmed, disabled, unsubscribed
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    confirmed_at = Column(DateTime)
+    unsubscribed_at = Column(DateTime)
+    last_email_sent_at = Column(DateTime)
+    signup_ip = Column(String)
+
+    tokens = relationship("SubscriberToken", back_populates="subscriber",
+                          cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index("ix_subscribers_status", "status"),
+    )
+
+
+class SubscriberToken(Base):
+    """Magic-link tokens for the subscriber lifecycle.
+
+    Mirrors ``ApprovalToken`` but keyed on a subscriber, with a wider
+    action vocabulary: ``confirm`` (double opt-in), ``unsubscribe``
+    (one-click off in every digest footer), and ``update_preferences``
+    (rare; emailed on request to flip cadence checkboxes).
+
+    Like approval tokens these are single-use and SHA-256-hashed at rest.
+    """
+    __tablename__ = "subscriber_tokens"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    subscriber_id = Column(Integer, ForeignKey("subscribers.id"), nullable=False)
+    token_hash = Column(String, nullable=False, unique=True)
+    action = Column(String, nullable=False)     # 'confirm' | 'unsubscribe' | 'update_preferences'
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    consumed_at = Column(DateTime)
+
+    subscriber = relationship("Subscriber", back_populates="tokens")
+
+    __table_args__ = (
+        Index("ix_subscriber_token_sub", "subscriber_id"),
     )
 
 
@@ -495,6 +557,35 @@ class DocumentSkip(Base):
     error_message = Column(Text)
 
 
+class PrunedDocument(Base):
+    """URLs that were intentionally pruned from ``documents`` and must NOT be
+    re-fetched.
+
+    The fetcher's only dedup gate is row-presence in ``documents``, so deleting
+    rows for size or housekeeping reasons (e.g. the 2026-05 pre-2026-agenda
+    prune) caused the next pipeline run to re-discover the same URLs in plan
+    listings and re-download them. This table is the durable memory of "we
+    don't want this URL anymore." ``fetcher.run_fetcher`` consults it
+    alongside ``document_exists``.
+
+    To un-prune a URL (i.e. allow it back in), delete its row.
+    """
+
+    __tablename__ = "pruned_documents"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    url = Column(String, nullable=False, unique=True)
+    plan_id = Column(String)                                  # context, nullable
+    doc_type = Column(String)                                 # context, nullable
+    meeting_date = Column(DateTime)                           # context, nullable
+    pruned_at = Column(DateTime, default=_utcnow, nullable=False)
+    reason = Column(String, nullable=False)                   # short tag, e.g. 'pre-2026-agenda-prune'
+
+    __table_args__ = (
+        Index("ix_pruned_documents_url", "url"),
+    )
+
+
 class IpsDocument(Base):
     """An Investment Policy Statement (IPS) PDF tracked per-plan.
 
@@ -559,13 +650,250 @@ class IpsRefreshLog(Base):
 
 
 # ---------------------------------------------------------------------------
+# Meeting-video / recording tables
+# ---------------------------------------------------------------------------
+# Captures the directory of where each plan publishes meeting video — live
+# stream and/or archived recordings — plus a per-recording row for download
+# and alerting workflows. Designed to mirror the IPS pattern: discovery via
+# mining existing extracted documents and site-crawling, optional LLM
+# verification of candidates, idempotent on (platform, video_id) for the
+# recordings themselves.
+
+# Platform values used across the video tables. Kept loose (string column,
+# not enum) so we can add new ones without a schema change.
+VIDEO_PLATFORMS = (
+    "youtube",     # YouTube channel or watch URL
+    "vimeo",       # Vimeo channel/showcase or watch URL
+    "granicus",    # granicus.com viewer (very common for muni/state)
+    "swagit",      # swagit.com viewer
+    "cablecast",   # cablecast.tv (Tightrope)
+    "civicplus",   # civicplus / civicclerk video player
+    "boxcast",     # boxcast.com livestream
+    "zoom",        # public Zoom meeting / archive
+    "facebook",    # FB live or page video
+    "website",     # plan-hosted player on their own domain
+    "other",
+    "none",        # confirmed: this plan does NOT post video
+    "unknown",     # not yet researched
+)
+
+
+class PlanVideoSource(Base):
+    """Where a given plan publishes meeting video.
+
+    A plan can have multiple sources (e.g. a YouTube channel for full
+    board meetings AND a Granicus archive for committee meetings), so
+    this is a 1-to-many on plan_id rather than a column on Plan.
+
+    Uniqueness is on (plan_id, platform, source_url): the same channel
+    discovered twice (mining + crawl) collapses to one row, while a
+    plan with two YouTube channels gets two rows. Discovery scripts
+    upsert; manual edits are safe.
+    """
+    __tablename__ = "plan_video_sources"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    plan_id = Column(String, ForeignKey("plans.id"), nullable=False)
+    platform = Column(String, nullable=False)            # see VIDEO_PLATFORMS
+    source_url = Column(String, nullable=False)          # archive/channel page
+    channel_id = Column(String)                          # platform-native id (yt UC..., vimeo user id, granicus client)
+    live_streamed = Column(Boolean)                      # does the plan stream meetings live? (None = unknown)
+    recording_policy = Column(String)                    # 'always' | 'sometimes' | 'never' | 'unknown'
+    typical_lag_days = Column(Integer)                   # observed lag between meeting and recording publish
+    discovery_method = Column(String, nullable=False)    # 'override' | 'mined' | 'site_crawl' | 'manual'
+    verification_verdict = Column(String)                # 'yes' | 'no' | 'partial' | null (not yet verified)
+    verification_confidence = Column(String)             # 'high' | 'medium' | 'low'
+    verification_notes = Column(Text)
+    status = Column(String, nullable=False, default="active")  # 'active' | 'inactive' | 'broken'
+    last_checked_at = Column(DateTime)                   # last time we polled this source for new recordings
+    last_recording_seen_at = Column(DateTime)            # newest recording publish_at observed here
+    notes = Column(Text)
+    created_at = Column(DateTime, default=_utcnow, nullable=False)
+    updated_at = Column(DateTime, default=_utcnow, nullable=False)
+
+    plan = relationship("Plan")
+    recordings = relationship("MeetingRecording", back_populates="video_source",
+                              cascade="all, delete-orphan")
+
+    __table_args__ = (
+        UniqueConstraint("plan_id", "platform", "source_url", name="uq_plan_video_source"),
+        Index("ix_plan_video_source_plan", "plan_id"),
+        Index("ix_plan_video_source_status", "status"),
+    )
+
+
+class MeetingRecording(Base):
+    """One row per meeting recording (or live stream) we know about.
+
+    Idempotency: (platform, video_id) is unique — the same YouTube video
+    discovered via two different sources collapses to one row. video_id
+    is the platform-native identifier (yt watch id, vimeo numeric id,
+    granicus clip_id, etc.); video_url is the canonical viewer URL.
+
+    download_status drives the Phase-2 downloader; alert_sent_at gates
+    the Phase-3 notification. meeting_id is best-effort linkage to the
+    existing meetings table — null until/unless we can match the
+    recording to a board-meeting agenda by date.
+    """
+    __tablename__ = "meeting_recordings"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    plan_id = Column(String, ForeignKey("plans.id"), nullable=False)
+    video_source_id = Column(Integer, ForeignKey("plan_video_sources.id"))
+    meeting_id = Column(Integer, ForeignKey("meetings.id"))
+    platform = Column(String, nullable=False)            # see VIDEO_PLATFORMS
+    video_id = Column(String, nullable=False)            # platform-native id
+    video_url = Column(String, nullable=False)           # canonical viewer URL
+    title = Column(String)
+    description = Column(Text)
+    thumbnail_url = Column(String)
+    published_at = Column(DateTime)                      # platform-reported publish time
+    meeting_date_inferred = Column(DateTime)             # parsed from title or filename
+    duration_seconds = Column(Integer)
+    is_livestream = Column(Boolean, default=False)       # ongoing or scheduled live event
+    livestream_start = Column(DateTime)                  # scheduled start, when applicable
+
+    # Downloader fields (Phase 2)
+    download_status = Column(String, nullable=False, default="pending")
+    # values: 'pending' | 'downloading' | 'done' | 'failed' | 'skipped' | 'unavailable'
+    local_path = Column(String)
+    file_size_bytes = Column(Integer)
+    content_hash = Column(String(64))                    # sha256 of downloaded file
+    download_attempts = Column(Integer, default=0)
+    last_download_attempt_at = Column(DateTime)
+    download_error = Column(Text)
+
+    # Alerting fields (Phase 3)
+    alert_sent_at = Column(DateTime)
+
+    discovered_at = Column(DateTime, default=_utcnow, nullable=False)
+    updated_at = Column(DateTime, default=_utcnow, nullable=False)
+
+    plan = relationship("Plan")
+    video_source = relationship("PlanVideoSource", back_populates="recordings")
+    meeting = relationship("Meeting")
+
+    __table_args__ = (
+        UniqueConstraint("platform", "video_id", name="uq_meeting_recording_video"),
+        Index("ix_meeting_recording_plan_pub", "plan_id", "published_at"),
+        Index("ix_meeting_recording_download_status", "download_status"),
+        Index("ix_meeting_recording_alert", "alert_sent_at"),
+    )
+
+
+class VideoRefreshLog(Base):
+    """Per-plan-per-source outcome from each video refresh run.
+
+    Mirrors ips_refresh_log / cafr_refresh_log. Status values:
+      no_source           — plan has no active video source row
+      checked_no_new      — polled the source, nothing new since last run
+      new_recordings      — new recording rows were inserted
+      fetch_failed        — could not load the source URL
+      parse_failed        — loaded but couldn't extract recording list
+      verification_failed — discovery candidate was rejected by LLM gate
+      error               — unexpected exception
+    """
+    __tablename__ = "video_refresh_log"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    plan_id = Column(String, ForeignKey("plans.id"), nullable=False)
+    video_source_id = Column(Integer, ForeignKey("plan_video_sources.id"))
+    run_at = Column(DateTime, nullable=False)
+    status = Column(String, nullable=False)
+    recordings_found = Column(Integer, default=0)        # total seen on this poll
+    recordings_new = Column(Integer, default=0)          # new rows inserted
+    url_tried = Column(String)
+    discovery_source = Column(String)                    # 'override' | 'mined' | 'site_crawl' | 'poll'
+    notes = Column(Text)
+
+    __table_args__ = (
+        Index("ix_video_refresh_plan_run", "plan_id", "run_at"),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Init / helpers
 # ---------------------------------------------------------------------------
+
+# --- Summary full-text search (SQLite FTS5) ---------------------------------
+# External-content FTS5 index over the four searchable summary columns.
+# Triggers keep it in sync with INSERTs/UPDATEs/DELETEs the ORM emits, and
+# `_init_fts` backfills once the first time it sees an unpopulated index.
+# Falls back to ILIKE in `search_summaries` if the SQLite build lacks FTS5.
+
+_FTS_VIRTUAL_TABLE_SQL = """
+CREATE VIRTUAL TABLE IF NOT EXISTS summaries_fts USING fts5(
+    summary_text, key_topics, investment_actions, decisions,
+    content='summaries', content_rowid='id',
+    tokenize='unicode61 remove_diacritics 2'
+);
+"""
+
+_FTS_TRIGGER_SQL = [
+    """
+    CREATE TRIGGER IF NOT EXISTS summaries_ai AFTER INSERT ON summaries BEGIN
+        INSERT INTO summaries_fts(rowid, summary_text, key_topics,
+                                  investment_actions, decisions)
+        VALUES (new.id, new.summary_text, new.key_topics,
+                new.investment_actions, new.decisions);
+    END;
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS summaries_ad AFTER DELETE ON summaries BEGIN
+        INSERT INTO summaries_fts(summaries_fts, rowid, summary_text,
+                                  key_topics, investment_actions, decisions)
+        VALUES ('delete', old.id, old.summary_text, old.key_topics,
+                old.investment_actions, old.decisions);
+    END;
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS summaries_au AFTER UPDATE ON summaries BEGIN
+        INSERT INTO summaries_fts(summaries_fts, rowid, summary_text,
+                                  key_topics, investment_actions, decisions)
+        VALUES ('delete', old.id, old.summary_text, old.key_topics,
+                old.investment_actions, old.decisions);
+        INSERT INTO summaries_fts(rowid, summary_text, key_topics,
+                                  investment_actions, decisions)
+        VALUES (new.id, new.summary_text, new.key_topics,
+                new.investment_actions, new.decisions);
+    END;
+    """,
+]
+
+
+def _init_fts(engine_) -> bool:
+    """Create the FTS5 virtual table, sync triggers, and backfill once.
+
+    Returns True when FTS5 is set up, False when the SQLite build lacks
+    the FTS5 module (callers fall back to ILIKE search).
+    """
+    with engine_.begin() as conn:
+        try:
+            conn.exec_driver_sql(_FTS_VIRTUAL_TABLE_SQL)
+        except Exception:
+            return False
+        for stmt in _FTS_TRIGGER_SQL:
+            conn.exec_driver_sql(stmt)
+        row = conn.exec_driver_sql(
+            "SELECT (SELECT COUNT(*) FROM summaries_fts), "
+            "       (SELECT COUNT(*) FROM summaries)"
+        ).fetchone()
+        fts_count, src_count = row[0], row[1]
+        if fts_count == 0 and src_count > 0:
+            conn.exec_driver_sql(
+                "INSERT INTO summaries_fts(rowid, summary_text, key_topics, "
+                "                          investment_actions, decisions) "
+                "SELECT id, summary_text, key_topics, "
+                "       investment_actions, decisions FROM summaries"
+            )
+        return True
+
 
 def init_db():
     """Create all tables if they don't exist."""
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     Base.metadata.create_all(engine)
+    _init_fts(engine)
 
 
 def get_session() -> Session:
@@ -599,6 +927,10 @@ def document_exists(session: Session, url: str) -> bool:
     return session.query(Document).filter_by(url=url).first() is not None
 
 
+def document_pruned(session: Session, url: str) -> bool:
+    return session.query(PrunedDocument).filter_by(url=url).first() is not None
+
+
 def get_unextracted_documents(session: Session) -> list[Document]:
     return session.query(Document).filter_by(extraction_status="pending").all()
 
@@ -628,11 +960,23 @@ def get_new_meetings(session: Session, days: int = 7) -> list[dict]:
     Groups by (plan_id, meeting_date). For each meeting returns:
       plan, meeting_date, agenda_doc, agenda_summary, all_docs
     Sorted by meeting_date descending.
+
+    Filters applied:
+      - Excludes doc_type IN ('cafr', 'performance') — CAFRs and stand-alone
+        performance reports aren't meetings; they get FY-end stamps that
+        otherwise pollute the meeting feed.
+      - Caps meeting_date at today + 60 days. Real forward-scheduled board
+        meetings (next ~2 months) stay visible; far-future parse errors
+        (Dec 31 FY stamps, multi-year workplans) drop out.
     """
     cutoff = datetime.utcnow() - timedelta(days=days)
+    future_cap = datetime.utcnow() + timedelta(days=60)
     recent_docs = (
         session.query(Document)
         .filter(Document.downloaded_at >= cutoff)
+        .filter(Document.doc_type.notin_(["cafr", "performance"]))
+        .filter((Document.meeting_date.is_(None)) |
+                (Document.meeting_date <= future_cap))
         .order_by(Document.meeting_date.desc())
         .all()
     )
@@ -670,9 +1014,30 @@ def get_new_meetings(session: Session, days: int = 7) -> list[dict]:
     return sorted(seen.values(), key=lambda e: e["meeting_date"] or datetime.min, reverse=True)
 
 
-def search_summaries(session: Session, query: str, plan_id: str = None,
-                     limit: int = 20) -> list[tuple[Document, Summary]]:
-    """Simple full-text search across summary_text and key_topics."""
+# Characters that have meaning in an FTS5 MATCH expression. We strip them
+# from user input and rebuild a safe AND-of-quoted-tokens query — users get
+# multi-term ranked search without having to learn FTS5 syntax.
+_FTS_STRIP_RE = re.compile(r'[\"\*\(\):\^]')
+
+
+def _build_fts_match(query: str) -> Optional[str]:
+    """Turn raw user input into a safe FTS5 MATCH expression.
+
+    Each whitespace-separated token becomes a quoted string-literal term
+    (so reserved words like AND/OR/NOT pass through as plain terms) and
+    the tokens are AND-joined. Returns None if nothing usable remains.
+    """
+    if not query:
+        return None
+    cleaned = _FTS_STRIP_RE.sub(" ", query).strip()
+    tokens = [t for t in cleaned.split() if t]
+    if not tokens:
+        return None
+    return " ".join(f'"{t}"' for t in tokens)
+
+
+def _ilike_search_query(session: Session, query: str, plan_id: Optional[str]):
+    """Legacy substring search — used as the FTS5 fallback path."""
     q = (
         session.query(Document, Summary)
         .join(Summary, Document.id == Summary.document_id)
@@ -682,26 +1047,88 @@ def search_summaries(session: Session, query: str, plan_id: str = None,
     )
     if plan_id:
         q = q.filter(Document.plan_id == plan_id)
-    return q.order_by(Document.meeting_date.desc()).limit(limit).all()
+    return q
+
+
+def search_summaries(session: Session, query: str, plan_id: str = None,
+                     limit: int = 20) -> list[tuple[Document, Summary]]:
+    """Ranked full-text search across summary_text, key_topics,
+    investment_actions, and decisions.
+
+    Uses SQLite FTS5 with bm25 ranking when available; falls back to the
+    legacy ILIKE substring scan if FTS5 is missing or the query reduces to
+    nothing after sanitisation. Tied bm25 scores break by meeting_date desc.
+    """
+    if not query or not query.strip():
+        return []
+    match = _build_fts_match(query)
+    if match is not None:
+        sql = (
+            "SELECT s.id "
+            "FROM summaries_fts f "
+            "JOIN summaries s ON s.id = f.rowid "
+            "JOIN documents d ON d.id = s.document_id "
+            "WHERE summaries_fts MATCH :match "
+        )
+        params = {"match": match, "lim": limit}
+        if plan_id:
+            sql += "AND d.plan_id = :pid "
+            params["pid"] = plan_id
+        sql += "ORDER BY bm25(summaries_fts), d.meeting_date DESC LIMIT :lim"
+        try:
+            rows = session.execute(text(sql), params).fetchall()
+        except Exception:
+            rows = None
+        if rows is not None:
+            ids = [r[0] for r in rows]
+            if not ids:
+                return []
+            order = {sid: i for i, sid in enumerate(ids)}
+            pairs = (
+                session.query(Document, Summary)
+                .join(Summary, Document.id == Summary.document_id)
+                .filter(Summary.id.in_(ids))
+                .all()
+            )
+            pairs.sort(key=lambda p: order[p[1].id])
+            return pairs
+
+    return (
+        _ilike_search_query(session, query, plan_id)
+        .order_by(Document.meeting_date.desc())
+        .limit(limit)
+        .all()
+    )
 
 
 def count_search_summaries(session: Session, query: str,
                            plan_id: str = None) -> int:
     """Total matching documents for a search query, ignoring the row limit.
 
-    Mirrors ``search_summaries``'s WHERE clause exactly so the count and the
-    paged results stay consistent.
+    Mirrors ``search_summaries`` so the count and the paged results stay
+    consistent across both the FTS5 and ILIKE paths.
     """
-    q = (
-        session.query(Document.id)
-        .join(Summary, Document.id == Summary.document_id)
-        .filter(Summary.summary_text.ilike(f"%{query}%") |
-                Summary.key_topics.ilike(f"%{query}%") |
-                Summary.investment_actions.ilike(f"%{query}%"))
-    )
-    if plan_id:
-        q = q.filter(Document.plan_id == plan_id)
-    return q.count()
+    if not query or not query.strip():
+        return 0
+    match = _build_fts_match(query)
+    if match is not None:
+        sql = (
+            "SELECT COUNT(*) "
+            "FROM summaries_fts f "
+            "JOIN summaries s ON s.id = f.rowid "
+            "JOIN documents d ON d.id = s.document_id "
+            "WHERE summaries_fts MATCH :match "
+        )
+        params = {"match": match}
+        if plan_id:
+            sql += "AND d.plan_id = :pid"
+            params["pid"] = plan_id
+        try:
+            return session.execute(text(sql), params).scalar() or 0
+        except Exception:
+            pass
+
+    return _ilike_search_query(session, query, plan_id).count()
 
 
 def aggregate_managers(session: Session) -> list[dict]:
