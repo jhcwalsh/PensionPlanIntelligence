@@ -20,7 +20,7 @@ from typing import Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from database import DailyRun, Document, Plan, Publication, get_session
+from database import DailyRun, Document, Plan, Publication, Summary, get_session
 from insights import config, cycle_common
 
 logger = logging.getLogger(__name__)
@@ -141,7 +141,7 @@ def compose_daily(
     for d in docs:
         grouped[d.plan_id].append(d)
 
-    # Resolve plan names in one query.
+    # Resolve plan names and per-doc summaries in two queries.
     owns_session = session is None
     if owns_session:
         session = get_session()
@@ -150,6 +150,15 @@ def compose_daily(
             p.id: p.name
             for p in session.query(Plan).filter(Plan.id.in_(list(grouped.keys()))).all()
         }
+        doc_ids = [d.id for d in docs if d.id is not None]
+        summaries_by_doc: dict[int, Summary] = {}
+        if doc_ids:
+            for sm in (
+                session.query(Summary)
+                .filter(Summary.document_id.in_(doc_ids))
+                .all()
+            ):
+                summaries_by_doc[sm.document_id] = sm
     finally:
         if owns_session:
             session.close()
@@ -162,7 +171,8 @@ def compose_daily(
         plan_docs = grouped[plan_id]
         parts.append(f"\n## {plan_name}\n")
 
-        paragraph, ok = _synthesize_plan_paragraph(plan_name, plan_docs)
+        plan_summaries = {d.id: summaries_by_doc.get(d.id) for d in plan_docs}
+        paragraph, ok = _synthesize_plan_paragraph(plan_name, plan_docs, plan_summaries)
         parts.append(f"{paragraph}\n")
         if not ok:
             any_llm_failed = True
@@ -189,13 +199,17 @@ def compose_daily(
 def _synthesize_plan_paragraph(
     plan_name: str,
     docs: list[Document],
+    summaries_by_doc: Optional[dict[int, Optional[Summary]]] = None,
 ) -> tuple[str, bool]:
     """Return ``(paragraph, ok)``. Falls back deterministically on failure.
 
     Mock mode (``INSIGHTS_MODE=mock``) returns a canned paragraph and
-    never calls Anthropic. Live mode is wired in a separate helper so
-    the test suite can stub it.
+    never calls Anthropic. Live mode passes each document's extracted
+    Summary (summary_text + structured topics/actions/decisions/perf)
+    so the digest can describe content rather than just listing titles.
     """
+    summaries_by_doc = summaries_by_doc or {}
+
     if config.is_mock():
         return (
             f"{plan_name} posted {len(docs)} document(s) in the last day: "
@@ -204,7 +218,7 @@ def _synthesize_plan_paragraph(
         )
 
     try:
-        return (_synthesize_via_anthropic(plan_name, docs), True)
+        return (_synthesize_via_anthropic(plan_name, docs, summaries_by_doc), True)
     except Exception as exc:  # noqa: BLE001
         logger.warning("LLM synthesis failed for %s: %s", plan_name, exc)
         return (
@@ -213,29 +227,97 @@ def _synthesize_plan_paragraph(
         )
 
 
-def _synthesize_via_anthropic(plan_name: str, docs: list[Document]) -> str:
+# Per-doc summary block sent to the LLM. Trimmed because some summary_text
+# values are multi-paragraph; the structured fields carry the high-signal
+# extractions and are kept intact.
+_DOC_SUMMARY_CHAR_BUDGET = 2000
+
+
+def _format_doc_block(d: Document, summary: Optional[Summary]) -> str:
+    """Render one document's metadata + extracted summary for the LLM prompt."""
+    header = (
+        f"### {d.filename or '(untitled)'} — "
+        f"type={d.doc_type or 'document'}, "
+        f"meeting_date={d.meeting_date.date().isoformat() if d.meeting_date else 'unknown'}"
+    )
+    if summary is None or not (summary.summary_text or summary.key_topics
+                               or summary.investment_actions or summary.decisions
+                               or summary.performance_data):
+        return header + "\nSummary: (not yet summarized)\n"
+
+    body = [header]
+    if summary.summary_text:
+        text = summary.summary_text.strip()
+        if len(text) > _DOC_SUMMARY_CHAR_BUDGET:
+            text = text[:_DOC_SUMMARY_CHAR_BUDGET].rstrip() + "…"
+        body.append(f"Summary: {text}")
+    if summary.key_topics:
+        body.append(f"Key topics (JSON): {summary.key_topics}")
+    if summary.investment_actions:
+        body.append(f"Investment actions (JSON): {summary.investment_actions}")
+    if summary.decisions:
+        body.append(f"Decisions (JSON): {summary.decisions}")
+    if summary.performance_data:
+        body.append(f"Performance data (JSON): {summary.performance_data}")
+    return "\n".join(body) + "\n"
+
+
+_DAILY_SYNTH_SYSTEM = (
+    "You write one short paragraph per pension plan for an institutional "
+    "investment audience. The reader will click through to the source "
+    "documents for detail — your job is to tell them WHAT is in the "
+    "materials at a topic level, not to recap the figures.\n"
+    "\n"
+    "Cover these in order if present:\n"
+    "1. Investment actions — describe what the board did (rebalance, manager "
+    "hire/fire, allocation change, RFP, search) and which managers or "
+    "consultants were involved.\n"
+    "2. Performance review — identify which asset classes or managers were "
+    "reviewed and, if clear from the summary, whether results were "
+    "broadly above or below benchmark — in qualitative terms only.\n"
+    "3. Notable governance, policy, or contract items.\n"
+    "4. If the document is agenda-only with no decisions yet, describe what "
+    "is on the agenda and say no actions were taken.\n"
+    "\n"
+    "Style:\n"
+    "- Plain prose, 2–3 sentences, no bullets, no headers, no preamble.\n"
+    "- Topic-level, not figure-level. Write \"approved a Callan-recommended "
+    "rebalance\", NOT \"approved a $17M rebalance (7-0)\".\n"
+    "- Do NOT include dollar amounts, percentages, basis points, mandate "
+    "sizes, vote counts, AUM, or returns. The reader clicks through for "
+    "those.\n"
+    "- DO use manager, consultant, asset-class, and committee names when "
+    "provided — these are discrete and low-risk.\n"
+    "- Do not repeat the plan name at the start — the reader sees the "
+    "heading above.\n"
+    "- Do not editorialize, infer significance, recommend, or speculate.\n"
+    "- If a document has no summary available, acknowledge it briefly and "
+    "describe what is known from the other documents.\n"
+)
+
+
+def _synthesize_via_anthropic(
+    plan_name: str,
+    docs: list[Document],
+    summaries_by_doc: dict[int, Optional[Summary]],
+) -> str:
     """Live-mode Anthropic call. Imported lazily so mock tests stay light."""
     from anthropic import Anthropic
     from summarizer import MODEL_SONNET
 
     client = Anthropic()
-    doc_lines = "\n".join(
-        f"- {d.filename or '(untitled)'} "
-        f"({d.doc_type or 'document'}, "
-        f"{d.meeting_date.isoformat() if d.meeting_date else 'no date'})"
-        for d in docs
+    doc_blocks = "\n".join(_format_doc_block(d, summaries_by_doc.get(d.id)) for d in docs)
+    user = (
+        f"Plan: {plan_name}\n"
+        f"Documents published in the last 24 hours, with their extracted "
+        f"summaries and structured fields:\n\n"
+        f"{doc_blocks}"
     )
-    system = (
-        "Produce one factual paragraph describing what these documents are. "
-        "Do not editorialize. Do not infer significance. Do not recommend. "
-        "State only what the documents are and what they cover. Maximum 3 sentences."
-    )
-    user = f"Plan: {plan_name}\nNew documents today:\n{doc_lines}"
     resp = client.messages.create(
         model=MODEL_SONNET,
-        max_tokens=500,
+        max_tokens=600,
         temperature=0,
-        system=system,
+        system=_DAILY_SYNTH_SYSTEM,
         messages=[{"role": "user", "content": user}],
     )
     return resp.content[0].text.strip()
