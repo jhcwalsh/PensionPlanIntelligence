@@ -48,6 +48,8 @@ def _filename_for(publication: Publication) -> str:
         return f"monthly_cio_insights_{period}.md"
     if publication.cadence == "annual":
         return f"annual_cio_insights_{publication.period_start.year}.md"
+    if publication.cadence == "daily":
+        return f"daily_digest_{period}.md"
     raise ValueError(f"Unknown cadence: {publication.cadence}")
 
 
