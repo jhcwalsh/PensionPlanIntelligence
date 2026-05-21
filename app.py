@@ -3559,9 +3559,21 @@ def page_approval_action(raw_token: str, action: str):
     """Handle ?approve=<token> / ?reject=<token>.
 
     Looks up the token, applies the action atomically, and renders a
-    confirmation page. On approve, also triggers the publish step.
+    confirmation page.
+
+    Approve handling differs by cadence:
+    - daily: transitions to "published" directly, mirroring the calm-day
+      ``finalize_and_send`` auto-send path. Daily content isn't archived
+      to notes/ and so doesn't need the git-push step.
+    - weekly / monthly / annual: stops at "approved". The notes-file write
+      and git push happen via the ``publish-approved`` GHA workflow —
+      Render's Streamlit container has no ``origin`` remote configured
+      and so can't push from here.
+
+    Subscriber fan-out runs for every approved cadence — emails are
+    independent of git push.
     """
-    from insights import approval as _approval, publish as _publish
+    from insights import approval as _approval
 
     if action not in ("approve", "reject"):
         st.error(f"Invalid action: {action}")
@@ -3582,30 +3594,18 @@ def page_approval_action(raw_token: str, action: str):
         return
 
     if action == "approve":
-        try:
-            _publish.publish(publication)
+        if publication.cadence == "daily":
+            from insights import cycle_common as _cc
             session = get_session()
             try:
                 pub = session.get(Publication, publication.id)
-                pub.status = "published"
+                _cc.transition_status(pub, "published")
                 pub.published_at = datetime.utcnow()
                 session.commit()
                 publication = pub
             finally:
                 session.close()
-        except Exception as exc:
-            st.title("Approve succeeded — publish failed")
-            st.error(f"The draft was approved but publishing failed: {exc}")
-            st.caption(
-                "The publication is in 'approved' status. You can retry "
-                "the publish step manually."
-            )
-            return
 
-        # Public subscriber fan-out. Runs for every cadence in
-        # ``subscribers.CADENCES``; idempotent via the
-        # ``Publication.subscribers_notified_at`` timestamp. Per-recipient
-        # failures are logged inside the helper and don't abort the loop.
         try:
             from insights import subscribers as _subs
             result = _subs.fan_out_digest(publication)
@@ -3617,31 +3617,26 @@ def page_approval_action(raw_token: str, action: str):
         except Exception as exc:
             import logging as _logging
             _logging.getLogger(__name__).warning(
-                "Publication %s published but subscriber fan-out failed: %s",
+                "Publication %s approved but subscriber fan-out failed: %s",
                 publication.id, exc,
             )
             st.warning(
-                f"Briefing published, but subscriber fan-out failed: {exc}. "
+                f"Approval recorded, but subscriber fan-out failed: {exc}. "
                 f"Check Resend logs."
             )
 
-        # Post-publish notice email (currently only for weekly cadence;
-        # extend by removing the gate once monthly/annual want it too).
-        # Failures here don't roll back — the publication is already
-        # live; we just log and surface to the operator.
         if publication.cadence == "weekly":
             try:
                 from insights import notice as _notice
                 _notice.send_publication_notice(publication)
             except Exception as exc:
-                # Don't block the approval-confirmation page on a notice failure.
                 import logging as _logging
                 _logging.getLogger(__name__).warning(
-                    "Publication %s published but notice email failed: %s",
+                    "Publication %s approved but notice email failed: %s",
                     publication.id, exc,
                 )
                 st.warning(
-                    f"Briefing published, but the notice email failed to "
+                    f"Approval recorded, but the notice email failed to "
                     f"send: {exc}. Check Resend logs."
                 )
 
@@ -3652,7 +3647,22 @@ def page_approval_action(raw_token: str, action: str):
         f"**{publication.status}**."
     )
     if action == "approve":
-        st.caption("Render auto-deploy will pick up the push within a few minutes.")
+        if publication.cadence == "daily":
+            st.caption(
+                "Subscribers have been notified. Daily digests are delivered "
+                "by email — they are not archived to notes/."
+            )
+        else:
+            workflow_url = (
+                "https://github.com/jhcwalsh/PensionPlanIntelligence/"
+                "actions/workflows/publish-approved.yml"
+            )
+            st.caption(
+                f"Next step: trigger the [publish-approved GHA workflow]"
+                f"({workflow_url}) with publication id **{publication.id}** "
+                f"to write the notes file and push to master. Render "
+                f"auto-deploys once the push lands."
+            )
     if st.button("Back to dashboard"):
         st.query_params.clear()
         st.rerun()
