@@ -2461,6 +2461,25 @@ ASSET_ALLOCATION_VIEWS = (
         "exclude_patterns": (),
         "exact_label": "real assets",
     },
+    {
+        # Plans label this allocation many different ways: hedge funds,
+        # absolute return, risk mitigation / risk mitigating strategies,
+        # diversifying strategies, diversifiers, crisis risk offset, tail
+        # risk. Exclusions strip false positives: "Real Assets and
+        # Inflation Hedges" matches %hedge% but is real-assets; "Diversified
+        # Multi-Sector Fixed Income" matches %diversif% but is fixed income.
+        "tab_name": "Hedge Funds",
+        "match_patterns": (
+            "%hedge%",
+            "%absolute return%",
+            "%risk mitig%",
+            "%diversif%",
+            "%crisis risk offset%",
+            "%tail risk%",
+        ),
+        "exclude_patterns": ("%inflation%", "%fixed income%"),
+        "exact_label": "hedge funds",
+    },
 )
 
 
