@@ -3602,6 +3602,12 @@ def page_approval_action(raw_token: str, action: str):
                 _cc.transition_status(pub, "published")
                 pub.published_at = datetime.utcnow()
                 session.commit()
+                # Refresh + expunge so attrs stay loaded after the session
+                # closes — otherwise fan_out_digest's access to .cadence
+                # triggers a refresh on a closed session and raises
+                # DetachedInstanceError. Mirrors insights.approval.consume_token.
+                session.refresh(pub)
+                session.expunge(pub)
                 publication = pub
             finally:
                 session.close()
