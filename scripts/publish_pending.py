@@ -77,6 +77,16 @@ def main(argv: list[str] | None = None) -> int:
         pub.published_at = now
         session.commit()
         logger.info("Transitioned to published.")
+
+        if pub.cadence == "weekly":
+            try:
+                from insights import notice
+                session.refresh(pub)
+                notice.send_publication_notice(pub)
+                logger.info("Publication notice email sent.")
+            except Exception as exc:
+                logger.warning("Notice email failed (non-fatal): %s", exc)
+
         return 0
     finally:
         session.close()

@@ -3631,21 +3631,6 @@ def page_approval_action(raw_token: str, action: str):
                 f"Check Resend logs."
             )
 
-        if publication.cadence == "weekly":
-            try:
-                from insights import notice as _notice
-                _notice.send_publication_notice(publication)
-            except Exception as exc:
-                import logging as _logging
-                _logging.getLogger(__name__).warning(
-                    "Publication %s approved but notice email failed: %s",
-                    publication.id, exc,
-                )
-                st.warning(
-                    f"Approval recorded, but the notice email failed to "
-                    f"send: {exc}. Check Resend logs."
-                )
-
     st.title(f"{action.title()}d")
     st.success(
         f"Publication #{publication.id} ({publication.cadence}, "
