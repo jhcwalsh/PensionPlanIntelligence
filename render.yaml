@@ -20,6 +20,16 @@ services:
         value: /data/downloads
       - key: APP_BASE_URL
         value: https://pensionplanintelligence.onrender.com
+      # Email sending — subscriber confirmation, welcome, digest fan-out
+      # and approval-link clicks all send mail from the Streamlit process.
+      # Values live in the Render dashboard; declared here so a missing
+      # var fails the deploy instead of silently breaking sign-ups.
+      - key: RESEND_API_KEY
+        sync: false
+      - key: APPROVAL_EMAIL_FROM
+        sync: false
+      - key: APPROVAL_EMAIL_RECIPIENT
+        sync: false
 
   # ---------------------------------------------------------------------------
   # FastAPI read API for RFP records.
