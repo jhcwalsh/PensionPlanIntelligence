@@ -28,6 +28,16 @@ if errorlevel 1 (
     exit /b 1
 )
 
+REM Sync with remote so the pipeline runs against the latest DB.
+echo [%TIME%] git pull --rebase >> "%LOG%"
+git pull --rebase origin master >> "%LOG%" 2>&1
+if errorlevel 1 (
+    echo [%TIME%] pull --rebase failed, aborting rebase >> "%LOG%"
+    git rebase --abort >> "%LOG%" 2>&1
+    python -m scripts.notify_failure %TASK% git_pull "%LOG%" %ERRORLEVEL%
+    exit /b 1
+)
+
 echo [%TIME%] insights.scheduler annual (used quarterly until a quarter-aware command exists) >> "%LOG%"
 python -m insights.scheduler annual >> "%LOG%" 2>&1
 if errorlevel 1 (
@@ -41,8 +51,18 @@ if errorlevel 1 (
     git commit -m "Quarterly insights cycle %DATE%" >> "%LOG%" 2>&1
     git push origin master >> "%LOG%" 2>&1
     if errorlevel 1 (
-        python -m scripts.notify_failure %TASK% git_push "%LOG%" %ERRORLEVEL%
-        exit /b 1
+        echo [%TIME%] push rejected, retrying with pull --rebase >> "%LOG%"
+        git pull --rebase origin master >> "%LOG%" 2>&1
+        if errorlevel 1 (
+            git rebase --abort >> "%LOG%" 2>&1
+            python -m scripts.notify_failure %TASK% git_rebase "%LOG%" %ERRORLEVEL%
+            exit /b 1
+        )
+        git push origin master >> "%LOG%" 2>&1
+        if errorlevel 1 (
+            python -m scripts.notify_failure %TASK% git_push "%LOG%" %ERRORLEVEL%
+            exit /b 1
+        )
     )
     echo [%TIME%] pushed quarterly cycle >> "%LOG%"
 ) else (
