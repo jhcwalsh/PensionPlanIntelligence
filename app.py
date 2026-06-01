@@ -3648,12 +3648,34 @@ def page_approval_action(raw_token: str, action: str):
                 "https://github.com/jhcwalsh/PensionPlanIntelligence/"
                 "actions/workflows/publish-approved.yml"
             )
-            st.caption(
-                f"Next step: trigger the [publish-approved GHA workflow]"
-                f"({workflow_url}) with publication id **{publication.id}** "
-                f"to write the notes file and push to master. Render "
-                f"auto-deploys once the push lands."
-            )
+            from insights import github_dispatch as _gh
+
+            if _gh.is_configured():
+                try:
+                    _gh.dispatch_publish_approved(publication.id)
+                    st.caption(
+                        f"Publish workflow triggered for publication "
+                        f"**{publication.id}**. The notes file will be "
+                        f"written and pushed to master in 2–5 minutes — "
+                        f"watch [Actions]({workflow_url})."
+                    )
+                except _gh.DispatchError as exc:
+                    import logging as _logging
+                    _logging.getLogger(__name__).warning(
+                        "Auto-dispatch of publish-approved failed: %s", exc,
+                    )
+                    st.caption(
+                        f"Auto-dispatch failed ({exc}). Trigger the "
+                        f"[publish-approved GHA workflow]({workflow_url}) "
+                        f"manually with publication id **{publication.id}**."
+                    )
+            else:
+                st.caption(
+                    f"Next step: trigger the [publish-approved GHA workflow]"
+                    f"({workflow_url}) with publication id **{publication.id}** "
+                    f"to write the notes file and push to master. Render "
+                    f"auto-deploys once the push lands."
+                )
     if st.button("Back to dashboard"):
         st.query_params.clear()
         st.rerun()

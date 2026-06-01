@@ -68,5 +68,14 @@ jobs:
             echo "No DB changes — nothing to commit."
           else
             git commit -m "Daily digest run $(date -u +%F)"
-            git push
+            if ! git push; then
+              echo "Push rejected; rebasing on origin/master and retrying."
+              git fetch origin master
+              if ! git rebase origin/master; then
+                echo "::error::Rebase conflict during push retry; aborting."
+                git rebase --abort
+                exit 1
+              fi
+              git push
+            fi
           fi
