@@ -3707,7 +3707,8 @@ def page_drafts():
         expires = pub.expires_at.strftime("%Y-%m-%d %H:%M") if pub.expires_at else "—"
         period = f"{pub.period_start.isoformat()} – {pub.period_end.isoformat()}"
         with st.expander(
-            f"**{pub.cadence.title()}** — {period} (composed {composed})",
+            f"**{pub.cadence.title()}** — {period} "
+            f"(composed {composed}) · id `{pub.id}`",
             expanded=False,
         ):
             c1, c2, c3 = st.columns(3)
@@ -3755,7 +3756,8 @@ def page_archive():
         when = pub.published_at or pub.approved_at
         when_str = when.strftime("%Y-%m-%d %H:%M") if when else "—"
         with st.expander(
-            f"**{pub.cadence.title()}** — {period} ({pub.status}, {when_str})",
+            f"**{pub.cadence.title()}** — {period} "
+            f"({pub.status}, {when_str}) · id `{pub.id}`",
             expanded=False,
         ):
             if pub.draft_markdown:
