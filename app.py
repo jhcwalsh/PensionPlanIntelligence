@@ -3433,13 +3433,16 @@ def page_subscribe() -> None:
         )
         return
 
-    try:
-        sub, raw_token = _subs.create_pending_subscriber(
-            email_clean,
-            weekly=weekly, monthly=monthly, quarterly=quarterly,
-        )
+    def _send_confirmation(sub, raw_token):
         email_obj = _subs.render_confirmation_email(sub, raw_token)
         _subs.send_email(email_obj, to=sub.email)
+
+    try:
+        _subs.create_pending_subscriber(
+            email_clean,
+            weekly=weekly, monthly=monthly, quarterly=quarterly,
+            send_callback=_send_confirmation,
+        )
     except _subs.SubscriberError as exc:
         st.error(str(exc))
         return
