@@ -114,6 +114,7 @@ def create_pending_subscriber(
     monthly: bool = False,
     quarterly: bool = False,
     signup_ip: str | None = None,
+    send_callback: "callable | None" = None,
 ) -> tuple[Subscriber, str]:
     """Upsert a subscriber row and return a fresh confirmation token.
 
@@ -125,6 +126,14 @@ def create_pending_subscriber(
     Existing ``unsubscribed``/``disabled`` rows: reset to ``pending`` so
     a re-confirmation can revive them. The raw token returned is shown
     once and never persisted again.
+
+    If ``send_callback`` is provided it is invoked inside the same
+    transaction as the row mutation, after the subscriber + token are
+    flushed but before commit. The callback receives ``(subscriber,
+    raw_token)`` and is expected to deliver the confirmation email.
+    A raised exception rolls the transaction back so a misconfigured
+    Resend / transient 5xx doesn't pollute the DB with a stale pending
+    row + token (which would also poison the rate limiter).
 
     Caller layer is responsible for soft rate-limiting via
     ``recent_signup_count``.
@@ -165,6 +174,14 @@ def create_pending_subscriber(
 
         expires = config.subscribe_confirm_expiry()
         token = _issue_token(session, sub, "confirm", expires)
+
+        if send_callback is not None:
+            try:
+                send_callback(sub, token.raw)
+            except Exception:
+                session.rollback()
+                raise
+
         session.commit()
         session.refresh(sub)
         session.expunge(sub)
