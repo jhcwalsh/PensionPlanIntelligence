@@ -181,15 +181,19 @@ def render_approval_email(publication: Publication,
     (sent at 72h unapproved). ``is_expiry`` switches it to the "draft
     has expired" notice (sent at 7 days).
     """
-    cadence = publication.cadence.title()
+    # Per-cadence product name (e.g. "Weekly CIO Insights",
+    # "Weekly Consultant RFP Brief") rather than the bare cadence key, so the
+    # subject reads naturally for non-"Insights" products like the RFP brief.
+    prefix, product, _slug = config.cadence_display(publication.cadence)
+    product_label = f"{prefix} {product}"
     period = f"{publication.period_start.isoformat()} – {publication.period_end.isoformat()}"
 
     if is_expiry:
-        subject = f"[Expired] {cadence} Insights ({period})"
+        subject = f"[Expired] {product_label} ({period})"
     elif is_reminder:
-        subject = f"[Reminder — please review] {cadence} Insights ({period})"
+        subject = f"[Reminder — please review] {product_label} ({period})"
     else:
-        subject = f"[Action required] {cadence} Insights ready to publish ({period})"
+        subject = f"[Action required] {product_label} ready to publish ({period})"
 
     approve_url = _approval_url(approve)
     reject_url = _approval_url(reject)
@@ -268,9 +272,7 @@ def render_approval_email(publication: Publication,
         f"Full draft attached as PDF."
     )
 
-    pdf_filename = (
-        f"{publication.cadence}_cio_insights_{publication.period_start.isoformat()}.pdf"
-    )
+    pdf_filename = f"{_slug}_{publication.period_start.isoformat()}.pdf"
 
     return ApprovalEmail(
         subject=subject,

@@ -373,6 +373,214 @@ MONTHLY BRIEFINGS:
 
 
 # ---------------------------------------------------------------------------
+# Weekly Consultant RFP brief — compose from structured RFPRecord rows
+# ---------------------------------------------------------------------------
+#
+# Unlike weekly/monthly/annual, this cadence composes from already-structured
+# ``RFPRecord`` rows (extracted by ``scripts.run_rfp_extraction``), not from
+# free-text summaries. The records are grouped by where each RFP sits in the
+# consultant-search lifecycle, rendered as deterministic tables (no figures
+# the model could invent), and topped with a short LLM-written lead-in.
+
+# Lifecycle stages, in forward order. Each label maps to one or more of the
+# six ``status`` enum values in ``lib/rfp_schema.json``. The set of statuses
+# across all buckets must stay an exact partition of that enum — the unit
+# test ``test_stage_buckets_cover_every_schema_status`` enforces it, so a new
+# schema status will fail CI until it is bucketed here.
+_RFP_STAGE_BUCKETS: list[tuple[str, list[str]]] = [
+    ("Initial plans", ["Planned"]),
+    ("Launch",        ["Issued"]),
+    ("Review",        ["ResponsesReceived", "FinalistsNamed"]),
+    ("Decisions",     ["Awarded", "Withdrawn"]),
+]
+
+# status -> bucket label, derived once from the ordered bucket list above.
+_RFP_STATUS_TO_BUCKET: dict[str, str] = {
+    status: label for label, statuses in _RFP_STAGE_BUCKETS for status in statuses
+}
+
+
+def _rfp_outcome(payload: dict) -> str:
+    """Classify an awarded RFP as ``Retained`` / ``Switched`` / ``—``.
+
+    Compares the awarded manager against the incumbent (case- and
+    whitespace-insensitive):
+
+    * both present and equal      → ``"Retained"`` (incumbent kept the mandate)
+    * both present and different  → ``"Switched"``
+    * either missing/blank/None   → ``"—"`` (not enough info, e.g. a search
+      still in flight or a first-time mandate with no incumbent)
+    """
+    awarded = (payload.get("awarded_manager") or "").strip()
+    incumbent = (payload.get("incumbent_manager") or "").strip()
+    if not awarded or not incumbent:
+        return "—"
+    return "Retained" if awarded.lower() == incumbent.lower() else "Switched"
+
+
+def _gather_consultant_rfps(session, period_start: date,
+                            period_end: date) -> list[dict]:
+    """Return consultant RFPs extracted within ``[period_start, period_end]``.
+
+    Filters ``RFPRecord`` to ``rfp_type == "Consultant"`` and to rows whose
+    ``extracted_at`` falls within the inclusive day window (00:00:00 on
+    ``period_start`` through 23:59:59.999999 on ``period_end``). Each parsed
+    record payload is enriched with:
+
+    * ``bucket`` — its lifecycle stage label (see ``_RFP_STAGE_BUCKETS``)
+    * ``outcome`` — ``_rfp_outcome`` of the payload
+    * ``plan_abbreviation`` / ``plan_name`` — joined from ``plans`` for display
+
+    Returns ``[]`` when nothing matches. Results are ordered by lifecycle
+    stage, then by extraction time, so downstream rendering is stable.
+    """
+    import json
+
+    from database import Plan, RFPRecord
+
+    window_start = datetime.combine(period_start, datetime.min.time())
+    window_end = datetime.combine(period_end, datetime.max.time())
+
+    rows = (
+        session.query(RFPRecord)
+        .filter(RFPRecord.extracted_at >= window_start)
+        .filter(RFPRecord.extracted_at <= window_end)
+        .all()
+    )
+
+    # plan_id -> (abbreviation, name) for display enrichment.
+    plan_display = {
+        p.id: (p.abbreviation, p.name) for p in session.query(Plan).all()
+    }
+
+    records: list[dict] = []
+    for row in rows:
+        payload = json.loads(row.record)
+        if payload.get("rfp_type") != "Consultant":
+            continue
+        bucket = _RFP_STATUS_TO_BUCKET.get(payload.get("status"))
+        if bucket is None:
+            continue  # unknown/unbucketed status — skip defensively
+        abbrev, name = plan_display.get(row.plan_id, (row.plan_id, row.plan_id))
+        payload["bucket"] = bucket
+        payload["outcome"] = _rfp_outcome(payload)
+        payload["plan_abbreviation"] = abbrev
+        payload["plan_name"] = name
+        payload["extracted_at"] = row.extracted_at
+        records.append(payload)
+
+    bucket_order = {label: i for i, (label, _) in enumerate(_RFP_STAGE_BUCKETS)}
+    records.sort(key=lambda r: (bucket_order[r["bucket"]], r["extracted_at"]))
+    return records
+
+
+def _render_rfp_tables(records: list[dict]) -> str:
+    """Render gathered consultant RFPs as markdown tables, one per stage.
+
+    Buckets with no records this week are omitted. The ``Outcome`` column is
+    only meaningful for the Decisions stage, so it is shown there alone.
+    """
+    by_bucket: dict[str, list[dict]] = {}
+    for rec in records:
+        by_bucket.setdefault(rec["bucket"], []).append(rec)
+
+    sections: list[str] = []
+    for label, _statuses in _RFP_STAGE_BUCKETS:
+        bucket_records = by_bucket.get(label)
+        if not bucket_records:
+            continue
+
+        show_outcome = label == "Decisions"
+        if show_outcome:
+            header = "| Plan | RFP | Status | Outcome |\n|---|---|---|---|"
+        else:
+            header = "| Plan | RFP | Status |\n|---|---|---|"
+
+        lines = [f"## {label}", "", header]
+        for rec in bucket_records:
+            plan = rec.get("plan_abbreviation") or rec.get("plan_id", "—")
+            title = rec.get("title", "—")
+            status = rec.get("status", "—")
+            if show_outcome:
+                lines.append(f"| {plan} | {title} | {status} | {rec['outcome']} |")
+            else:
+                lines.append(f"| {plan} | {title} | {status} |")
+        sections.append("\n".join(lines))
+
+    return "\n\n".join(sections)
+
+
+_RFP_WEEKLY_SYSTEM_PROMPT = """\
+You are an analyst at a pension fund research firm. You write a short lead-in
+for a weekly brief on investment-consultant RFP activity across U.S. public
+pension plans, for an audience of consulting firms tracking new-business
+opportunities.
+
+Style:
+- Factual and concise: 2–4 sentences, no headline, no markdown headings.
+- Faithful: mention only plans, consultant names, and RFP titles that appear
+  in the DATA TABLE below. Do NOT introduce names from general knowledge or
+  invent counts you cannot read off the table.
+- Lead with what matters most to a consultant: newly issued searches and
+  awarded mandates (especially switches away from an incumbent).
+Output plain markdown prose only — no code fences, no headings, no commentary."""
+
+
+def compose_rfp_weekly(session, period_start: date, period_end: date) -> str:
+    """Build the Weekly Consultant RFP Brief markdown for the window.
+
+    Gathers consultant RFPs extracted in ``[period_start, period_end]``,
+    renders them as lifecycle-stage tables, and tops them with a short
+    LLM-written lead-in. In ``INSIGHTS_MODE=mock`` the Claude call is
+    short-circuited and canned markdown is returned unconditionally.
+    """
+    if config.is_mock():
+        return _mock_markdown("Weekly Consultant RFP Brief", period_start, period_end)
+
+    today_str = datetime.utcnow().strftime("%B %d, %Y")
+    range_str = f"{period_start.isoformat()} – {period_end.isoformat()}"
+    heading = (
+        f"# Weekly Consultant RFP Brief: {range_str}\n"
+        f"*Generated: {today_str}*\n\n"
+        "---\n"
+    )
+
+    records = _gather_consultant_rfps(session, period_start, period_end)
+    if not records:
+        return (
+            f"{heading}\n"
+            "_No consultant RFP activity recorded in this window._\n"
+        )
+
+    tables = _render_rfp_tables(records)
+
+    from summarizer import _get_client
+
+    message = _get_client().messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=1024,
+        temperature=0.2,
+        system=[
+            {
+                "type": "text",
+                "text": _RFP_WEEKLY_SYSTEM_PROMPT,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ],
+        messages=[{
+            "role": "user",
+            "content": (
+                f"Write the lead-in for the week of {range_str}.\n\n"
+                f"DATA TABLE:\n{tables}"
+            ),
+        }],
+    )
+    lead_in = message.content[0].text.strip()
+
+    return f"{heading}\n{lead_in}\n\n{tables}\n"
+
+
+# ---------------------------------------------------------------------------
 # Period helpers
 # ---------------------------------------------------------------------------
 
