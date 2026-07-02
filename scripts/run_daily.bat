@@ -46,11 +46,15 @@ REM   python -m scripts.run_rfp_extraction --limit 50
 REM Then add this back into the daily once steady-state. Idempotent on
 REM (document_id, prompt_version) so daily runs do nothing once caught up.
 
+REM Reminders failure must NOT abort before the commit block below —
+REM exiting here once stranded db/pension.db dirty, which made every
+REM subsequent run's `git pull --rebase` fail for weeks. Notify and
+REM carry on so the pipeline's data still lands on master.
 echo [%TIME%] insights.scheduler reminders >> "%LOG%"
 python -m insights.scheduler reminders >> "%LOG%" 2>&1
 if errorlevel 1 (
+    set REMINDERS_FAILED=1
     python -m scripts.notify_failure %TASK% insights_reminders "%LOG%" %ERRORLEVEL%
-    exit /b 1
 )
 
 REM Stage and commit only if something actually changed.
@@ -78,6 +82,11 @@ if errorlevel 1 (
     echo [%TIME%] no changes to push >> "%LOG%"
 )
 
+if defined REMINDERS_FAILED (
+    echo === [%DATE% %TIME%] %TASK% completed with reminders failure === >> "%LOG%"
+    endlocal
+    exit /b 1
+)
 echo === [%DATE% %TIME%] %TASK% completed === >> "%LOG%"
 endlocal
 exit /b 0

@@ -16,9 +16,41 @@ from pathlib import Path
 from typing import Optional
 
 from database import ApprovalToken, Publication, get_session
-from insights import approval, config, cycle_common, notify
+from insights import approval, config, cycle_common, notify, render
 
 logger = logging.getLogger(__name__)
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _pdf_bytes_for(pub: Publication) -> Optional[bytes]:
+    """Attachment bytes for a reminder email, tolerating foreign paths.
+
+    ``pdf_path`` is written by whichever machine composed the publication
+    (GHA runners store ``/home/runner/...``) and ``notes/pdfs/`` is
+    gitignored, so the file routinely doesn't exist here. Re-render from
+    the stored draft rather than crashing — callers upstream (the .bat
+    wrappers) treat an exception as fatal before their commit step.
+    """
+    if pub.pdf_path:
+        p = Path(pub.pdf_path)
+        if not p.is_absolute():
+            p = _REPO_ROOT / p
+        if p.exists():
+            return p.read_bytes()
+    if not pub.draft_markdown:
+        return None
+    prefix, product, _slug = config.cadence_display(pub.cadence)
+    composed = pub.composed_at or datetime.utcnow()
+    pdf_path = render.write_pdf(
+        publication_id=pub.id,
+        title=f"{prefix} {product}",
+        date_str=composed.strftime("%B %d, %Y"),
+        markdown_text=pub.draft_markdown,
+    )
+    pub.pdf_path = str(pdf_path)
+    logger.info("Re-rendered missing PDF for publication %s at %s", pub.id, pdf_path)
+    return pdf_path.read_bytes()
 
 
 def _active_tokens_for(session, publication_id: int) -> tuple[Optional[ApprovalToken],
@@ -72,7 +104,7 @@ def run_reminders(now: Optional[datetime] = None) -> dict:
             session.flush()
 
             approve_tok, reject_tok = approval.issue_tokens(session, pub)
-            pdf_bytes = Path(pub.pdf_path).read_bytes() if pub.pdf_path else None
+            pdf_bytes = _pdf_bytes_for(pub)
             email = approval.render_approval_email(
                 pub, approve_tok, reject_tok, pdf_bytes, is_reminder=True
             )

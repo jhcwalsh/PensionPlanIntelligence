@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date, datetime
+from pathlib import Path
 from typing import Optional
 
 from sqlalchemy.exc import IntegrityError
@@ -16,6 +17,17 @@ from database import Publication, get_session
 from insights import approval, config, render
 
 logger = logging.getLogger(__name__)
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _portable_pdf_path(pdf_path: Path) -> str:
+    """Store PDFs repo-relative — absolute paths from one machine (e.g. a
+    GHA runner) are meaningless on the next one that reads the row."""
+    try:
+        return str(pdf_path.relative_to(_REPO_ROOT))
+    except ValueError:
+        return str(pdf_path)
 
 
 # Allowed status transitions. Anything else raises ValueError.
@@ -131,7 +143,7 @@ def finalize_for_approval(session, publication: Publication,
         date_str=now.strftime("%B %d, %Y"),
         markdown_text=draft_markdown,
     )
-    publication.pdf_path = str(pdf_path)
+    publication.pdf_path = _portable_pdf_path(pdf_path)
     pdf_bytes = pdf_path.read_bytes()
 
     # Issue tokens; flush so they're visible if the email send fails.
@@ -208,7 +220,7 @@ def finalize_and_send(session, publication: Publication,
         date_str=now.strftime("%B %d, %Y"),
         markdown_text=draft_markdown,
     )
-    publication.pdf_path = str(pdf_path)
+    publication.pdf_path = _portable_pdf_path(pdf_path)
     pdf_bytes = pdf_path.read_bytes()
 
     email = _render_informational_email(publication, pdf_bytes)
