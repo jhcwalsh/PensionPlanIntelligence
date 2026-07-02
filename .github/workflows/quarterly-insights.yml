@@ -8,19 +8,18 @@ name: Quarterly insights (GHA edition)
 # Staggered 1 hour after monthly-insights (which fires the same days
 # at 18:00 UTC) so the two workflows don't push the DB simultaneously.
 #
-# NOTE on the 'annual' subcommand: insights.scheduler doesn't have a
-# 'quarterly' verb yet — composing a 3-month review uses the existing
-# 'annual' entry point, which the original local run_quarterly.bat
-# also did. Tweaking insights/annual.py to a 3-month window is a
-# small follow-up.
+# Uses the 'quarterly' scheduler verb (insights/quarterly.py), which
+# synthesizes the approved monthlies of the quarter that just ended —
+# it works from the first quarter with approved monthlies instead of
+# requiring a full prior calendar year like 'annual'.
 
 on:
   schedule:
     - cron: "0 19 1 1,4,7,10 *"   # 1st of Jan/Apr/Jul/Oct at 19:00 UTC
   workflow_dispatch:
     inputs:
-      year:
-        description: "Override target year (default: prior calendar year)"
+      period:
+        description: "Override target quarter — any month in it as YYYY-MM (default: quarter just ended)"
         required: false
         default: ""
       dry_run:
@@ -75,10 +74,10 @@ jobs:
           APPROVAL_EMAIL_FROM: ${{ secrets.APPROVAL_EMAIL_FROM }}
           INSIGHTS_MODE: live
         run: |
-          if [ -n "${{ github.event.inputs.year }}" ]; then
-            python -m insights.scheduler annual --year ${{ github.event.inputs.year }}
+          if [ -n "${{ github.event.inputs.period }}" ]; then
+            python -m insights.scheduler quarterly --period ${{ github.event.inputs.period }}
           else
-            python -m insights.scheduler annual
+            python -m insights.scheduler quarterly
           fi
 
       - name: Commit DB + notes changes

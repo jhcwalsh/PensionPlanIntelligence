@@ -59,6 +59,12 @@ def main(argv: list[str] | None = None) -> int:
                            help="Target month as YYYY-MM — default = prior month")
     p_monthly.add_argument("--force", action="store_true")
 
+    p_quarterly = sub.add_parser("quarterly", help="Run the quarterly cycle")
+    p_quarterly.add_argument("--period", type=_parse_month,
+                             help="Any month in the target quarter as YYYY-MM — "
+                                  "default = quarter that just ended")
+    p_quarterly.add_argument("--force", action="store_true")
+
     p_annual = sub.add_parser("annual", help="Run the annual cycle")
     p_annual.add_argument("--year", type=int, help="Target year — default = prior calendar year")
     p_annual.add_argument("--force", action="store_true")
@@ -98,6 +104,10 @@ def main(argv: list[str] | None = None) -> int:
             from insights.monthly import run_monthly_cycle
             pub = run_monthly_cycle(period_start=args.period, force=args.force)
             print(f"monthly cycle complete: publication_id={pub.id} status={pub.status}")
+        elif args.cycle == "quarterly":
+            from insights.quarterly import run_quarterly_cycle
+            pub = run_quarterly_cycle(period_start=args.period, force=args.force)
+            print(f"quarterly cycle complete: publication_id={pub.id} status={pub.status}")
         elif args.cycle == "annual":
             from insights.annual import run_annual_cycle
             pub = run_annual_cycle(year=args.year, force=args.force)

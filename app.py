@@ -686,7 +686,27 @@ def _find_all_highlights() -> list[tuple[Path, str, str]]:
 
 
 def _find_latest_insights() -> tuple[Path, str, str] | None:
-    """Find the YTD Insights note and extract its generated date."""
+    """Find the note for the Year-to-date tab.
+
+    Prefers the newest published quarterly review
+    (``quarterly_cio_insights_<date>.md`` written by
+    ``insights.publish.publish``); falls back to the legacy rolling YTD
+    file if no quarterly has been published yet.
+    """
+    quarterly = sorted(
+        NOTES_DIR.glob("quarterly_cio_insights_*.md"),
+        reverse=True,  # filenames embed YYYY-MM-DD; lexical sort = chronological
+    )
+    if quarterly:
+        path = quarterly[0]
+        content = path.read_text(encoding="utf-8")
+        gen_match = re.search(r"\*Generated:\s*(.+?)\*", content)
+        generated_date = gen_match.group(1).strip() if gen_match else "Unknown"
+        first_line = content.split("\n")[0] if content else ""
+        title = (first_line[2:].strip() if first_line.startswith("# ")
+                 else "Quarterly Insights")
+        return (path, title, generated_date)
+
     path = NOTES_DIR / "2026_cio_insights.md"
     if not path.exists():
         return None

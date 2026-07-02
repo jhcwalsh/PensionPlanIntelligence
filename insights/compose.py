@@ -373,6 +373,143 @@ MONTHLY BRIEFINGS:
 
 
 # ---------------------------------------------------------------------------
+# Quarterly — synthesize the prior quarter's approved monthlies
+# ---------------------------------------------------------------------------
+
+_QUARTERLY_SYSTEM_PROMPT = """\
+You are a senior investment analyst at a pension fund research firm.
+You write quarter-in-review briefings for institutional investors based
+on the quarter's approved monthly briefings.
+
+Style:
+- Strategic: identify the quarter's defining themes, not a month-by-month log.
+- Analytical: track how themes evolved through the quarter; call out reversals.
+- Faithful: every figure, manager name, vote tally, and plan position must
+  appear verbatim in the source monthlies. No general-knowledge embellishment.
+- Concise: no filler, no preamble. Start directly with the content.
+Output clean markdown only — no code fences, no JSON, no commentary."""
+
+
+def quarter_label(period_start: date) -> str:
+    """``date(2026, 4, 1)`` → ``"Q2 2026"``."""
+    return f"Q{(period_start.month - 1) // 3 + 1} {period_start.year}"
+
+
+def compose_quarterly(monthlies: list[tuple[date, str]],
+                      period_start: date, period_end: date) -> str:
+    """Synthesize the quarter's approved monthlies into a quarterly Insights.
+
+    ``monthlies`` pairs each briefing with its own ``period_start`` so month
+    labels stay correct even when a month in the window has no approved
+    monthly (unlike ``compose_annual``, which assumes a dense 12-month list).
+    """
+    label = quarter_label(period_start)
+    if config.is_mock():
+        return _mock_markdown(f"Quarterly Insights ({label})", period_start, period_end)
+
+    from summarizer import _get_client
+
+    today_str = datetime.utcnow().strftime("%B %d, %Y")
+    n_months = len(monthlies)
+    monthlies_block = "\n\n".join(
+        f"=== {month_start.strftime('%B %Y')} ===\n{md.strip()}"
+        for month_start, md in monthlies
+    )
+
+    user_prompt = f"""\
+Write a Quarterly Insights review for {label} synthesizing the \
+{n_months} approved monthly briefings below.
+
+GROUNDING RULES (non-negotiable):
+- Every figure, manager name, and plan position must appear verbatim in one \
+of the MONTHLY BRIEFINGS below.
+- Do NOT compute new figures from source data. No subtracting a return from \
+its benchmark to produce a basis-points alpha, no dividing counts to produce \
+a percentage, no summing commitments to produce a total. If a derived figure \
+isn't already stated verbatim in MONTHLY BRIEFINGS, do not state it.
+- Use only the source's own language for WHY things happened or what they \
+signify. Synthesis prose may use connectives like "driven by", "reflects", \
+"is consistent with", "a notable trend", "suggests", "indicates", or industry \
+jargon ("market appreciation", "flight to quality", "crowding") ONLY when (a) \
+the exact phrase appears in MONTHLY BRIEFINGS, OR (b) the connective claim is \
+anchored to ≥2 specific named plans whose evidence in MONTHLY BRIEFINGS \
+supports the relationship being asserted. Otherwise juxtapose facts neutrally.
+- Track how each theme evolved month-by-month — call out reversals or \
+inflection points where you see them.
+- Drop themes that appear in only one month, or flag them as \
+*Emerging signal*.
+- AUM consistency: when the source monthlies show different AUM values for \
+the same plan, pick ONE — preferring the value with an "as of <date>" \
+qualifier — and use it consistently throughout the quarterly. Do not switch \
+values within a single note.
+
+FORMAT REQUIREMENTS:
+- Start with exactly: # Insights: {label} in Review
+- Second line: *Synthesized from {n_months} approved monthly briefings ({period_start.isoformat()} – {period_end.isoformat()})*
+- Third line: *Generated: {today_str}*
+- Then a --- horizontal rule
+- Use numbered ## headings. Aim for 4–6 themes.
+- Each section ends with a bold **Practical implication:** sentence.
+- Open with a 2–3 sentence executive summary before the first ## section.
+- Every sentence containing a $ figure, %, bps, vote tally, or manager name \
+must end with an inline citation in the form (doc_id=42). The cited doc_id \
+must be the one whose source monthly attached that specific figure or name to \
+that doc_id. If a sentence's figures come from two different docs, split the \
+sentence so each cite is unambiguous. The section-level *Sources:* line (see \
+below) remains as a summary.
+- Hard cap 2,500 words total. If you reach it, drop the weakest-evidenced \
+theme entirely rather than trimming a sentence from each.
+
+BEFORE FINALISING — scan the draft for these specific patterns and verify \
+each against MONTHLY BRIEFINGS. If any item does not match the source, \
+remove it or rewrite the sentence to juxtapose facts neutrally.
+- bps / basis points figures (especially alpha or excess-return numbers — \
+these are the most common arithmetic-derived hallucinations)
+- multi-year returns (1-year, 3-year, 5-year, 10-year)
+- ratios (Nx, N:1, N-quartile, N% of)
+- list counts ("three plans", "all 11 portfolios", "two managers")
+- the connective phrases: "consistent with", "reflects", "driven by", \
+"a notable", "suggests", "indicates", "underscores" — each must either appear \
+verbatim in MONTHLY BRIEFINGS or be anchored to ≥2 specific named plans \
+whose evidence supports the relationship
+- every theme (##): supported by at least 2 of the quarter's months; if not, \
+drop or flag as *Emerging signal*
+- every inline (doc_id=N): the cited doc must be one whose source monthly \
+attached that specific figure or name to that doc_id, not merely the same topic.
+
+SOURCE LINKS:
+The MONTHLY BRIEFINGS below include inline (doc_id=N) cites and section-level \
+*Sources:* lines listing each underlying meeting document as a markdown link. \
+Preserve those doc_ids end-to-end in your synthesis. At the end of each ## \
+section in your output, add a *Sources:* line listing the documents \
+referenced in that section as markdown links. Use this exact format for each \
+link:
+  [Plan Abbreviation — DocType — Date](?doc=ID)
+Example: *Sources: [CalPERS — Agenda — April 02, 2026](?doc=42), [LACERA — Board Pack — March 11, 2026](?doc=58)*
+Only cite documents whose content you actually used in that section. The \
+*Sources:* line goes immediately before the **Practical implication:** \
+sentence at the end of each section.
+
+MONTHLY BRIEFINGS:
+{monthlies_block}"""
+
+    message = _get_client().messages.create(
+        model="claude-opus-4-6",
+        max_tokens=8192,
+        temperature=0.2,
+        system=[
+            {
+                "type": "text",
+                "text": _QUARTERLY_SYSTEM_PROMPT,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ],
+        messages=[{"role": "user", "content": user_prompt}],
+    )
+    return message.content[0].text
+
+
+# ---------------------------------------------------------------------------
 # Weekly Consultant RFP brief — compose from structured RFPRecord rows
 # ---------------------------------------------------------------------------
 #
@@ -617,3 +754,17 @@ def annual_period_for(reference: date) -> tuple[date, date]:
     """Return ``(jan 1 of prior year, dec 31 of prior year)``."""
     prior_year = reference.year - 1
     return date(prior_year, 1, 1), date(prior_year, 12, 31)
+
+
+def quarterly_period_for(reference: date) -> tuple[date, date]:
+    """Return ``(first day, last day)`` of the most recently *completed*
+    calendar quarter.
+
+    Run on the 1st of Jan/Apr/Jul/Oct, this picks up the quarter that
+    just ended; mid-quarter references resolve the same way.
+    """
+    current_q_start_month = ((reference.month - 1) // 3) * 3 + 1
+    current_q_start = date(reference.year, current_q_start_month, 1)
+    period_end = current_q_start - timedelta(days=1)
+    period_start = date(period_end.year, ((period_end.month - 1) // 3) * 3 + 1, 1)
+    return period_start, period_end
