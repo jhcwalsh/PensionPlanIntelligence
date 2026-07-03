@@ -688,23 +688,32 @@ def _find_all_highlights() -> list[tuple[Path, str, str]]:
 def _find_latest_insights() -> tuple[Path, str, str] | None:
     """Find the note for the Year-to-date tab.
 
-    Prefers the newest published quarterly review
-    (``quarterly_cio_insights_<date>.md`` written by
-    ``insights.publish.publish``); falls back to the legacy rolling YTD
-    file if no quarterly has been published yet.
+    Shows the most recently *generated* year-scale synthesis — quarterly
+    reviews and the annual year-in-review both qualify (both are written
+    by ``insights.publish.publish``). Falls back to the legacy rolling
+    YTD file if neither has been published yet.
     """
-    quarterly = sorted(
-        NOTES_DIR.glob("quarterly_cio_insights_*.md"),
-        reverse=True,  # filenames embed YYYY-MM-DD; lexical sort = chronological
-    )
-    if quarterly:
-        path = quarterly[0]
+    candidates = []
+    for path in (
+        list(NOTES_DIR.glob("quarterly_cio_insights_*.md"))
+        + list(NOTES_DIR.glob("annual_cio_insights_*.md"))
+    ):
         content = path.read_text(encoding="utf-8")
         gen_match = re.search(r"\*Generated:\s*(.+?)\*", content)
         generated_date = gen_match.group(1).strip() if gen_match else "Unknown"
+        try:
+            sort_key = datetime.strptime(generated_date, "%B %d, %Y")
+        except ValueError:
+            sort_key = datetime.min
         first_line = content.split("\n")[0] if content else ""
         title = (first_line[2:].strip() if first_line.startswith("# ")
-                 else "Quarterly Insights")
+                 else path.stem)
+        candidates.append((sort_key, path.name, path, title, generated_date))
+
+    if candidates:
+        # Newest Generated date first; filename as deterministic tie-break.
+        candidates.sort(key=lambda c: (c[0], c[1]), reverse=True)
+        _, _, path, title, generated_date = candidates[0]
         return (path, title, generated_date)
 
     path = NOTES_DIR / "2026_cio_insights.md"
