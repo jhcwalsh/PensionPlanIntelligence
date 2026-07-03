@@ -252,7 +252,7 @@ WEEKLY BRIEFINGS:
 _ANNUAL_SYSTEM_PROMPT = """\
 You are a senior investment analyst at a pension fund research firm.
 You write annual year-in-review briefings for institutional investors based
-on twelve approved monthly briefings.
+on the year's approved monthly briefings.
 
 Style:
 - Strategic: identify the year's defining themes, not a month-by-month log.
@@ -263,25 +263,28 @@ Style:
 Output clean markdown only — no code fences, no JSON, no commentary."""
 
 
-def compose_annual(monthly_markdowns: list[str],
+def compose_annual(monthlies: list[tuple[date, str]],
                    period_start: date, period_end: date) -> str:
-    """Synthesize 12 approved monthlies into an annual Insights."""
+    """Synthesize the year's approved monthlies into an annual Insights.
+
+    ``monthlies`` pairs each briefing with its own ``period_start`` so a
+    partial year (2026 production starts in April) labels months
+    correctly and the prompt states the real briefing count.
+    """
     if config.is_mock():
         return _mock_markdown("Annual Insights", period_start, period_end)
 
-    from generate_notes import generate_note  # noqa: F401
     from summarizer import _get_client
 
     today_str = datetime.utcnow().strftime("%B %d, %Y")
     year = period_start.year
-    monthlies_block = "\n\n".join(
-        f"=== {(period_start.replace(month=i + 1)).strftime('%B %Y')} ===\n{md.strip()}"
-        for i, md in enumerate(monthly_markdowns)
-    )
+    n_months = len(monthlies)
+    theme_min = 3 if n_months >= 6 else 2
+    monthlies_block = _monthlies_block(monthlies)
 
     user_prompt = f"""\
 Write an Annual Insights year-in-review for {year} synthesizing the \
-twelve approved monthly briefings below.
+{n_months} approved monthly briefings below.
 
 GROUNDING RULES (non-negotiable):
 - Every figure, manager name, and plan position must appear verbatim in one \
@@ -299,7 +302,7 @@ anchored to ≥2 specific named plans whose evidence in MONTHLY BRIEFINGS \
 supports the relationship being asserted. Otherwise juxtapose facts neutrally.
 - Track how each theme evolved month-by-month — call out reversals or \
 inflection points where you see them.
-- Drop themes that appear in fewer than 3 months, or flag them as \
+- Drop themes that appear in fewer than {theme_min} months, or flag them as \
 *Emerging signal*.
 - AUM consistency: when the source monthlies show different AUM values for \
 the same plan, pick ONE — preferring the value with an "as of <date>" \
@@ -308,7 +311,7 @@ values within a single note.
 
 FORMAT REQUIREMENTS:
 - Start with exactly: # Insights: {year} Year in Review
-- Second line: *Synthesized from twelve approved monthly briefings ({period_start.isoformat()} – {period_end.isoformat()})*
+- Second line: *Synthesized from {n_months} approved monthly briefings ({period_start.isoformat()} – {period_end.isoformat()})*
 - Third line: *Generated: {today_str}*
 - Then a --- horizontal rule
 - Use numbered ## headings. Aim for 5–8 themes.
@@ -335,8 +338,8 @@ these are the most common arithmetic-derived hallucinations)
 "a notable", "suggests", "indicates", "underscores" — each must either appear \
 verbatim in MONTHLY BRIEFINGS or be anchored to ≥2 specific named plans \
 whose evidence supports the relationship
-- every theme (##): supported by at least 3 of the 12 months; if not, drop \
-or flag as *Emerging signal*
+- every theme (##): supported by at least {theme_min} of the {n_months} \
+months; if not, drop or flag as *Emerging signal*
 - every inline (doc_id=N): the cited doc must be one whose source monthly \
 attached that specific figure or name to that doc_id, not merely the same topic.
 
@@ -395,6 +398,19 @@ def quarter_label(period_start: date) -> str:
     return f"Q{(period_start.month - 1) // 3 + 1} {period_start.year}"
 
 
+def _monthlies_block(monthlies: list[tuple[date, str]]) -> str:
+    """Format ``(month_start, markdown)`` pairs into a labelled block.
+
+    Labels come from each monthly's own ``period_start`` so partial or
+    gapped windows (2026 production starts in April) stay correct —
+    never from positional index.
+    """
+    return "\n\n".join(
+        f"=== {month_start.strftime('%B %Y')} ===\n{md.strip()}"
+        for month_start, md in monthlies
+    )
+
+
 def compose_quarterly(monthlies: list[tuple[date, str]],
                       period_start: date, period_end: date) -> str:
     """Synthesize the quarter's approved monthlies into a quarterly Insights.
@@ -411,10 +427,7 @@ def compose_quarterly(monthlies: list[tuple[date, str]],
 
     today_str = datetime.utcnow().strftime("%B %d, %Y")
     n_months = len(monthlies)
-    monthlies_block = "\n\n".join(
-        f"=== {month_start.strftime('%B %Y')} ===\n{md.strip()}"
-        for month_start, md in monthlies
-    )
+    monthlies_block = _monthlies_block(monthlies)
 
     user_prompt = f"""\
 Write a Quarterly Insights review for {label} synthesizing the \

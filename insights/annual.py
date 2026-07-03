@@ -1,7 +1,9 @@
-"""Annual cycle: synthesize the 12 approved monthlies of the prior year.
+"""Annual cycle: synthesize the prior year's approved monthlies.
 
-Runs every Jan 5 02:00 ET. Same shape as monthly but operates on the
-calendar year that just ended.
+Runs each January via the GHA annual-insights workflow. Same shape as
+monthly but operates on the calendar year that just ended. Partial
+years are fine — 2026 production starts in April, so the first annual
+synthesizes 9 monthlies.
 """
 
 from __future__ import annotations
@@ -90,7 +92,7 @@ def run_annual_cycle(year: Optional[int] = None,
         publication.source_publication_ids = [m.id for m in monthlies]
 
         draft = compose.compose_annual(
-            [m.draft_markdown or "" for m in monthlies],
+            [(m.period_start, m.draft_markdown or "") for m in monthlies],
             period_start, period_end,
         )
 

@@ -122,6 +122,7 @@ Render hosts only two web services now: Streamlit (`pension-plan-intelligence`) 
 | Monthly IPS refresh (all 148 plans, auto-discover + verify via Haiku 4.5) | Task Scheduler | local Windows | `scripts/run_ips.bat` |
 | Monthly insights composition + email | cron 1st of month 18:00 UTC | GHA | `.github/workflows/monthly-insights.yml` |
 | Quarterly insights composition + email | cron 1st of Jan/Apr/Jul/Oct 19:00 UTC | GHA | `.github/workflows/quarterly-insights.yml` |
+| Annual insights composition + email | cron Jan 5 19:00 UTC | GHA | `.github/workflows/annual-insights.yml` |
 
 GHA secrets that must exist for the cron entries to work: `ANTHROPIC_API_KEY`, `RESEND_API_KEY`, `APPROVAL_EMAIL_RECIPIENT`, `APPROVAL_EMAIL_FROM`. Local cron uses the same names from `.env`. Schedules are UTC; ET drifts one hour between EDT and EST. The 1st-of-month sequence is deliberate: GHA CAFR refresh @ 15:00 UTC → local CAFR refresh runs early ET → GHA monthly-insights @ 18:00 UTC pulls a DB that already has both runs' new CAFRs.
 
