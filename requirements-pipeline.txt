@@ -29,7 +29,9 @@ pytest==8.3.3
 freezegun==1.5.1
 
 # RFP pipeline + read API
-fastapi==0.115.0
+# fastapi must track streamlit: both depend on starlette, and
+# streamlit>=1.52 forces starlette>=0.40 which fastapi<0.116 rejects.
+fastapi==0.139.0
 uvicorn[standard]==0.32.0
 pydantic>=2.6,<3
 jsonschema==4.23.0
