@@ -8,7 +8,7 @@ Three layered systems sharing one SQLite database (`db/pension.db`, ~42 MB, trac
 
 1. **Meeting-document pipeline** (`pipeline.py`, `fetcher.py`, `extractor.py`, `summarizer.py`) — fetches board materials and CAFRs from ~148 U.S. public pension plans, extracts text, summarizes with Claude per-document. Hybrid: GHA cron handles 137 of 148 plans daily; local Windows Task Scheduler handles the 11 WAF-blocked plans (see `data/local_only_plans.json`).
 2. **Insights automation** (`insights/` package) — composes weekly / monthly / annual editorial briefings from the existing summaries, gated on a magic-link approval email to the founder. GHA cron-triggered (weekly Sundays 12:30 UTC, monthly 1st of month 18:00 UTC).
-3. **RFP alerts pipeline** (`rfp/`, `lib/`, `api/`, `scripts/`) — structured extraction of RFP records from already-fetched documents into `rfp_records` / `document_health` / `pipeline_runs`, served via FastAPI. RFP backfill runs locally via Windows Task Scheduler weekly; FastAPI lives on Render.
+3. **RFP alerts pipeline** (`rfp/`, `lib/`, `api/`, `scripts/`) — structured extraction of RFP records from already-fetched documents into `rfp_records` / `document_health` / `pipeline_runs`, served via FastAPI. RFP backfill runs weekly on GHA (the duplicate local Task Scheduler entry was retired 2026-07-07); FastAPI lives on Render.
 
 The Streamlit app (`app.py`) reads from the same DB and surfaces all three layers as tabs.
 

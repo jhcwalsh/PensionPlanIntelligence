@@ -39,8 +39,22 @@ from sqlalchemy import or_
 from database import MeetingRecording, SessionLocal, init_db
 from refresh_recordings import parse_meeting_date_from_title
 
-_GONE_MARKERS = ("Private video", "video unavailable", "This video has been removed",
+_GONE_MARKERS = ("private video", "video unavailable", "has been removed",
                  "account associated with this video has been terminated")
+# YouTube's rate-limit error also says "Video unavailable", so transient
+# markers must be checked first — a rate-limited session once mis-marked
+# 1,775 live recordings as gone.
+_TRANSIENT_MARKERS = ("rate-limited", "try again later")
+
+
+def _classify_error(msg: str) -> str:
+    """'gone' (video permanently inaccessible) or 'transient' (retry later)."""
+    m = msg.lower()
+    if any(t in m for t in _TRANSIENT_MARKERS):
+        return "transient"
+    if any(g in m for g in _GONE_MARKERS):
+        return "gone"
+    return "transient"
 
 
 def _hydrate_one(ydl, row) -> str:
@@ -48,10 +62,13 @@ def _hydrate_one(ydl, row) -> str:
         info = ydl.extract_info(row.video_url, download=False)
     except Exception as exc:  # noqa: BLE001
         msg = str(exc)
-        if any(m.lower() in msg.lower() for m in _GONE_MARKERS):
+        # A downloaded row keeps its status whatever happened remotely.
+        if _classify_error(msg) == "gone" and not row.local_path:
             row.download_status = "gone"
             row.download_error = msg[:500]
             return "gone"
+        if "rate-limited" in msg.lower():
+            return "rate_limited"
         return "error"
 
     ts = info.get("timestamp")
@@ -99,13 +116,22 @@ def main(argv: list[str] | None = None) -> int:
         rows = rows[:args.limit]
     print(f"hydrating {len(rows)} recordings", flush=True)
 
-    counts = {"hydrated": 0, "gone": 0, "error": 0}
+    counts = {"hydrated": 0, "gone": 0, "error": 0, "rate_limited": 0}
+    consecutive_rl = 0
     ydl = yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "skip_download": True})
     try:
         for i, row in enumerate(rows, 1):
             outcome = _hydrate_one(ydl, row)
             counts[outcome] += 1
             session.commit()
+            # Circuit breaker: once YouTube rate-limits the session (up to
+            # an hour), every further request wastes quota and risks
+            # misclassification — stop and let the next run resume.
+            consecutive_rl = consecutive_rl + 1 if outcome == "rate_limited" else 0
+            if consecutive_rl >= 5:
+                print(f"rate-limited {consecutive_rl}x in a row after {i} rows; "
+                      f"stopping — re-run in an hour to resume", flush=True)
+                break
             if i % 50 == 0:
                 print(f"  {i}/{len(rows)} ({counts})", flush=True)
             time.sleep(args.delay)
