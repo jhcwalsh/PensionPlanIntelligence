@@ -414,8 +414,12 @@ def run_extractor(doc_ids: list[int] = None, retry_failed: bool = False):
         for doc in docs:
             text, pages, status = extract_document(doc)
 
-            doc.extracted_text = text
-            doc.page_count = pages
+            # On failure, leave extracted_text alone: never store "" (the
+            # GzippedText wrapper would persist it as a non-NULL gzip blob),
+            # and never clobber text kept from an earlier successful pass.
+            if status == "done":
+                doc.extracted_text = text
+                doc.page_count = pages
             doc.extraction_status = status
 
             # Try to infer meeting date from content if not already set
