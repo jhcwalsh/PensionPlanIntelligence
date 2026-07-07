@@ -557,6 +557,37 @@ class DocumentSkip(Base):
     error_message = Column(Text)
 
 
+class ExtractionDetail(Base):
+    """Why a document isn't fully extracted — the index of recoverable work.
+
+    One row per document that failed extraction or was only partially
+    scanned, so those docs stay queryable and can be re-processed if the
+    OCR gates loosen or a file reappears. Reasons:
+
+    - ``file_missing``       no file at local_path (never downloaded / other machine)
+    - ``unsupported_format`` extension we don't extract
+    - ``ocr_gate_doc_type``  empty text layer; doc_type isn't OCR-worthy
+    - ``ocr_gate_page_cap``  empty text layer; over MAX_VISION_OCR_DOC_PAGES
+    - ``ocr_empty``          vision OCR ran (or was unavailable) and produced no text
+    - ``extract_empty``      non-PDF (docx) extraction produced no text
+    - ``ocr_partial``        doc is ``done`` but OCR stopped at the per-page
+                             cap — pages_ocred < pages_total
+
+    ``run_extractor`` maintains rows automatically: upserted when extraction
+    ends with a reason, deleted on a clean full extraction. Unlike
+    ``DocumentSkip`` this table never blocks summarization.
+    """
+
+    __tablename__ = "extraction_details"
+
+    document_id = Column(Integer, ForeignKey("documents.id"), primary_key=True)
+    reason = Column(String, nullable=False)
+    pages_total = Column(Integer)
+    pages_ocred = Column(Integer)
+    detected_at = Column(DateTime, default=_utcnow, nullable=False)
+    error_message = Column(Text)
+
+
 class PrunedDocument(Base):
     """URLs that were intentionally pruned from ``documents`` and must NOT be
     re-fetched.

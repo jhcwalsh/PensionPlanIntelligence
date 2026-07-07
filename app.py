@@ -25,6 +25,7 @@ from database import (
     Document,
     DocumentHealth,
     DocumentSkip,
+    ExtractionDetail,
     FetchRun,
     MeetingRecording,
     PipelineRun,
@@ -1727,8 +1728,11 @@ def _render_failed_docs():
     try:
         # Two queries, then merge by plan
         ext_rows = (
-            session.query(Plan.id, Plan.name, Document.id, Document.filename)
+            session.query(Plan.id, Plan.name, Document.id, Document.filename,
+                          ExtractionDetail.reason)
             .join(Document, Document.plan_id == Plan.id)
+            .outerjoin(ExtractionDetail,
+                       ExtractionDetail.document_id == Document.id)
             .filter(Document.extraction_status == "failed")
             .all()
         )
@@ -1752,9 +1756,10 @@ def _render_failed_docs():
         by_plan: dict[str, dict] = defaultdict(
             lambda: {"name": "", "extraction": [], "skip": []}
         )
-        for plan_id, plan_name, _doc_id, filename in ext_rows:
+        for plan_id, plan_name, _doc_id, filename, ext_reason in ext_rows:
             by_plan[plan_id]["name"] = plan_name
-            by_plan[plan_id]["extraction"].append(filename)
+            by_plan[plan_id]["extraction"].append(
+                f"{filename} *({ext_reason})*" if ext_reason else filename)
         for plan_id, plan_name, _doc_id, filename, reason, err in skip_rows:
             by_plan[plan_id]["name"] = plan_name
             by_plan[plan_id]["skip"].append((filename, reason, err))

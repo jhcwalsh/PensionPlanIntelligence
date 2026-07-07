@@ -16,12 +16,15 @@ Three-tier PDF strategy:
 import base64
 import os
 import re
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 
 from rich.console import Console
 
-from database import Document, get_session, get_unextracted_documents
+from database import (
+    Document, ExtractionDetail, get_session, get_unextracted_documents,
+)
 
 console = Console(legacy_windows=False)
 
@@ -31,6 +34,13 @@ MAX_TEXT_CHARS = 150_000
 # Cap pages sent to vision OCR to bound cost on accidental 500-page agendas.
 # A typical board pack is 5–60 pages; 100 covers the long tail.
 MAX_VISION_OCR_PAGES = 100
+
+# OCR-worthiness gate: vision OCR costs real money per page, so only doc
+# types whose text density justifies it get the fallback — and a scan whose
+# page count exceeds the doc cap is skipped outright (a 200-page image-only
+# board pack isn't worth transcribing even partially).
+OCR_DOC_TYPES = {"cafr", "agenda", "minutes"}
+MAX_VISION_OCR_DOC_PAGES = 50
 
 # 2x render is roughly 1200x1600 px for letter-size — plenty of resolution for
 # Sonnet vision and only modestly more image tokens than 1x.
@@ -97,7 +107,14 @@ def extract_pdf_pymupdf(path: str) -> tuple[str, int]:
         return "", 0
 
 
-def extract_pdf_ocr(path: str) -> tuple[str, int]:
+@dataclass
+class OcrInfo:
+    """How far vision OCR actually got (for the extraction_details index)."""
+    pages_ocred: int = 0
+    reason: str | None = None  # 'page_cap' when the whole-doc gate fired
+
+
+def extract_pdf_ocr(path: str) -> tuple[str, int, OcrInfo]:
     """OCR fallback using Claude Sonnet vision.
 
     Renders each page with pymupdf and asks Sonnet for verbatim
@@ -113,24 +130,37 @@ def extract_pdf_ocr(path: str) -> tuple[str, int]:
         import fitz  # pymupdf
     except ImportError as e:
         console.print(f"  [yellow]OCR skipped: pymupdf not installed ({e})[/yellow]")
-        return "", 0
+        return "", 0, OcrInfo()
+
+    try:
+        doc = fitz.open(path)
+    except Exception as e:
+        console.print(f"  [red]Vision OCR failed: {e}[/red]")
+        return "", 0, OcrInfo()
+
+    if len(doc) > MAX_VISION_OCR_DOC_PAGES:
+        console.print(
+            f"  [yellow]OCR skipped: {len(doc)} pages exceeds the "
+            f"{MAX_VISION_OCR_DOC_PAGES}-page document cap[/yellow]"
+        )
+        return "", len(doc), OcrInfo(reason="page_cap")
 
     try:
         from summarizer import MODEL_SONNET, _get_client
     except ImportError as e:
         console.print(f"  [yellow]OCR skipped: anthropic SDK not available ({e})[/yellow]")
-        return "", 0
+        return "", 0, OcrInfo()
 
     try:
         client = _get_client()
     except Exception as e:
         console.print(f"  [yellow]OCR skipped: no Anthropic credentials ({e})[/yellow]")
-        return "", 0
+        return "", 0, OcrInfo()
 
     try:
-        doc = fitz.open(path)
         page_count = len(doc)
         pages_text = []
+        pages_attempted = 0
         mat = fitz.Matrix(VISION_OCR_RENDER_SCALE, VISION_OCR_RENDER_SCALE)
         for i, page in enumerate(doc):
             if i >= MAX_VISION_OCR_PAGES:
@@ -139,6 +169,7 @@ def extract_pdf_ocr(path: str) -> tuple[str, int]:
                     f"skipping remaining {page_count - i} pages[/yellow]"
                 )
                 break
+            pages_attempted = i + 1
             pix = page.get_pixmap(matrix=mat)
             png_b64 = base64.b64encode(pix.tobytes("png")).decode("ascii")
             try:
@@ -168,20 +199,30 @@ def extract_pdf_ocr(path: str) -> tuple[str, int]:
             if page_text.strip():
                 pages_text.append(f"[Page {i + 1}]\n{page_text}")
         full_text = "\n\n".join(pages_text)
-        return full_text[:MAX_TEXT_CHARS], page_count
+        return full_text[:MAX_TEXT_CHARS], page_count, OcrInfo(pages_ocred=pages_attempted)
     except Exception as e:
         console.print(f"  [red]Vision OCR failed: {e}[/red]")
-        return "", 0
+        return "", 0, OcrInfo()
 
 
-def extract_pdf(path: str) -> tuple[str, int]:
+def extract_pdf(path: str, allow_ocr: bool = True) -> tuple[str, int, str | None, int | None]:
+    """Extract PDF text. Returns (text, pages, reason, pages_ocred) where
+    reason is an extraction_details reason for empty/partial results."""
     text, pages = extract_pdf_pdfplumber(path)
     if len(text.strip()) < 100:
         text, pages = extract_pdf_pymupdf(path)
-    if len(text.strip()) < 100:
-        console.print("  [dim]Trying OCR...[/dim]")
-        text, pages = extract_pdf_ocr(path)
-    return text, pages
+    if len(text.strip()) >= 100:
+        return text, pages, None, None
+    if not allow_ocr:
+        return text, pages, "ocr_gate_doc_type", None
+    console.print("  [dim]Trying OCR...[/dim]")
+    text, pages, info = extract_pdf_ocr(path)
+    if not text.strip():
+        reason = "ocr_gate_page_cap" if info.reason == "page_cap" else "ocr_empty"
+        return text, pages, reason, info.pages_ocred
+    if info.pages_ocred < pages:
+        return text, pages, "ocr_partial", info.pages_ocred
+    return text, pages, None, None
 
 
 # ---------------------------------------------------------------------------
@@ -358,13 +399,25 @@ def infer_meeting_date(
 # Main extraction runner
 # ---------------------------------------------------------------------------
 
-def extract_document(doc: Document) -> tuple[str, int, str]:
+@dataclass
+class ExtractOutcome:
+    """Result of one document extraction, including why it fell short.
+
+    ``reason`` is non-None whenever the document is not fully extracted —
+    see database.ExtractionDetail for the vocabulary. A ``done`` outcome
+    can still carry reason='ocr_partial'.
     """
-    Extract text from a document's local file.
-    Returns (text, page_count, status).
-    """
+    text: str = ""
+    pages: int = 0
+    status: str = "failed"
+    reason: str | None = None
+    pages_ocred: int | None = None
+
+
+def extract_document(doc: Document) -> ExtractOutcome:
+    """Extract text from a document's local file."""
     if not doc.local_path or not Path(doc.local_path).exists():
-        return "", 0, "failed"
+        return ExtractOutcome(reason="file_missing")
 
     path = doc.local_path
     ext = Path(path).suffix.lower()
@@ -372,16 +425,20 @@ def extract_document(doc: Document) -> tuple[str, int, str]:
     console.print(f"  Extracting [cyan]{Path(path).name}[/cyan]")
 
     if ext == ".pdf":
-        text, pages = extract_pdf(path)
+        text, pages, reason, pages_ocred = extract_pdf(
+            path, allow_ocr=doc.doc_type in OCR_DOC_TYPES)
     elif ext in (".docx", ".doc"):
         text, pages = extract_docx(path)
+        reason, pages_ocred = ("extract_empty" if not text.strip() else None), None
     else:
-        return "", 0, "failed"
+        return ExtractOutcome(reason="unsupported_format")
 
     if not text.strip():
-        return "", 0, "failed"
+        return ExtractOutcome(pages=pages, reason=reason or "extract_empty",
+                              pages_ocred=pages_ocred)
 
-    return text, pages, "done"
+    return ExtractOutcome(text=text, pages=pages, status="done",
+                          reason=reason, pages_ocred=pages_ocred)
 
 
 def run_extractor(doc_ids: list[int] = None, retry_failed: bool = False):
@@ -412,28 +469,42 @@ def run_extractor(doc_ids: list[int] = None, retry_failed: bool = False):
         console.print(f"[bold]Extracting text from {len(docs)} documents...[/bold]")
 
         for doc in docs:
-            text, pages, status = extract_document(doc)
+            outcome = extract_document(doc)
 
             # On failure, leave extracted_text alone: never store "" (the
             # GzippedText wrapper would persist it as a non-NULL gzip blob),
             # and never clobber text kept from an earlier successful pass.
-            if status == "done":
-                doc.extracted_text = text
-                doc.page_count = pages
-            doc.extraction_status = status
+            if outcome.status == "done":
+                doc.extracted_text = outcome.text
+                doc.page_count = outcome.pages
+            doc.extraction_status = outcome.status
+
+            # Keep the extraction_details index in sync: any shortfall
+            # (failure or partial scan) is recorded so the doc can be
+            # found and re-processed later; a clean pass clears it.
+            if outcome.reason:
+                session.merge(ExtractionDetail(
+                    document_id=doc.id, reason=outcome.reason,
+                    pages_total=outcome.pages or None,
+                    pages_ocred=outcome.pages_ocred,
+                    detected_at=datetime.utcnow()))
+            else:
+                session.query(ExtractionDetail).filter(
+                    ExtractionDetail.document_id == doc.id).delete()
 
             # Try to infer meeting date from content if not already set
-            if text:
+            if outcome.text:
                 doc.meeting_date = infer_meeting_date(
-                    text, doc.meeting_date,
+                    outcome.text, doc.meeting_date,
                     filename=doc.filename,
                     downloaded_at=doc.downloaded_at,
                 )
 
             session.commit()
-            status_color = "green" if status == "done" else "red"
-            console.print(f"    [{status_color}]{status}[/{status_color}] "
-                          f"— {pages} pages, {len(text):,} chars")
+            status_color = "green" if outcome.status == "done" else "red"
+            note = f" [{outcome.reason}]" if outcome.reason else ""
+            console.print(f"    [{status_color}]{outcome.status}[/{status_color}] "
+                          f"— {outcome.pages} pages, {len(outcome.text):,} chars{note}")
 
         done = sum(1 for d in docs if d.extraction_status == "done")
         console.print(f"\n[bold green]{done}/{len(docs)} documents extracted successfully.[/bold green]")
