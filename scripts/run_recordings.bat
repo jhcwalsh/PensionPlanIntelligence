@@ -1,19 +1,24 @@
 @echo off
 REM ------------------------------------------------------------------------
-REM Meeting recordings refresh / download / notify — local Windows only.
+REM Meeting recordings catalogue refresh / notify — local Windows only.
 REM
-REM Three sequential steps:
-REM   1. refresh_recordings.py     — poll active video sources for new vids
-REM   2. download_recordings.py    — fetch new pending rows to D:\
-REM   3. notify_new_recordings.py  — email digest of newly-discovered videos
+REM Sequential steps:
+REM   1. discover_video_sources.py — mine newly-extracted documents for
+REM                                  video archive/channel URLs (offline)
+REM   2. refresh_recordings.py     — poll active video sources for new vids
+REM   3. download_recordings.py    — fetch new pending rows to D:\
+REM                                  (skipped by the scheduled task; the
+REM                                  catalogue is the product, a board video
+REM                                  is 1-3 GB — download manually on demand)
+REM   4. notify_new_recordings.py  — email digest of newly-discovered videos
 REM
 REM Recordings live on the local D: drive (D:\PensionGraph\meetingrecordings),
 REM not on Render. Only the SQLite metadata lives in db/pension.db, which we
 REM commit and push so the Streamlit catalogue tab on Render stays in sync.
 REM
-REM Schedule: daily, after the daily-pipeline so we have a refreshed plan
-REM list. Skip the download step on metered connections by passing
-REM --no-downloads.
+REM Schedule: weekly, Saturdays 08:00 local with --no-downloads (see
+REM register_tasks.ps1), so the catalogue is fresh before the Sunday GHA
+REM insights/RFP runs.
 REM
 REM Manual run:
 REM   scripts\run_recordings.bat                   # all steps
@@ -43,6 +48,13 @@ if errorlevel 1 (
     echo [%TIME%] pull --rebase failed, aborting rebase >> "%LOG%"
     git rebase --abort >> "%LOG%" 2>&1
     python -m scripts.notify_failure %TASK% git_pull "%LOG%" %ERRORLEVEL%
+    exit /b 1
+)
+
+echo [%TIME%] discover_video_sources.py >> "%LOG%"
+python discover_video_sources.py >> "%LOG%" 2>&1
+if errorlevel 1 (
+    python -m scripts.notify_failure %TASK% discover "%LOG%" %ERRORLEVEL%
     exit /b 1
 )
 

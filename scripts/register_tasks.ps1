@@ -119,6 +119,34 @@ $IpsFolder.RegisterTaskDefinition(
 ) | Out-Null
 Write-Host "Registered PensionPipeline-IPS"
 
+# Recordings — Saturdays 08:00 local. Catalogue-only (--no-downloads):
+# discovers video sources, polls them for new meeting recordings, emails
+# the digest, pushes DB metadata. Saturday so the catalogue is fresh
+# before the Sunday GHA insights/RFP runs. Downloads stay manual — see
+# scripts/run_recordings.bat.
+$RecAction = New-ScheduledTaskAction `
+    -Execute "$Repo\scripts\run_recordings.bat" `
+    -Argument "--no-downloads" `
+    -WorkingDirectory $Repo
+$RecSettings = New-ScheduledTaskSettingsSet `
+    -StartWhenAvailable `
+    -DontStopIfGoingOnBatteries `
+    -AllowStartIfOnBatteries `
+    -RunOnlyIfNetworkAvailable `
+    -ExecutionTimeLimit (New-TimeSpan -Hours 6)
+$RecPrincipal = New-ScheduledTaskPrincipal `
+    -UserId $User `
+    -LogonType Interactive `
+    -RunLevel Limited
+Register-ScheduledTask `
+    -TaskName "PensionPipeline-Recordings" `
+    -Action $RecAction `
+    -Trigger (New-ScheduledTaskTrigger -Weekly -DaysOfWeek Saturday -At 8:00am) `
+    -Settings $RecSettings `
+    -Principal $RecPrincipal `
+    -Force
+Write-Host "Registered PensionPipeline-Recordings"
+
 # Weekly + Quarterly tasks moved to GitHub Actions on 2026-05-04.
 # See .github/workflows/weekly-rfp.yml and quarterly-insights.yml.
 # The legacy-cleanup loop at the top of this script unregisters those
