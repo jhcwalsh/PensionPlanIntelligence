@@ -22,8 +22,9 @@ async def _refresh_db_loop():
     while True:
         await asyncio.sleep(300)
         try:
-            if await asyncio.to_thread(db_sync.pull, database.DB_PATH):
-                database.engine.dispose()
+            await asyncio.to_thread(
+                db_sync.pull, database.DB_PATH,
+                pre_replace=database.engine.dispose)
         except Exception as exc:  # noqa: BLE001
             import logging
             logging.getLogger("db_sync").warning("refresh failed: %s", exc)
@@ -35,8 +36,9 @@ async def lifespan(app):
     task = None
     if db_sync.enabled():
         import database
-        await asyncio.to_thread(db_sync.pull, database.DB_PATH)
-        database.engine.dispose()
+        await asyncio.to_thread(
+            db_sync.pull, database.DB_PATH,
+            pre_replace=database.engine.dispose)
         task = asyncio.create_task(_refresh_db_loop())
     yield
     if task:

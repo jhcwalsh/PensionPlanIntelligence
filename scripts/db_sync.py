@@ -22,6 +22,7 @@ import argparse
 import hashlib
 import json
 import os
+import sqlite3
 import sys
 import tempfile
 import threading
@@ -35,6 +36,18 @@ KEEP_VERSIONS = 10
 
 _client_lock = threading.Lock()
 _client = None
+
+# Tracks whether install_auto_push has an armed debounce timer or an
+# in-flight push, so callers (app.py's freshness pull) can avoid yanking
+# the local DB file out from under a pending local write.
+_pending_lock = threading.Lock()
+_pending_state = {"armed": False, "in_flight": False}
+
+
+def auto_push_pending() -> bool:
+    """True while a debounced auto-push timer is armed or a push is running."""
+    with _pending_lock:
+        return _pending_state["armed"] or _pending_state["in_flight"]
 
 
 class SyncConflict(Exception):
@@ -91,8 +104,14 @@ def _read_sidecar(path) -> int:
         return 0
 
 
-def pull(dest) -> bool:
+def pull(dest, pre_replace=None) -> bool:
     """Download the current DB to dest if remote generation is newer.
+
+    ``pre_replace``, if given, is called after the download is verified
+    but immediately BEFORE the atomic ``os.replace`` swap — e.g. to
+    dispose SQLAlchemy engine connections and clear cached sessions.
+    On Windows a file can't be replaced while another handle has it
+    open, so disposal must happen before the swap, not after.
 
     Returns True when the file was replaced. Atomic via os.replace.
     """
@@ -113,11 +132,51 @@ def pull(dest) -> bool:
         if digest != manifest["sha256"]:
             raise RuntimeError(
                 f"sha256 mismatch pulling gen {manifest['generation']}")
+        if pre_replace is not None:
+            pre_replace()
         os.replace(tmp, dest)
     finally:
         Path(tmp).unlink(missing_ok=True)
     _sidecar(dest).write_text(str(manifest["generation"]))
     return True
+
+
+def _snapshot_bytes(src: Path) -> bytes:
+    """Read src's bytes via the sqlite3 backup API, not a raw file read.
+
+    ``src`` may be the live application DB, with another connection
+    writing to it concurrently. A raw ``read_bytes()`` can observe a
+    torn/partial write (SQLite writes aren't a single atomic file
+    write in WAL/rollback-journal mode). The backup API takes SQLite's
+    own locking and streams a transactionally consistent copy into a
+    temp file, so we hash/upload that instead.
+
+    Falls back to a raw read when sqlite3 can't open ``src`` as a
+    database at all (``sqlite3.DatabaseError``) — this happens for
+    test fixtures that write arbitrary bytes as a stand-in DB file
+    (and, in principle, for some hypothetical non-SQLite payload). Such
+    files aren't subject to the torn-read race in the first place,
+    since nothing is concurrently writing to them via SQLite.
+    """
+    fd, tmp_path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    try:
+        try:
+            src_conn = sqlite3.connect(str(src))
+            try:
+                tmp_conn = sqlite3.connect(tmp_path)
+                try:
+                    with tmp_conn:
+                        src_conn.backup(tmp_conn)
+                finally:
+                    tmp_conn.close()
+            finally:
+                src_conn.close()
+            return Path(tmp_path).read_bytes()
+        except sqlite3.DatabaseError:
+            return src.read_bytes()
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
 
 
 def push(src, uploaded_by: str) -> int:
@@ -133,14 +192,19 @@ def push(src, uploaded_by: str) -> int:
         raise SyncConflict(
             f"remote at generation {remote_gen}, local sidecar at "
             f"{local_gen} — pull and re-run")
+    body = _snapshot_bytes(src)
+    digest = hashlib.sha256(body).hexdigest()
+    if manifest is not None and manifest.get("sha256") == digest:
+        print(f"[db_sync] push: unchanged (generation {remote_gen}); "
+              f"skipping upload")
+        return remote_gen
     new_gen = remote_gen + 1
     key = f"{VERSIONS_PREFIX}{new_gen}.db"
-    body = src.read_bytes()
     _s3().put_object(Bucket=_bucket(), Key=key, Body=body)
     new_manifest = json.dumps({
         "generation": new_gen,
         "key": key,
-        "sha256": hashlib.sha256(body).hexdigest(),
+        "sha256": digest,
         "size": len(body),
         "uploaded_by": uploaded_by,
         "uploaded_at": datetime.now(timezone.utc).isoformat(),
@@ -188,13 +252,39 @@ def snapshot() -> str:
     return key
 
 
+def _push_ignore_conflict(db_path, uploaded_by: str) -> None:
+    """Push db_path; on SyncConflict, log loudly and leave the file alone.
+
+    Used by ``install_auto_push``'s debounced callback. A conflict means
+    another writer's generation raced ours: the OLD behaviour here used
+    to pull-and-replace the local file and re-push, which silently threw
+    away the just-committed local write (the very thing this push was
+    trying to persist) and replaced it with the remote winner's bytes.
+    Instead we do nothing to the local file — it will either get pushed
+    successfully on the next auto-push cycle (if this process's sidecar
+    catches up via a freshness pull first, that pull is itself skipped
+    while a push is pending — see ``auto_push_pending``) or be reconciled
+    /lost the next time this process pulls a newer generation.
+    """
+    try:
+        push(db_path, uploaded_by=uploaded_by)
+    except SyncConflict:
+        print(
+            "db_sync CONFLICT: local Streamlit write NOT pushed; will be "
+            "reconciled or lost at next freshness pull — generation raced "
+            "by another writer",
+            file=sys.stderr,
+        )
+
+
 def install_auto_push(session_factory, uploaded_by: str,
                       db_path: str, debounce_seconds: float = 5.0) -> None:
     """After any commit through session_factory, push the DB (debounced).
 
     Used by the Streamlit service so subscriber sign-ups and approval
     clicks survive redeploys. Push failures are logged, never raised
-    into the UI. On SyncConflict: pull + dispose engine + retry once.
+    into the UI. On SyncConflict: log loudly and leave the local file
+    alone — see ``_push_ignore_conflict``.
     """
     if not enabled():
         return
@@ -202,22 +292,24 @@ def install_auto_push(session_factory, uploaded_by: str,
     timer_box = {}
 
     def _do_push():
-        import database
+        with _pending_lock:
+            _pending_state["armed"] = False
+            _pending_state["in_flight"] = True
         try:
-            try:
-                push(db_path, uploaded_by=uploaded_by)
-            except SyncConflict:
-                pull(db_path)
-                database.engine.dispose()
-                push(db_path, uploaded_by=uploaded_by)
+            _push_ignore_conflict(db_path, uploaded_by)
         except Exception as exc:  # noqa: BLE001
             print(f"[db_sync] auto-push failed: {exc}", file=sys.stderr)
+        finally:
+            with _pending_lock:
+                _pending_state["in_flight"] = False
 
     @event.listens_for(session_factory, "after_commit")
     def _after_commit(session):  # noqa: ARG001
         t = timer_box.get("t")
         if t is not None:
             t.cancel()
+        with _pending_lock:
+            _pending_state["armed"] = True
         timer_box["t"] = threading.Timer(debounce_seconds, _do_push)
         timer_box["t"].daemon = True
         timer_box["t"].start()

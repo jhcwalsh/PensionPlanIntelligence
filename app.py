@@ -9,6 +9,7 @@ import io
 import json
 import os
 import re
+import sys
 import textwrap
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -191,16 +192,34 @@ def _ensure_fresh_db() -> bool:
     """Re-pull the DB from R2 when a writer pushed a new generation.
 
     TTL-cached so at most one manifest check per 5 minutes per process.
-    Returns True when the local file was replaced (engine disposed).
+    Returns True when the local file was replaced. The engine is
+    disposed and the cached session (``get_db_session``) is cleared
+    BEFORE the file swap via ``pre_replace`` — Windows can't replace a
+    file with open handles, and a stale cached session would otherwise
+    keep serving the old file's connections forever.
+
+    Skips the pull entirely while an auto-push is pending (debounce
+    timer armed or a push in flight) so we never yank the local file
+    out from under a just-committed local write. Any failure here (an
+    R2 blip, a transient network error) is caught and logged to stderr
+    rather than propagating — this must never error-page the site.
     """
-    from scripts import db_sync
-    if not db_sync.enabled():
+    try:
+        from scripts import db_sync
+        if not db_sync.enabled():
+            return False
+        if db_sync.auto_push_pending():
+            return False
+        import database
+
+        def _pre_replace():
+            database.engine.dispose()
+            get_db_session.clear()
+
+        return db_sync.pull(database.DB_PATH, pre_replace=_pre_replace)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[db_sync] freshness pull failed: {exc}", file=sys.stderr)
         return False
-    import database
-    if db_sync.pull(database.DB_PATH):
-        database.engine.dispose()
-        return True
-    return False
 
 
 @st.cache_resource(show_spinner=False)
