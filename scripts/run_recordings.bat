@@ -53,6 +53,13 @@ if errorlevel 1 (
     exit /b 1
 )
 
+echo [%TIME%] db_sync pull >> "%LOG%"
+python -m scripts.db_sync pull >> "%LOG%" 2>&1
+if errorlevel 1 (
+    python -m scripts.notify_failure %TASK% db_sync_pull "%LOG%" %ERRORLEVEL%
+    exit /b 1
+)
+
 echo [%TIME%] discover_video_sources.py >> "%LOG%"
 python discover_video_sources.py >> "%LOG%" 2>&1
 if errorlevel 1 (
@@ -87,6 +94,13 @@ if errorlevel 1 (
 
 REM Commit and push the metadata changes so the Streamlit catalogue on
 REM Render shows the new rows. Recording files themselves stay local.
+echo [%TIME%] db_sync push >> "%LOG%"
+python -m scripts.db_sync push --by %TASK% >> "%LOG%" 2>&1
+if errorlevel 1 (
+    python -m scripts.notify_failure %TASK% db_sync_push "%LOG%" %ERRORLEVEL%
+    exit /b 1
+)
+
 git add db/pension.db >> "%LOG%" 2>&1
 git diff-index --quiet HEAD
 if errorlevel 1 (

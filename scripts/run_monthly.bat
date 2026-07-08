@@ -38,6 +38,13 @@ if errorlevel 1 (
     exit /b 1
 )
 
+echo [%TIME%] db_sync pull >> "%LOG%"
+python -m scripts.db_sync pull >> "%LOG%" 2>&1
+if errorlevel 1 (
+    python -m scripts.notify_failure %TASK% db_sync_pull "%LOG%" %ERRORLEVEL%
+    exit /b 1
+)
+
 echo [%TIME%] refresh_cafrs.py --local-only >> "%LOG%"
 python refresh_cafrs.py --local-only >> "%LOG%" 2>&1
 if errorlevel 1 (
@@ -53,6 +60,13 @@ echo [%TIME%] extract_cafr_investments.py >> "%LOG%"
 python extract_cafr_investments.py >> "%LOG%" 2>&1
 if errorlevel 1 (
     python -m scripts.notify_failure %TASK% extract_cafr_investments "%LOG%" %ERRORLEVEL%
+    exit /b 1
+)
+
+echo [%TIME%] db_sync push >> "%LOG%"
+python -m scripts.db_sync push --by %TASK% >> "%LOG%" 2>&1
+if errorlevel 1 (
+    python -m scripts.notify_failure %TASK% db_sync_push "%LOG%" %ERRORLEVEL%
     exit /b 1
 )
 

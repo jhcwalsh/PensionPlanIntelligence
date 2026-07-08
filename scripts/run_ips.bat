@@ -46,6 +46,13 @@ if errorlevel 1 (
     exit /b 1
 )
 
+echo [%TIME%] db_sync pull >> "%LOG%"
+python -m scripts.db_sync pull >> "%LOG%" 2>&1
+if errorlevel 1 (
+    python -m scripts.notify_failure %TASK% db_sync_pull "%LOG%" %ERRORLEVEL%
+    exit /b 1
+)
+
 echo [%TIME%] refresh_ips.py >> "%LOG%"
 python refresh_ips.py >> "%LOG%" 2>&1
 if errorlevel 1 (
@@ -54,6 +61,13 @@ if errorlevel 1 (
 )
 
 REM Stage and commit only if something actually changed.
+echo [%TIME%] db_sync push >> "%LOG%"
+python -m scripts.db_sync push --by %TASK% >> "%LOG%" 2>&1
+if errorlevel 1 (
+    python -m scripts.notify_failure %TASK% db_sync_push "%LOG%" %ERRORLEVEL%
+    exit /b 1
+)
+
 git add db/pension.db >> "%LOG%" 2>&1
 git diff-index --quiet HEAD
 if errorlevel 1 (
