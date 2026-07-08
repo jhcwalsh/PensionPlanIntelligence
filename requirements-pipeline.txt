@@ -37,3 +37,6 @@ pydantic>=2.6,<3
 jsonschema==4.23.0
 structlog==24.4.0
 httpx==0.27.2
+
+# DB sync to R2
+boto3==1.43.42

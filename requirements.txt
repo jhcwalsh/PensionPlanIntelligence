@@ -5,3 +5,4 @@ pandas
 reportlab
 requests
 yt-dlp
+boto3
