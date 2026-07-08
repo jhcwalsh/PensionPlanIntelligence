@@ -186,6 +186,34 @@ def get_stats():
     return plans, docs, downloaded, summarized
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def _ensure_fresh_db() -> bool:
+    """Re-pull the DB from R2 when a writer pushed a new generation.
+
+    TTL-cached so at most one manifest check per 5 minutes per process.
+    Returns True when the local file was replaced (engine disposed).
+    """
+    from scripts import db_sync
+    if not db_sync.enabled():
+        return False
+    import database
+    if db_sync.pull(database.DB_PATH):
+        database.engine.dispose()
+        return True
+    return False
+
+
+@st.cache_resource(show_spinner=False)
+def _install_db_auto_push() -> bool:
+    """Once per process: push after any Streamlit-side DB commit."""
+    from scripts import db_sync
+    import database
+    db_sync.install_auto_push(database.SessionLocal,
+                              uploaded_by="streamlit",
+                              db_path=database.DB_PATH)
+    return True
+
+
 def parse_json_field(val):
     if not val:
         return []
@@ -3807,6 +3835,9 @@ def page_archive():
 
 
 def main():
+    _ensure_fresh_db()
+    _install_db_auto_push()
+
     plan_id, plan_label = render_sidebar()
 
     # Approval routing — handled before tabs so the magic-link click
