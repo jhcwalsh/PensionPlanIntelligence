@@ -95,12 +95,13 @@ jobs:
           python -m insights.scheduler weekly $ARGS
 
       - name: Push DB to R2
+        if: ${{ github.event.inputs.dry_run != 'true' }}
         env:
           R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
-        run: python -m scripts.db_sync push --by ${{ github.workflow }}
+        run: python -m scripts.db_sync push --by "${{ github.workflow }}"
 
       # Skip only when the manual dispatch explicitly checks "dry_run".
       # Scheduled runs have no inputs, so this fires for cron and for

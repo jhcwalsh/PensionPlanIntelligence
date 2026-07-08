@@ -84,12 +84,13 @@ jobs:
         run: python -m insights.scheduler monthly
 
       - name: Push DB to R2
+        if: ${{ github.event.inputs.dry_run != 'true' }}
         env:
           R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
-        run: python -m scripts.db_sync push --by ${{ github.workflow }}
+        run: python -m scripts.db_sync push --by "${{ github.workflow }}"
 
       - name: Commit DB + notes + cafr_summaries changes
         if: ${{ github.event.inputs.dry_run != 'true' }}
