@@ -177,3 +177,8 @@ def test_push_prunes_old_versions(r2):
     keys = [o["Key"] for o in boto3.client("s3").list_objects_v2(
         Bucket="pension-db", Prefix="versions/")["Contents"]]
     assert len(keys) == 10  # keeps last 10 generations
+
+
+def test_push_missing_source_raises(r2):
+    with pytest.raises(FileNotFoundError):
+        db_sync.push(r2 / "does-not-exist.db", uploaded_by="test")

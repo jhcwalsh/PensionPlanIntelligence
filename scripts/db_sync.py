@@ -158,6 +158,11 @@ def _snapshot_bytes(src: Path) -> bytes:
     files aren't subject to the torn-read race in the first place,
     since nothing is concurrently writing to them via SQLite.
     """
+    # sqlite3.connect() would happily CREATE an empty DB at a missing
+    # path — a mistyped --path on the initial seed would upload 4 KB of
+    # nothing as generation 1. Fail the way read_bytes() would have.
+    if not src.exists():
+        raise FileNotFoundError(src)
     fd, tmp_path = tempfile.mkstemp(suffix=".db")
     os.close(fd)
     try:
