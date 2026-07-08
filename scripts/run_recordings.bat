@@ -26,6 +26,8 @@ REM   scripts\run_recordings.bat --no-downloads    # poll + notify only
 REM ------------------------------------------------------------------------
 
 setlocal
+REM Rich console output crashes on cp1252 when redirected to a log file.
+set PYTHONIOENCODING=utf-8
 cd /d C:\Users\james\PycharmProjects\PensionPlanIntelligence
 if not exist logs mkdir logs
 set TASK=recordings
