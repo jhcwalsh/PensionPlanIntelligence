@@ -17,12 +17,14 @@ from scripts import db_sync
 @pytest.fixture
 def r2(monkeypatch, tmp_path):
     with mock_aws():
-        # Non-empty so enabled() is True; "moto" tells _s3() to use default endpoint.
+        # Set env vars so enabled() is True.
         monkeypatch.setenv("R2_ENDPOINT", "moto")
         monkeypatch.setenv("R2_ACCESS_KEY_ID", "test")
         monkeypatch.setenv("R2_SECRET_ACCESS_KEY", "test")
         monkeypatch.setenv("R2_BUCKET", "pension-db")
         db_sync._reset_client_cache()
+        # Monkeypatch _s3() to use boto3 directly so moto intercepts.
+        monkeypatch.setattr(db_sync, "_s3", lambda: boto3.client("s3"))
         boto3.client("s3").create_bucket(Bucket="pension-db")
         yield tmp_path
 

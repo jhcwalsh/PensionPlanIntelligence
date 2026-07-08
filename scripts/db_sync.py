@@ -58,16 +58,9 @@ def _s3():
     with _client_lock:
         if _client is None:
             import boto3
-            endpoint = os.environ.get("R2_ENDPOINT")
-            # For testing with moto, check for "moto" or localhost endpoints;
-            # use None endpoint to allow moto interception.
-            if endpoint and "moto" not in endpoint.lower() and "localhost" not in endpoint.lower() and "127.0.0.1" not in endpoint:
-                endpoint_url = endpoint
-            else:
-                endpoint_url = None
             _client = boto3.client(
                 "s3",
-                endpoint_url=endpoint_url,
+                endpoint_url=os.environ.get("R2_ENDPOINT") or None,
                 aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
                 aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
             )
