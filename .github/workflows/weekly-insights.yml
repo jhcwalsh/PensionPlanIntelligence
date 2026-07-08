@@ -69,6 +69,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-pipeline.txt
 
+      - name: Pull DB from R2
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: python -m scripts.db_sync pull
+
       - name: Compose weekly insights + send approval email
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -85,6 +93,14 @@ jobs:
             ARGS="$ARGS --force"
           fi
           python -m insights.scheduler weekly $ARGS
+
+      - name: Push DB to R2
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: python -m scripts.db_sync push --by ${{ github.workflow }}
 
       # Skip only when the manual dispatch explicitly checks "dry_run".
       # Scheduled runs have no inputs, so this fires for cron and for

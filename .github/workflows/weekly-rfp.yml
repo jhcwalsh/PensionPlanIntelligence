@@ -61,10 +61,26 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-pipeline.txt
 
+      - name: Pull DB from R2
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: python -m scripts.db_sync pull
+
       - name: Run RFP extraction
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python -m scripts.run_rfp_extraction --limit ${{ github.event.inputs.limit || '100' }}
+
+      - name: Push DB to R2
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: python -m scripts.db_sync push --by ${{ github.workflow }}
 
       - name: Commit DB changes
         if: ${{ github.event.inputs.dry_run != 'true' }}

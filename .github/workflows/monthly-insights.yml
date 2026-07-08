@@ -60,6 +60,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-pipeline.txt
 
+      - name: Pull DB from R2
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: python -m scripts.db_sync pull
+
       # NOTE: extract_cafr_investments.py used to run here, but it can't
       # see the PDF binaries — those are downloaded by the cafr-refresh
       # workflow on a different runner and never committed to git. Moved
@@ -74,6 +82,14 @@ jobs:
           APPROVAL_EMAIL_FROM: ${{ secrets.APPROVAL_EMAIL_FROM }}
           INSIGHTS_MODE: live
         run: python -m insights.scheduler monthly
+
+      - name: Push DB to R2
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: python -m scripts.db_sync push --by ${{ github.workflow }}
 
       - name: Commit DB + notes + cafr_summaries changes
         if: ${{ github.event.inputs.dry_run != 'true' }}

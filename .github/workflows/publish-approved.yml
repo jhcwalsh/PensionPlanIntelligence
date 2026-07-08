@@ -38,6 +38,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-pipeline.txt
 
+      - name: Pull DB from R2
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: python -m scripts.db_sync pull
+
       - name: Configure git author
         run: |
           git config user.name "github-actions[bot]"
@@ -45,6 +53,14 @@ jobs:
 
       - name: Publish publication
         run: python -m scripts.publish_pending --id "${{ inputs.publication_id }}"
+
+      - name: Push DB to R2
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: python -m scripts.db_sync push --by ${{ github.workflow }}
 
       - name: Commit notes + DB
         run: |
