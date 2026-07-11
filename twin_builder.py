@@ -447,29 +447,50 @@ def run_builder(plan_ids=None) -> None:
     run = TwinBuildRun()
     session.add(run); session.commit()
     errors = []
+    written = 0
+    plans = []
     try:
         q = session.query(Plan).order_by(Plan.id)
         if plan_ids:
             q = q.filter(Plan.id.in_(plan_ids))
         plans = q.all()
         run.plans_total = len(plans)
-        written = 0
         for plan in plans:
             try:
                 if save_snapshot(session, plan.id, build_twin(session, plan)):
                     written += 1
                     console.print(f"  [green]snapshot[/green] {plan.id}")
             except Exception as exc:  # noqa: BLE001
+                # A failure inside save_snapshot (e.g. database locked) can
+                # leave the session in a pending-rollback state; without
+                # rolling back here, every later plan's first session use
+                # raises PendingRollbackError instead of its own error.
+                session.rollback()
                 errors.append(f"{plan.id}: {exc}")
                 console.print(f"  [red]failed[/red] {plan.id}: {exc}")
-        run.snapshots_written = written
-        run.errors = json.dumps(errors)
-        run.status = "succeeded" if not errors else "failed"
-        run.completed_at = datetime.utcnow()
-        session.commit()
-        console.print(f"[bold]{written}/{len(plans)} snapshots written[/bold]")
     finally:
-        session.close()
+        try:
+            run.snapshots_written = written
+            run.errors = json.dumps(errors)
+            run.status = "succeeded" if not errors else "failed"
+            run.completed_at = datetime.utcnow()
+            session.commit()
+            console.print(f"[bold]{written}/{len(plans)} snapshots written[/bold]")
+        except Exception as exc:  # noqa: BLE001
+            # Never let bookkeeping itself blow up the build run: roll back
+            # and try once more so the run row still gets finalized.
+            try:
+                session.rollback()
+                run.snapshots_written = written
+                run.errors = json.dumps(errors)
+                run.status = "succeeded" if not errors else "failed"
+                run.completed_at = datetime.utcnow()
+                session.commit()
+            except Exception as exc2:  # noqa: BLE001
+                print(f"twin_builder: failed to finalize run {run.run_id}: {exc2}",
+                      file=sys.stderr)
+        finally:
+            session.close()
 
 
 def main():

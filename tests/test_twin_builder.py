@@ -4,7 +4,7 @@ from datetime import datetime
 
 from database import (
     CafrAllocation, CafrExtract, CafrPerformance, Document, Plan,
-    RFPRecord, Summary, TwinBuildRun, get_session, get_twin_snapshot,
+    RFPRecord, Summary, TwinBuildRun, TwinSnapshot, get_session, get_twin_snapshot,
 )
 import twin_builder
 
@@ -249,4 +249,64 @@ def test_governance_freshness_scoped_to_governance_types(tmp_db):
     assert freshness["rfp_state"] == "2026-06-01", \
         f"Expected rfp_state freshness to be 2026-06-01, got {freshness['rfp_state']}"
 
+    session.close()
+
+
+def test_run_builder_rolls_back_poisoned_session_and_finalizes_run(tmp_db, monkeypatch):
+    """Regression test: a mid-loop failure must not poison the session for
+    later plans, and the run's bookkeeping must still land.
+
+    Root cause: the per-plan ``except Exception`` handler didn't call
+    ``session.rollback()``. If save_snapshot fails after ``session.add()``
+    but before its own commit, the session is left in a dirty/pending state;
+    SQLAlchemy then raises PendingRollbackError on every subsequent use of
+    that session (including the later per-plan iterations and the final
+    bookkeeping commit at the end of run_builder), so the whole build run
+    blows up instead of just recording one failed plan.
+    """
+    session = get_session()
+    session.add_all([
+        Plan(id="badplan", name="Bad Plan", abbreviation="BAD", state="CA"),
+        Plan(id="goodplan", name="Good Plan", abbreviation="GOOD", state="CA"),
+    ])
+    session.commit()
+    session.close()
+
+    real_save_snapshot = twin_builder.save_snapshot
+
+    def fake_save_snapshot(session, plan_id, twin):
+        if plan_id == "badplan":
+            # Dirty the session with a row that violates a NOT NULL
+            # constraint (facets_hash) and flush it -- this is a real
+            # IntegrityError, which is what actually leaves a SQLAlchemy
+            # Session requiring a rollback() before it can be used again
+            # (a bare `session.add()` + a Python-level raise, with no
+            # flush, does NOT poison the session -- SQLAlchemy only marks
+            # the transaction as needing rollback after a real flush/DB
+            # error). We swallow the IntegrityError ourselves to mimic a
+            # caller that didn't roll back, then surface the failure as
+            # the RuntimeError run_builder is expected to catch.
+            session.add(TwinSnapshot(plan_id="badplan", schema_version="x",
+                                     facets="{}", facets_hash=None))
+            try:
+                session.flush()
+            except Exception:
+                pass
+            raise RuntimeError("boom for badplan")
+        return real_save_snapshot(session, plan_id, twin)
+
+    monkeypatch.setattr(twin_builder, "save_snapshot", fake_save_snapshot)
+
+    twin_builder.run_builder(["badplan", "goodplan"])  # must not raise
+
+    session = get_session()
+    good_snap = get_twin_snapshot(session, "goodplan")
+    assert good_snap is not None
+
+    run = session.query(TwinBuildRun).one()
+    assert run.status == "failed"
+    assert run.completed_at is not None
+    assert run.snapshots_written == 1
+    errors = json.loads(run.errors)
+    assert any("badplan" in e for e in errors)
     session.close()
