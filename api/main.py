@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.routes.rfps import router as rfps_router
+from api.routes import twins
 from rfp.logging_setup import configure_logging
 
 configure_logging()
@@ -67,3 +68,4 @@ def health() -> dict[str, str]:
 
 
 app.include_router(rfps_router)
+app.include_router(twins.router)

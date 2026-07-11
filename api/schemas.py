@@ -60,3 +60,29 @@ class RFPListResponse(BaseModel):
 class RFPStatsResponse(BaseModel):
     total: int
     by_type: dict[str, int]
+
+
+class TwinIndexRow(BaseModel):
+    plan_id: str
+    name: str
+    state: Optional[str] = None
+    aum_billions: Optional[float] = None
+    built_at: datetime
+    schema_version: str
+    completeness: dict
+    freshness: dict
+
+
+class TwinIndexResponse(BaseModel):
+    results: list[TwinIndexRow]
+    total: int
+
+
+class TwinResponse(BaseModel):
+    plan_id: str
+    built_at: datetime
+    schema_version: str
+    facets: dict
+    completeness: dict
+    freshness: dict
+    changed_facets: list[str]
