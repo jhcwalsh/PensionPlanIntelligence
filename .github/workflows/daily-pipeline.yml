@@ -83,6 +83,9 @@ jobs:
       - name: Pipeline status
         run: python pipeline.py --status
 
+      - name: Build twin snapshots
+        run: python twin_builder.py
+
       - name: Push DB to R2
         if: ${{ github.event.inputs.dry_run != 'true' }}
         env:
