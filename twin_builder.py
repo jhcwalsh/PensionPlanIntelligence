@@ -381,6 +381,16 @@ def _freshness(facets: dict) -> dict:
         if v
     ]
     rfp_freshness = max(rfp_dates) if rfp_dates else None
+
+    # Governance freshness: only from governance-type records (Consultant, Custodian, etc.)
+    governance_dates = [
+        v for rec in facets["rfp_state"]["records"]
+        if rec.get("rfp_type") in GOVERNANCE_RFP_TYPES
+        for v in (rec.get("release_date"), rec.get("response_due_date"), rec.get("award_date"))
+        if v
+    ]
+    governance_freshness = max(governance_dates) if governance_dates and facets["governance_people"]["relationships"] else None
+
     return {
         "identity": None,
         "policy": pol["as_of"] if pol else None,
@@ -389,7 +399,7 @@ def _freshness(facets: dict) -> dict:
         "manager_roster": max(roster_dates) if roster_dates else None,
         "activity_timeline": max(timeline_dates) if timeline_dates else None,
         "rfp_state": rfp_freshness,
-        "governance_people": rfp_freshness if facets["governance_people"]["relationships"] else None,
+        "governance_people": governance_freshness,
         "funding_actuarial": None,
     }
 

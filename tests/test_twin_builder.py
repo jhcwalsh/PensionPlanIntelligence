@@ -99,3 +99,61 @@ def test_builder_tolerates_empty_plan(tmp_db):
     assert facets["allocation"]["rows"] == []
     assert facets["funding_actuarial"] == {"status": "not_captured"}
     session.close()
+
+
+def test_governance_freshness_scoped_to_governance_types(tmp_db):
+    """Verify governance_people freshness ignores non-governance RFP types."""
+    session = get_session()
+    plan = Plan(id="testplan2", name="Test Plan 2", abbreviation="TP2",
+                state="CA", aum_billions=10.0, fiscal_year_end="06-30")
+    session.add(plan)
+    doc = Document(plan_id="testplan2", url="https://x/pack.pdf", filename="pack.pdf",
+                   doc_type="board_pack", extraction_status="done",
+                   meeting_date=datetime(2026, 6, 17))
+    session.add(doc); session.commit()
+
+    # Governance-type RFP with older award date
+    consultant_rec = RFPRecord(
+        rfp_id="governance_id", document_id=doc.id, plan_id="testplan2",
+        record=json.dumps({
+            "rfp_type": "Consultant", "status": "Awarded",
+            "title": "Consultant search", "asset_class": None,
+            "mandate_size_usd_millions": None,
+            "release_date": None, "response_due_date": None,
+            "award_date": "2026-01-01",
+            "incumbent_manager": None,
+            "awarded_manager": "Meketa"
+        }),
+        extraction_confidence=0.9, needs_review=False, prompt_version="rfp_v1"
+    )
+
+    # Non-governance RFP (Manager) with newer release date
+    manager_rec = RFPRecord(
+        rfp_id="manager_id", document_id=doc.id, plan_id="testplan2",
+        record=json.dumps({
+            "rfp_type": "Manager", "status": "In Progress",
+            "title": "Manager search", "asset_class": "Global Equity",
+            "mandate_size_usd_millions": 500,
+            "release_date": "2026-06-01", "response_due_date": None,
+            "award_date": None,
+            "incumbent_manager": None,
+            "awarded_manager": None
+        }),
+        extraction_confidence=0.9, needs_review=False, prompt_version="rfp_v1"
+    )
+
+    session.add_all([consultant_rec, manager_rec])
+    session.commit()
+
+    twin = twin_builder.build_twin(session, plan)
+    freshness = twin["freshness"]
+
+    # governance_people should only look at Consultant record (2026-01-01)
+    assert freshness["governance_people"] == "2026-01-01", \
+        f"Expected governance_people freshness to be 2026-01-01, got {freshness['governance_people']}"
+
+    # rfp_state should see both records, so the max date is from Manager (2026-06-01)
+    assert freshness["rfp_state"] == "2026-06-01", \
+        f"Expected rfp_state freshness to be 2026-06-01, got {freshness['rfp_state']}"
+
+    session.close()
