@@ -39,6 +39,7 @@ from database import (
     count_search_summaries,
     get_new_meetings,
     get_session,
+    get_twin_snapshot,
     init_db,
     search_summaries,
 )
@@ -514,6 +515,9 @@ def _render_activity_by_document(plan_id, plan_label, sort: str = "Most recent")
 
 
 def page_plans():
+    """Digital-twin index — one row per tracked plan, linking to its twin page."""
+    import pandas as pd
+
     st.title("Tracked Plans")
     session = get_db_session()
     plans = session.query(Plan).order_by(Plan.name).all()
@@ -522,20 +526,43 @@ def page_plans():
         st.warning("No plans loaded yet. Run the pipeline to initialize.")
         return
 
+    rows = []
     for plan in plans:
-        doc_count = session.query(Document).filter_by(plan_id=plan.id).count()
-        summary_count = (session.query(Summary)
-                         .join(Document)
-                         .filter(Document.plan_id == plan.id).count())
+        snap = get_twin_snapshot(session, plan.id)
+        if snap is not None:
+            comp = json.loads(snap.completeness or "{}")
+            completeness = f"{(sum(comp.values()) / len(comp)):.0%}" if comp else "—"
+            twin_built = snap.built_at.strftime("%Y-%m-%d") if snap.built_at else "—"
+        else:
+            completeness = "—"
+            twin_built = "—"
+        rows.append({
+            "Plan": plan.abbreviation or plan.id,
+            "Name": plan.name,
+            "State": plan.state or "—",
+            "AUM ($B)": plan.aum_billions,
+            "Twin built": twin_built,
+            "Completeness": completeness,
+            "Twin": f"?plan={plan.id}",
+        })
 
-        with st.expander(f"**{plan.abbreviation}** — {plan.name} ({plan.state})"):
-            col1, col2, col3, col4 = st.columns(4)
-            col1.metric("AUM", f"${plan.aum_billions:.0f}B" if plan.aum_billions else "—")
-            col2.metric("Documents", doc_count)
-            col3.metric("Summarized", summary_count)
-            col4.metric("State", plan.state or "—")
-            if plan.materials_url:
-                st.markdown(f"Materials page: [{plan.materials_url}]({plan.materials_url})")
+    df = pd.DataFrame(rows)
+    st.caption(
+        f"**{len(plans)} plan(s)** tracked. Click a row's link to open its "
+        "digital-twin detail page."
+    )
+    st.dataframe(
+        df,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Twin": st.column_config.LinkColumn(
+                "Twin",
+                display_text="open twin →",
+                help="Open the digital-twin detail page for this plan.",
+            ),
+        },
+    )
 
 
 def _truncate_words(text: str, max_words: int) -> tuple[str, bool]:
@@ -2380,6 +2407,19 @@ def _cafr_plan_detail_data(plan_id: str) -> dict:
     }
 
 
+def _twin_page_data(plan_id: str) -> dict:
+    """Load the latest twin snapshot for the twin detail page."""
+    session = get_db_session()
+    snap = get_twin_snapshot(session, plan_id)
+    if snap is None:
+        return {}
+    return {
+        "twin": json.loads(snap.facets),
+        "built_at": snap.built_at,
+        "changed_facets": json.loads(snap.changed_facets or "[]"),
+    }
+
+
 def page_cafr_plan_detail(plan_id: str) -> None:
     """Standalone detail page for one plan's CAFR extraction.
 
@@ -2515,6 +2555,101 @@ def page_cafr_plan_detail(plan_id: str) -> None:
     if extract.get("investment_policy_text"):
         with st.expander("Investment policy text", expanded=False):
             st.markdown(_safe_md(extract["investment_policy_text"]))
+
+
+def page_plan_twin(plan_id: str) -> None:
+    """Digital-twin detail page. Reached via ``?plan=<plan_id>``."""
+    import pandas as pd
+
+    data = _twin_page_data(plan_id)
+    if st.button("← Back to all plans", key="twin_back"):
+        st.query_params.clear()
+        st.rerun()
+    if not data:
+        st.warning(f"No twin snapshot for '{plan_id}' yet. Run: python twin_builder.py {plan_id}")
+        return
+    twin = data["twin"]
+    f = twin["facets"]
+    ident = f["identity"]
+    st.title(f"{ident['name']} — Digital Twin")
+
+    aum = ident.get("aum_billions", {}).get("v")
+    caption_parts = [p for p in (
+        ident.get("state"),
+        f"AUM ${aum:,.1f}B" if aum else None,
+    ) if p]
+    if caption_parts:
+        st.caption(" · ".join(caption_parts))
+    st.caption(
+        f"Snapshot built {data['built_at']:%Y-%m-%d} · schema {twin['schema_version']} — "
+        "every fact shows its as-of date; CAFR-derived facts can be a year old."
+    )
+
+    comp = twin.get("completeness", {})
+    fresh = twin.get("freshness", {})
+    cols = st.columns(len(comp) or 1)
+    for col, (facet, score) in zip(cols, sorted(comp.items())):
+        col.metric(facet.replace("_", " "), f"{score:.0%}",
+                   help=f"as of {fresh.get(facet) or 'n/a'}")
+
+    with st.expander("Policy", expanded=True):
+        pol = f["policy"].get("investment_policy_text")
+        if pol and pol.get("v"):
+            st.caption(f"as of {pol['as_of']} · [source](?doc={pol['src']['doc_id']})")
+            st.write(pol["v"])
+        else:
+            st.info("No CAFR policy text captured yet.")
+
+    with st.expander("Allocation vs targets", expanded=True):
+        rows = f["allocation"]["rows"]
+        if rows:
+            st.caption(f"FY{f['allocation']['fiscal_year']} · as of {f['allocation']['as_of']}")
+            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+        else:
+            st.info("No structured allocation captured yet.")
+
+    with st.expander("Performance", expanded=False):
+        rows = f["performance"]["rows"]
+        if rows:
+            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+        else:
+            st.info("No structured performance captured yet.")
+
+    with st.expander("Manager roster (observed activity)", expanded=False):
+        entries = f["manager_roster"]["entries"]
+        if entries:
+            st.dataframe(pd.DataFrame([
+                {"Manager": e["name_canonical"], "Status": e["status"],
+                 "Mentions": e["mention_count"], "First seen": e["first_seen"],
+                 "Last seen": e["last_seen"]}
+                for e in entries]), use_container_width=True, hide_index=True)
+        else:
+            st.info("No manager activity observed.")
+
+    with st.expander("Activity timeline", expanded=False):
+        for item in f["activity_timeline"]["items"][:30]:
+            label = item.get("action") or "decision"
+            line = (f"**{item.get('date') or '—'}** · {label} — "
+                    f"{item.get('description') or ''}")
+            if item.get("doc_id"):
+                line += f" ([doc](?doc={item['doc_id']}))"
+            st.markdown(line)
+
+    with st.expander("RFP / search state", expanded=False):
+        recs = f["rfp_state"]["records"]
+        if recs:
+            st.dataframe(pd.DataFrame(recs), use_container_width=True, hide_index=True)
+        else:
+            st.info("No RFP records for this plan.")
+
+    with st.expander("Governance & relationships", expanded=False):
+        rels = f["governance_people"]["relationships"]
+        if rels:
+            st.dataframe(pd.DataFrame(rels), use_container_width=True, hide_index=True)
+        else:
+            st.info("No relationships derived yet.")
+
+    st.info("Funding & actuarial data: not captured yet (twin v1).")
 
 
 ASSET_ALLOCATION_VIEWS = (
@@ -3882,6 +4017,11 @@ def main():
     cafr_plan_param = st.query_params.get("cafr_plan")
     if cafr_plan_param:
         page_cafr_plan_detail(cafr_plan_param)
+        return
+
+    plan_param = st.query_params.get("plan")
+    if plan_param:
+        page_plan_twin(plan_param)
         return
 
     confirm_param = st.query_params.get("confirm")
