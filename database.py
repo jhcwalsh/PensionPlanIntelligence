@@ -516,6 +516,49 @@ class PipelineRun(Base):
     status = Column(String, nullable=False, default="running")  # running|succeeded|failed
 
 
+class TwinSnapshot(Base):
+    """One materialized digital-twin state per plan per content change.
+
+    ``facets`` is the full twin JSON (see docs/superpowers/specs/
+    2026-07-10-digital-twin-design.md) stored via GzippedText. A row is
+    written only when ``facets_hash`` (sha256 of the canonical facets
+    JSON) differs from the plan's latest snapshot, so the table stays
+    small while still answering "what did we know on date X".
+    ``changed_facets`` (JSON list of facet names that differ from the
+    previous snapshot) is the future change-alert feed.
+    """
+
+    __tablename__ = "twin_snapshots"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    plan_id = Column(String, ForeignKey("plans.id"), nullable=False)
+    built_at = Column(DateTime, default=_utcnow, nullable=False)
+    schema_version = Column(String, nullable=False)
+    facets = Column(GzippedText)                      # full twin JSON (str)
+    facets_hash = Column(String(64), nullable=False)
+    changed_facets = Column(Text, default="[]")       # JSON list[str]
+    completeness = Column(Text, default="{}")         # JSON dict facet->0..1
+    freshness = Column(Text, default="{}")            # JSON dict facet->date|null
+
+    __table_args__ = (
+        Index("ix_twin_snapshots_plan_built", "plan_id", "built_at"),
+    )
+
+
+class TwinBuildRun(Base):
+    """One row per twin_builder invocation (mirrors PipelineRun)."""
+
+    __tablename__ = "twin_build_runs"
+
+    run_id = Column(String(32), primary_key=True, default=_new_run_id)
+    started_at = Column(DateTime, default=_utcnow, nullable=False)
+    completed_at = Column(DateTime)
+    plans_total = Column(Integer, default=0)
+    snapshots_written = Column(Integer, default=0)
+    errors = Column(Text, default="[]")               # JSON list of strings
+    status = Column(String, nullable=False, default="running")  # running|succeeded|failed
+
+
 class FetchRun(Base):
     """One row per pipeline.py invocation, capturing what was scraped.
 
@@ -1160,6 +1203,15 @@ def count_search_summaries(session: Session, query: str,
             pass
 
     return _ilike_search_query(session, query, plan_id).count()
+
+
+def get_twin_snapshot(session: Session, plan_id: str,
+                      as_of: "datetime | None" = None) -> "TwinSnapshot | None":
+    """Latest twin snapshot for a plan, optionally as known at ``as_of``."""
+    q = session.query(TwinSnapshot).filter(TwinSnapshot.plan_id == plan_id)
+    if as_of is not None:
+        q = q.filter(TwinSnapshot.built_at <= as_of)
+    return q.order_by(TwinSnapshot.built_at.desc(), TwinSnapshot.id.desc()).first()
 
 
 def aggregate_managers(session: Session) -> list[dict]:
