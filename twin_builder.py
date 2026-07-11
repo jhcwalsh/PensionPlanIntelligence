@@ -115,7 +115,11 @@ def _load_manager_mappings() -> dict:
         return {}
     out = {}
     for name, m in raw.items():
-        out[name] = m.get("canonical", name) if isinstance(m, dict) else (m or name)
+        # `m.get("canonical", name)` only falls back to `name` when the key is
+        # *missing*; entries with an explicit `"canonical": null` (real data
+        # has ~179 of these) return None here, which then propagates as
+        # entries[i]["name_canonical"] = None and breaks the str sort below.
+        out[name] = (m.get("canonical") or name) if isinstance(m, dict) else (m or name)
     return out
 
 
@@ -243,7 +247,7 @@ def build_roster_and_timeline(session, plan, mappings):
             if not manager_raw or not str(manager_raw).strip() \
                     or str(manager_raw).strip().upper() == "N/A":
                 continue
-            canonical = mappings.get(manager_raw, manager_raw)
+            canonical = mappings.get(manager_raw, manager_raw) or manager_raw
             entry = managers.setdefault(canonical, {
                 "name_raw": manager_raw, "name_canonical": canonical,
                 "mention_count": 0, "action_types": Counter(),
@@ -276,7 +280,14 @@ def build_roster_and_timeline(session, plan, mappings):
     now = datetime.utcnow()
     entries = []
     for canonical, entry in managers.items():
-        dated = sorted((d, a) for d, a in entry["_dated_actions"] if d is not None)
+        # Sort by date only: `action_type` (the second tuple element) can be
+        # None for some rows, and a plain tuple sort falls through to compare
+        # it whenever two actions share the exact same meeting_date (common
+        # when one document logs several actions for the same manager).
+        dated = sorted(
+            ((d, a) for d, a in entry["_dated_actions"] if d is not None),
+            key=lambda t: t[0],
+        )
         status = "unknown"
         if dated and dated[-1][1] == "fire":
             status = "terminated"
@@ -294,7 +305,10 @@ def build_roster_and_timeline(session, plan, mappings):
             "status": status,
             "doc_ids": sorted(entry["doc_ids"])[:20],
         })
-    entries.sort(key=lambda e: e["name_canonical"])
+    # None-safe defense in depth: name_canonical should always be a string
+    # now that _load_manager_mappings() never emits None, but sort on a
+    # (is_none, value) key so a future bad mapping can't crash the build.
+    entries.sort(key=lambda e: (e["name_canonical"] is None, e["name_canonical"] or ""))
 
     timeline_count = len(timeline_items)
     dated_items = [i for i in timeline_items if i["date"] is not None]

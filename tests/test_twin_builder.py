@@ -101,6 +101,99 @@ def test_builder_tolerates_empty_plan(tmp_db):
     session.close()
 
 
+def test_build_twin_handles_none_and_dated_meeting_dates(tmp_db):
+    """Undated documents (meeting_date=None) must not break sorting/min/max
+    against dated (ISO string) documents anywhere in the facet builders."""
+    session = get_session()
+    plan = Plan(id="mixedplan", name="Mixed Plan", abbreviation="MP",
+                state="CA", aum_billions=5.0, fiscal_year_end="06-30")
+    session.add(plan)
+    undated_doc = Document(plan_id="mixedplan", url="https://x/undated.pdf",
+                           filename="undated.pdf", doc_type="board_pack",
+                           extraction_status="done", meeting_date=None)
+    dated_doc = Document(plan_id="mixedplan", url="https://x/dated.pdf",
+                         filename="dated.pdf", doc_type="board_pack",
+                         extraction_status="done", meeting_date=datetime(2026, 6, 17))
+    session.add_all([undated_doc, dated_doc]); session.commit()
+    session.add_all([
+        Summary(document_id=undated_doc.id, summary_text="undated summary",
+                investment_actions=json.dumps([{"action": "hire", "manager": "Undated Mgr",
+                                                "asset_class": "Private Credit",
+                                                "amount_millions": 50,
+                                                "description": "hired Undated Mgr"}]),
+                decisions=json.dumps([])),
+        Summary(document_id=dated_doc.id, summary_text="dated summary",
+                investment_actions=json.dumps([{"action": "hire", "manager": "Dated Mgr",
+                                                "asset_class": "Public Equity",
+                                                "amount_millions": 75,
+                                                "description": "hired Dated Mgr"}]),
+                decisions=json.dumps([{"description": "Approved policy change", "vote": "8-1"}])),
+    ])
+    session.commit()
+
+    twin = twin_builder.build_twin(session, plan)
+    facets = twin["facets"]
+
+    items = facets["activity_timeline"]["items"]
+    assert len(items) == 3
+    assert items[0]["date"] is not None
+    assert items[1]["date"] is not None
+    assert items[2]["date"] is None
+
+    roster = {e["name_raw"]: e for e in facets["manager_roster"]["entries"]}
+    assert set(roster) == {"Undated Mgr", "Dated Mgr"}
+    assert roster["Undated Mgr"]["first_seen"] is None
+    assert roster["Undated Mgr"]["last_seen"] is None
+    assert roster["Undated Mgr"]["status"] == "unknown"
+
+    session.close()
+
+
+def test_manager_canonical_none_and_tied_action_dates_are_safe(tmp_db, monkeypatch):
+    """Regression test for the real 57/148 production crash.
+
+    Root cause: data/manager_mappings.json has ~179 entries with an explicit
+    ``"canonical": null``; ``_load_manager_mappings()`` used to return that
+    None straight through, so ``entries.sort(key=lambda e: e["name_canonical"])``
+    blew up comparing None to str. Also covers a second latent site: two
+    investment actions for the same manager on the same document (identical
+    meeting_date) where one action has no "action" field (None) — the old
+    ``sorted((d, a) for ...)`` tuple sort would compare the None action
+    against a string action whenever dates tied.
+    """
+    monkeypatch.setattr(twin_builder, "_load_manager_mappings",
+                        lambda: {"Broken Mapping Co": None})
+
+    session = get_session()
+    plan = Plan(id="brokenmap", name="Broken Map Plan", abbreviation="BMP",
+                state="CA", aum_billions=1.0, fiscal_year_end="06-30")
+    session.add(plan)
+    doc = Document(plan_id="brokenmap", url="https://x/pack.pdf", filename="pack.pdf",
+                   doc_type="board_pack", extraction_status="done",
+                   meeting_date=datetime(2026, 6, 17))
+    session.add(doc); session.commit()
+    session.add(Summary(
+        document_id=doc.id, summary_text="s",
+        investment_actions=json.dumps([
+            {"action": None, "manager": "Broken Mapping Co",
+             "asset_class": "Private Credit", "amount_millions": 10,
+             "description": "undated-action-type entry"},
+            {"action": "hire", "manager": "Broken Mapping Co",
+             "asset_class": "Private Credit", "amount_millions": 20,
+             "description": "hired Broken Mapping Co"},
+        ]),
+        decisions=json.dumps([]),
+    ))
+    session.commit()
+
+    twin = twin_builder.build_twin(session, plan)  # must not raise TypeError
+    roster = twin["facets"]["manager_roster"]["entries"]
+    assert len(roster) == 1
+    assert roster[0]["name_raw"] == "Broken Mapping Co"
+    assert roster[0]["name_canonical"] == "Broken Mapping Co"  # None mapping falls back to raw name
+    session.close()
+
+
 def test_governance_freshness_scoped_to_governance_types(tmp_db):
     """Verify governance_people freshness ignores non-governance RFP types."""
     session = get_session()
