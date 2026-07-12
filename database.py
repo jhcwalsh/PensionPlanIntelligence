@@ -63,6 +63,11 @@ class Base(DeclarativeBase):
     pass
 
 
+def _utcnow() -> datetime:
+    """Return current UTC time with timezone awareness."""
+    return datetime.now(timezone.utc)
+
+
 # ---------------------------------------------------------------------------
 # Models
 # ---------------------------------------------------------------------------
@@ -216,6 +221,137 @@ class CafrPerformance(Base):
     __table_args__ = (
         Index("ix_cafr_perf_extract", "cafr_extract_id"),
         Index("ix_cafr_perf_lookup", "cafr_extract_id", "scope", "period"),
+    )
+
+
+class IpsExtract(Base):
+    """Extracted allocation and governance data from an Investment Policy Statement (IPS).
+
+    One row per IPS document we've structured; idempotent on ips_document_id
+    per prompt_version so a prompt bump triggers re-extraction.
+    """
+    __tablename__ = "ips_extracts"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    plan_id = Column(String, ForeignKey("plans.id"), nullable=False)
+    ips_document_id = Column(Integer, ForeignKey("ips_documents.id"), nullable=False, unique=True)
+    extracted_at = Column(DateTime, default=_utcnow, nullable=False)
+    model_used = Column(String)
+    prompt_version = Column(String)
+    text_hash = Column(String)                       # sha256 of the IPS text
+    target_return_pct = Column(Float)
+    effective_date = Column(String(10))              # YYYY-MM-DD
+    adopted_date = Column(String(10))                # YYYY-MM-DD
+    objectives = Column(Text)                        # JSON
+    rebalancing_policy = Column(Text)                # JSON
+    permitted_prohibited = Column(Text)              # JSON
+    governance = Column(Text)                        # JSON
+    manager_structure = Column(Text)                 # JSON
+    esg_divestment_text = Column(Text)               # JSON
+    notes = Column(Text)
+
+    plan = relationship("Plan")
+    ips_document = relationship("IpsDocument")
+    allocations = relationship("IpsAllocation", back_populates="extract",
+                               cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index("ix_ips_extract_plan", "plan_id"),
+    )
+
+
+class IpsAllocation(Base):
+    """Long-form asset-allocation row: one per (IPS extract, asset class)."""
+    __tablename__ = "ips_allocations"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    ips_extract_id = Column(Integer, ForeignKey("ips_extracts.id"), nullable=False)
+    asset_class = Column(String, nullable=False)     # raw, as stated in IPS
+    target_pct = Column(Float)
+    range_low = Column(Float)
+    range_high = Column(Float)
+
+    extract = relationship("IpsExtract", back_populates="allocations")
+
+    __table_args__ = (
+        Index("ix_ips_allocation_extract", "ips_extract_id"),
+    )
+
+
+class CafrActuarial(Base):
+    """Extracted actuarial data from a CAFR document.
+
+    One row per CAFR document we've extracted actuarial metrics from;
+    idempotent on (plan_id, document_id) so each document yields at most
+    one row across all prompt versions.
+    """
+    __tablename__ = "cafr_actuarial"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    plan_id = Column(String, ForeignKey("plans.id"), nullable=False)
+    document_id = Column(Integer, ForeignKey("documents.id"), nullable=False, unique=True)
+    fiscal_year = Column(Integer)
+    valuation_date = Column(String(10))              # YYYY-MM-DD
+    funded_ratio_pct = Column(Float)
+    market_funded_ratio_pct = Column(Float)
+    actuarial_value_assets_millions = Column(Float)
+    actuarial_accrued_liability_millions = Column(Float)
+    unfunded_aal_millions = Column(Float)
+    net_pension_liability_millions = Column(Float)
+    discount_rate_pct = Column(Float)
+    assumed_return_pct = Column(Float)
+    inflation_pct = Column(Float)
+    payroll_growth_pct = Column(Float)
+    amortization_years = Column(Float)
+    employer_contribution_rate_pct = Column(Float)
+    employee_contribution_rate_pct = Column(Float)
+    adc_millions = Column(Float)                     # Annual Defined Contribution
+    adc_pct_contributed = Column(Float)
+    members_active = Column(Integer)
+    members_retired = Column(Integer)
+    actuary_firm = Column(String)
+    extracted_at = Column(DateTime, default=_utcnow, nullable=False)
+    model_used = Column(String)
+    prompt_version = Column(String)
+    text_hash = Column(String)                       # sha256 of the source text
+    pages_used = Column(String)                      # e.g. "10-23"
+    notes = Column(Text)
+
+    plan = relationship("Plan")
+    document = relationship("Document")
+
+    __table_args__ = (
+        Index("ix_cafr_actuarial_plan", "plan_id"),
+        Index("ix_cafr_actuarial_plan_fy", "plan_id", "fiscal_year"),
+    )
+
+
+class PlanManagerRoster(Base):
+    """Asset manager, consultant, custodian, or actuary associated with a plan.
+
+    One row per (plan, canonical_name, role) — captures the roster of
+    external service providers and their asset-class assignments over time.
+    """
+    __tablename__ = "plan_manager_roster"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    plan_id = Column(String, ForeignKey("plans.id"), nullable=False)
+    canonical_name = Column(String, nullable=False)
+    role = Column(String, nullable=False)             # manager|consultant|custodian|actuary
+    asset_class_raw = Column(String)                 # raw text from source
+    asset_class_canonical = Column(String)           # mapped to ASSET_CLASS_CANONICAL
+    status = Column(String, nullable=False)          # current|terminated|unknown
+    first_seen = Column(String(10))                  # YYYY-MM-DD
+    last_seen = Column(String(10))                   # YYYY-MM-DD
+    evidence = Column(Text)                          # JSON: array of {source, date, context}
+    confidence = Column(Float)
+    derived_at = Column(DateTime, default=_utcnow, nullable=False)
+
+    plan = relationship("Plan")
+
+    __table_args__ = (
+        UniqueConstraint("plan_id", "canonical_name", "role", name="uq_roster_plan_name_role"),
+        Index("ix_roster_plan", "plan_id"),
     )
 
 
@@ -448,10 +584,6 @@ RFP_REVIEW_CONFIDENCE_THRESHOLD = 0.70
 # regression analysis; the orchestrator re-extracts when prompt_version
 # changes.
 RFP_PROMPT_VERSION = "rfp_v1"
-
-
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 def _new_run_id() -> str:
@@ -749,6 +881,24 @@ VIDEO_PLATFORMS = (
     "other",
     "none",        # confirmed: this plan does NOT post video
     "unknown",     # not yet researched
+)
+
+# Canonical asset class taxonomy for twin v1 manager roster and allocations.
+ASSET_CLASS_CANONICAL = (
+    "public_equity_us",
+    "public_equity_non_us",
+    "public_equity_global",
+    "fixed_income_core",
+    "fixed_income_credit",
+    "private_equity",
+    "private_credit",
+    "real_estate",
+    "real_assets_infrastructure",
+    "hedge_funds_absolute_return",
+    "cash_short_term",
+    "opportunistic_other",
+    "total",
+    "unmapped",
 )
 
 
