@@ -2596,17 +2596,70 @@ def page_plan_twin(plan_id: str) -> None:
         pol = f["policy"].get("investment_policy_text")
         if pol and pol.get("v"):
             st.caption(f"as of {pol['as_of']} · [source](?doc={pol['src']['doc_id']})")
-            st.write(pol["v"])
+            st.markdown(_safe_md(pol["v"]))
         else:
             st.info("No CAFR policy text captured yet.")
+
+        ips = f["policy"].get("ips")
+        if ips:
+            st.markdown("#### IPS (structured)")
+            # NB: ips["src"]["doc_id"] is an ips_documents.id, not a documents.id —
+            # never render it as a ?doc= deep link (see task-7 brief warning).
+            caption_bits = [
+                f"effective {ips['effective_date']}" if ips.get("effective_date") else None,
+                f"as of {ips['as_of']}" if ips.get("as_of") else None,
+            ]
+            caption = " · ".join(p for p in caption_bits if p)
+            if caption:
+                st.caption(caption)
+            if ips.get("target_return_pct") is not None:
+                st.metric("Target return", f"{ips['target_return_pct']:.1f}%")
+            rebal = ips.get("rebalancing_policy") or {}
+            freq = rebal.get("frequency") if isinstance(rebal, dict) else None
+            if freq:
+                st.markdown(f"**Rebalancing frequency:** {_safe_md(str(freq))}")
+            elif rebal:
+                st.write("**Rebalancing policy:**", rebal)
+            permitted = ips.get("permitted") or []
+            prohibited = ips.get("prohibited") or []
+            if permitted:
+                st.markdown("**Permitted:** " + _safe_md(", ".join(str(p) for p in permitted)))
+            if prohibited:
+                st.markdown("**Prohibited:** " + _safe_md(", ".join(str(p) for p in prohibited)))
 
     with st.expander("Allocation vs targets", expanded=True):
         rows = f["allocation"]["rows"]
         if rows:
             st.caption(f"FY{f['allocation']['fiscal_year']} · as of {f['allocation']['as_of']}")
-            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+            df_alloc = pd.DataFrame([
+                {"Asset class (raw)": r.get("asset_class_raw"),
+                 "Asset class (canonical)": r.get("asset_class_canonical"),
+                 "Target %": r.get("target_pct"),
+                 "Actual %": r.get("actual_pct"),
+                 "Range low %": r.get("range_low"),
+                 "Range high %": r.get("range_high"),
+                 "Drift %": r.get("drift_pct"),
+                 "Outside range": r.get("outside_range")}
+                for r in rows
+            ])
+            st.dataframe(df_alloc, use_container_width=True, hide_index=True)
         else:
             st.info("No structured allocation captured yet.")
+
+        ips_targets = f["allocation"].get("ips_targets")
+        if ips_targets and ips_targets.get("rows"):
+            st.markdown("#### IPS policy targets")
+            # NB: same doc-id-namespace caveat as above — as-of caption only, no source link.
+            st.caption(f"as of {ips_targets.get('as_of')}")
+            df_ips_targets = pd.DataFrame([
+                {"Asset class (raw)": r.get("asset_class_raw"),
+                 "Asset class (canonical)": r.get("asset_class_canonical"),
+                 "Target %": r.get("target_pct"),
+                 "Range low %": r.get("range_low"),
+                 "Range high %": r.get("range_high")}
+                for r in ips_targets["rows"]
+            ])
+            st.dataframe(df_ips_targets, use_container_width=True, hide_index=True)
 
     with st.expander("Performance", expanded=False):
         rows = f["performance"]["rows"]
@@ -2618,19 +2671,31 @@ def page_plan_twin(plan_id: str) -> None:
     with st.expander("Manager roster (observed activity)", expanded=False):
         entries = f["manager_roster"]["entries"]
         if entries:
-            st.dataframe(pd.DataFrame([
-                {"Manager": e["name_canonical"], "Status": e["status"],
-                 "Mentions": e["mention_count"], "First seen": e["first_seen"],
-                 "Last seen": e["last_seen"]}
-                for e in entries]), use_container_width=True, hide_index=True)
+            has_roster_detail = any(
+                e.get("role") is not None
+                or e.get("asset_class_canonical") is not None
+                or e.get("confidence") is not None
+                for e in entries
+            )
+            roster_rows = []
+            for e in entries:
+                row = {"Manager": e["name_canonical"], "Status": e["status"],
+                       "Mentions": e["mention_count"], "First seen": e["first_seen"],
+                       "Last seen": e["last_seen"]}
+                if has_roster_detail:
+                    row["Role"] = e.get("role") or ""
+                    row["Asset class (canonical)"] = e.get("asset_class_canonical") or ""
+                    row["Confidence"] = e.get("confidence")
+                roster_rows.append(row)
+            st.dataframe(pd.DataFrame(roster_rows), use_container_width=True, hide_index=True)
         else:
             st.info("No manager activity observed.")
 
     with st.expander("Activity timeline", expanded=False):
         for item in f["activity_timeline"]["items"][:30]:
             label = item.get("action") or "decision"
-            line = (f"**{item.get('date') or '—'}** · {label} — "
-                    f"{item.get('description') or ''}")
+            desc = _safe_md(item.get("description") or "")
+            line = f"**{item.get('date') or '—'}** · {label} — {desc}"
             if item.get("doc_id"):
                 line += f" ([doc](?doc={item['doc_id']}))"
             st.markdown(line)
@@ -2649,7 +2714,54 @@ def page_plan_twin(plan_id: str) -> None:
         else:
             st.info("No relationships derived yet.")
 
-    st.info("Funding & actuarial data: not captured yet (twin v1).")
+    with st.expander("Funding & actuarial", expanded=True):
+        fund = f["funding_actuarial"]
+        if fund.get("status") == "captured":
+            metrics = fund.get("metrics", {})
+            fy = fund.get("fiscal_year")
+            caption_bits = [
+                f"FY{fy}" if fy else None,
+                f"as of {fund['as_of']}" if fund.get("as_of") else None,
+            ]
+            caption = " · ".join(p for p in caption_bits if p)
+            src = fund.get("src") or {}
+            doc_id = src.get("doc_id")
+            if doc_id:
+                caption = (caption + " · " if caption else "") + f"[source](?doc={doc_id})"
+            if caption:
+                st.caption(caption)
+
+            def _fmt_pct(v):
+                return f"{v:.1f}%" if v is not None else "—"
+
+            def _fmt_m(v):
+                return f"${v:,.1f}M" if v is not None else "—"
+
+            def _fmt_int(v):
+                return f"{v:,.0f}" if v is not None else "—"
+
+            row1 = st.columns(3)
+            row1[0].metric("Funded ratio (actuarial)", _fmt_pct(metrics.get("funded_ratio_pct")))
+            row1[1].metric("Funded ratio (market)", _fmt_pct(metrics.get("market_funded_ratio_pct")))
+            row1[2].metric("Discount rate", _fmt_pct(metrics.get("discount_rate_pct")))
+
+            row2 = st.columns(3)
+            row2[0].metric("Unfunded AAL", _fmt_m(metrics.get("unfunded_aal_millions")))
+            row2[1].metric("Net pension liability", _fmt_m(metrics.get("net_pension_liability_millions")))
+            amort = metrics.get("amortization_years")
+            row2[2].metric("Amortization period", f"{amort:.0f} yrs" if amort is not None else "—")
+
+            row3 = st.columns(3)
+            row3[0].metric("Employer contribution rate", _fmt_pct(metrics.get("employer_contribution_rate_pct")))
+            row3[1].metric("Employee contribution rate", _fmt_pct(metrics.get("employee_contribution_rate_pct")))
+            row3[2].metric("ADC % contributed", _fmt_pct(metrics.get("adc_pct_contributed")))
+
+            row4 = st.columns(3)
+            row4[0].metric("Active members", _fmt_int(metrics.get("members_active")))
+            row4[1].metric("Retired members", _fmt_int(metrics.get("members_retired")))
+            row4[2].metric("Actuary", metrics.get("actuary_firm") or "—")
+        else:
+            st.info("Funding & actuarial data: not captured yet (twin v1).")
 
 
 ASSET_ALLOCATION_VIEWS = (
