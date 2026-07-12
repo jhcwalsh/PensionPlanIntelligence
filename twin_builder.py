@@ -33,6 +33,7 @@ TWIN_SCHEMA_VERSION = "twin_v0"
 KEEP_RECENT = 8
 GOVERNANCE_RFP_TYPES = ("Consultant", "Custodian", "Actuary", "Audit", "Legal")
 MANAGER_MAPPINGS_PATH = Path(__file__).parent / "data" / "manager_mappings.json"
+ASSET_CLASS_MAPPINGS_PATH = Path(__file__).parent / "data" / "asset_class_mappings.json"
 
 
 def _canonical_hash(facets: dict) -> str:
@@ -121,6 +122,50 @@ def _load_manager_mappings() -> dict:
         # entries[i]["name_canonical"] = None and breaks the str sort below.
         out[name] = (m.get("canonical") or name) if isinstance(m, dict) else (m or name)
     return out
+
+
+def load_asset_class_mappings() -> dict[str, str]:
+    """Load asset-class label mappings from data/asset_class_mappings.json.
+
+    Returns a dict mapping raw label strings to canonical asset-class names.
+    Entry values may be dicts with {"canonical": ...} or plain strings;
+    both are normalized to strings. Missing file returns {}.
+    """
+    try:
+        raw = json.loads(ASSET_CLASS_MAPPINGS_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    out = {}
+    for label, m in raw.items():
+        # Handle both dict entries {"canonical": "..."} and plain strings
+        out[label] = m.get("canonical") if isinstance(m, dict) else m
+    return out
+
+
+def canonical_asset_class(raw: str | None, mappings: dict[str, str]) -> str:
+    """Map a raw asset-class label to canonical form.
+
+    Args:
+        raw: raw asset-class label string (may be None or empty)
+        mappings: dict from raw labels to canonical names
+
+    Returns:
+        A canonical asset-class name from ASSET_CLASS_CANONICAL, or "unmapped".
+        Returns "unmapped" for None/empty input, unmapped labels, or labels
+        that map to values not in ASSET_CLASS_CANONICAL.
+    """
+    from database import ASSET_CLASS_CANONICAL
+
+    if not raw or not str(raw).strip():
+        return "unmapped"
+
+    raw_str = str(raw).strip()
+    canonical = mappings.get(raw_str)
+
+    if canonical is None or canonical not in ASSET_CLASS_CANONICAL:
+        return "unmapped"
+
+    return canonical
 
 
 def _parse_json_list(text):
