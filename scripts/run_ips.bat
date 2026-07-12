@@ -60,6 +60,13 @@ if errorlevel 1 (
     exit /b 1
 )
 
+echo [%TIME%] extract_ips.py >> "%LOG%"
+python extract_ips.py >> "%LOG%" 2>&1
+if errorlevel 1 (
+    python -m scripts.notify_failure %TASK% extract_ips "%LOG%" %ERRORLEVEL%
+    exit /b 1
+)
+
 REM Stage and commit only if something actually changed.
 echo [%TIME%] db_sync push >> "%LOG%"
 python -m scripts.db_sync push --by %TASK% >> "%LOG%" 2>&1

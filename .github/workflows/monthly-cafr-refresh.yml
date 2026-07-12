@@ -79,6 +79,16 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python extract_cafr_investments.py
 
+      - name: Extract CAFR actuarial data
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python extract_cafr_actuarial.py
+
+      - name: Refresh asset-class mappings
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python -m scripts.normalize_asset_classes
+
       - name: Build twin snapshots
         run: python twin_builder.py
 
@@ -96,7 +106,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add db/pension.db
+          git add db/pension.db data/asset_class_mappings.json
           if git diff --staged --quiet; then
             echo "No DB changes to commit."
           else

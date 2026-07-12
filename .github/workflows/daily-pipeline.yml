@@ -83,6 +83,9 @@ jobs:
       - name: Pipeline status
         run: python pipeline.py --status
 
+      - name: Rebuild manager rosters
+        run: python -m scripts.build_manager_roster
+
       - name: Build twin snapshots
         run: python twin_builder.py
 
