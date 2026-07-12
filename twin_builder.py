@@ -493,6 +493,7 @@ def build_roster_and_timeline(session, plan, mappings):
     roster_rows = (
         session.query(PlanManagerRoster)
         .filter(PlanManagerRoster.plan_id == plan.id)
+        .order_by(PlanManagerRoster.canonical_name, PlanManagerRoster.role)
         .all()
     )
     if roster_rows:
@@ -515,7 +516,11 @@ def build_roster_and_timeline(session, plan, mappings):
                 "mention_count": sum(action_types.values()),
                 "action_types": action_types,
             })
-        entries.sort(key=lambda e: (e["name_canonical"] is None, e["name_canonical"] or ""))
+        entries.sort(key=lambda e: (
+            e["name_canonical"] is None,
+            e["name_canonical"] or "",
+            e["role"] or "",
+        ))
 
     manager_roster = {"entries": entries}
     activity_timeline = {"count": timeline_count, "items": timeline_items[:100]}

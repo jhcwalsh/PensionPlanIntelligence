@@ -360,3 +360,111 @@ def test_v0_shape_preserved_without_v1_data(tmp_db):
     assert f["policy"]["ips"] is None
     assert f["allocation"]["ips_targets"] is None
     session.close()
+
+
+def test_deterministic_roster_entry_ordering_with_same_canonical_name(tmp_db):
+    """Regression: roster entries with same canonical_name under different roles
+    must maintain consistent order regardless of database insertion order.
+
+    Root cause: the PlanManagerRoster query had no ORDER BY, and entries were
+    sorted only by name_canonical. When "Aon" appeared as both "consultant"
+    and "manager", insertion order determined the final order, causing facets
+    hash to flip spuriously on each rebuild.
+
+    Fix: add ORDER BY (canonical_name, role) to the query and sort entries
+    by (name_canonical, role) as well.
+    """
+    from database import PlanManagerRoster
+
+    session = get_session()
+
+    # Seed a plan with two roster entries: same canonical_name, different roles
+    plan = Plan(id="roster_test", name="Roster Test Plan", abbreviation="RTP",
+                state="CA", aum_billions=5.0, fiscal_year_end="06-30")
+    session.add(plan)
+    session.commit()
+
+    # Insert in forward order: consultant first, then manager
+    roster_1 = PlanManagerRoster(
+        plan_id="roster_test",
+        canonical_name="Aon",
+        role="consultant",
+        asset_class_raw=None,
+        asset_class_canonical=None,
+        status="current",
+        first_seen="2026-01-01",
+        last_seen="2026-06-30",
+        evidence='{"doc_ids": []}',
+        confidence=0.9,
+    )
+    roster_2 = PlanManagerRoster(
+        plan_id="roster_test",
+        canonical_name="Aon",
+        role="manager",
+        asset_class_raw="Equity",
+        asset_class_canonical="public_equity_global",
+        status="current",
+        first_seen="2026-02-01",
+        last_seen="2026-06-15",
+        evidence='{"doc_ids": []}',
+        confidence=0.95,
+    )
+    session.add_all([roster_1, roster_2])
+    session.commit()
+
+    # Build twin and capture order and hash
+    twin_1 = twin_builder.build_twin(session, plan)
+    entries_1 = twin_1["facets"]["manager_roster"]["entries"]
+    hash_1 = twin_builder._canonical_hash(twin_1["facets"])
+
+    # Verify we have two entries
+    assert len(entries_1) == 2
+    # Capture the order of roles in first build
+    roles_order_1 = [e["role"] for e in entries_1]
+
+    # Delete and re-insert in REVERSE order: manager first, then consultant
+    session.query(PlanManagerRoster).filter(PlanManagerRoster.plan_id == "roster_test").delete()
+    session.commit()
+
+    roster_2_reversed = PlanManagerRoster(
+        plan_id="roster_test",
+        canonical_name="Aon",
+        role="manager",
+        asset_class_raw="Equity",
+        asset_class_canonical="public_equity_global",
+        status="current",
+        first_seen="2026-02-01",
+        last_seen="2026-06-15",
+        evidence='{"doc_ids": []}',
+        confidence=0.95,
+    )
+    roster_1_reversed = PlanManagerRoster(
+        plan_id="roster_test",
+        canonical_name="Aon",
+        role="consultant",
+        asset_class_raw=None,
+        asset_class_canonical=None,
+        status="current",
+        first_seen="2026-01-01",
+        last_seen="2026-06-30",
+        evidence='{"doc_ids": []}',
+        confidence=0.9,
+    )
+    session.add_all([roster_2_reversed, roster_1_reversed])
+    session.commit()
+
+    # Build twin again after reversed insertion order
+    twin_2 = twin_builder.build_twin(session, plan)
+    entries_2 = twin_2["facets"]["manager_roster"]["entries"]
+    hash_2 = twin_builder._canonical_hash(twin_2["facets"])
+
+    # Capture the order of roles in second build
+    roles_order_2 = [e["role"] for e in entries_2]
+
+    # ASSERTIONS: order and hash must be identical
+    assert roles_order_1 == roles_order_2, \
+        f"Entry order changed: {roles_order_1} vs {roles_order_2}"
+    assert hash_1 == hash_2, \
+        f"Facets hash should be deterministic, but got {hash_1} vs {hash_2}"
+
+    session.close()
