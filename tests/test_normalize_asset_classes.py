@@ -40,3 +40,18 @@ def test_classify_batch_mock(monkeypatch):
     monkeypatch.setenv("LLM_MODE", "mock")
     out = nac._classify_batch(None, ["Global Equity"])
     assert out == {"Global Equity": {"canonical": "unmapped", "confidence": "low"}}
+
+
+def test_mappings_save_load_roundtrip_non_ascii(tmp_path, monkeypatch):
+    """cp1252-default Windows writes must not poison the utf-8 reader.
+
+    Regression: labels like "DoubleLine – Core Plus" (en-dash) written
+    without an explicit encoding crashed every twin/roster build.
+    """
+    path = tmp_path / "asset_class_mappings.json"
+    monkeypatch.setattr(nac, "MAPPINGS_PATH", path)
+    nac._save({"DoubleLine – Core Plus": {"canonical": "fixed_income_core",
+                                               "confidence": "high"}})
+    raw = path.read_bytes()
+    raw.decode("utf-8")  # must not raise
+    assert nac._load_existing()["DoubleLine – Core Plus"]["canonical"] == "fixed_income_core"

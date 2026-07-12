@@ -91,7 +91,8 @@ def _load_existing() -> dict:
 def _save(mapping: dict) -> None:
     MAPPINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
     MAPPINGS_PATH.write_text(
-        json.dumps(mapping, indent=2, sort_keys=True, ensure_ascii=False)
+        json.dumps(mapping, indent=2, sort_keys=True, ensure_ascii=False),
+        encoding="utf-8",  # Windows defaults to cp1252, poisoning utf-8 readers
     )
 
 
