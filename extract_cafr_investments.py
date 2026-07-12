@@ -74,8 +74,27 @@ INV_END_PATTERNS = [
 # Section location
 # ---------------------------------------------------------------------------
 
-def _locate_via_toc(doc: fitz.Document) -> tuple[int, int] | None:
-    """Try to find Investment Section page range via the PDF outline (TOC)."""
+# Lenient keyword pattern used to match candidate TOC titles for the
+# Investment Section (tried with `.search()`, so it matches "Investments",
+# "Investment Section", or a substring like "Investment Policy" — the
+# level-comparison logic below then prefers the top-level entry over such
+# subheaders).
+INV_TOC_PATTERNS = (re.compile(r"\binvestment(?:s|\s+section)?\b", re.IGNORECASE),)
+
+
+def _locate_via_toc(doc: fitz.Document, start_patterns=None,
+                    end_patterns=None) -> tuple[int, int] | None:
+    """Try to find a section's page range via the PDF outline (TOC).
+
+    `start_patterns` (each tried with `.search()` against a TOC entry's
+    title) defaults to the Investment Section's lenient keyword pattern,
+    preserving current behavior for existing callers. `end_patterns` is
+    accepted for signature symmetry with `_locate_via_text_search` /
+    `locate_investment_section` but unused here — the section end is
+    derived from TOC hierarchy (next entry at the same or higher level),
+    not from text matching.
+    """
+    patterns = start_patterns if start_patterns is not None else INV_TOC_PATTERNS
     toc = doc.get_toc()
     if not toc:
         return None
@@ -83,7 +102,7 @@ def _locate_via_toc(doc: fitz.Document) -> tuple[int, int] | None:
     inv_idx = None
     inv_level = None
     for i, (level, title, page) in enumerate(toc):
-        if re.search(r"\binvestment(?:s|\s+section)?\b", title, re.IGNORECASE):
+        if any(pat.search(title) for pat in patterns):
             # Skip subheaders like "investment policy" if we already found a top-level "investments"
             if inv_idx is None or level < inv_level:
                 inv_idx = i
@@ -105,19 +124,26 @@ def _locate_via_toc(doc: fitz.Document) -> tuple[int, int] | None:
     return (start_page, end_page)
 
 
-def _locate_via_text_search(doc: fitz.Document) -> tuple[int, int] | None:
-    """Fallback: scan page text for section header phrases."""
+def _locate_via_text_search(doc: fitz.Document, start_patterns=None,
+                            end_patterns=None) -> tuple[int, int] | None:
+    """Fallback: scan page text for section header phrases.
+
+    `start_patterns`/`end_patterns` default to the Investment Section's
+    module-level patterns, preserving current behavior for existing callers.
+    """
+    start_pats = start_patterns if start_patterns is not None else INV_START_PATTERNS
+    end_pats = end_patterns if end_patterns is not None else INV_END_PATTERNS
     start = None
     end = None
     for i in range(doc.page_count):
         text = doc.load_page(i).get_text()
         if start is None:
-            for pat in INV_START_PATTERNS:
+            for pat in start_pats:
                 if pat.search(text):
                     start = i + 1  # PyMuPDF pages are 0-indexed; we use 1-indexed externally
                     break
         elif end is None:
-            for pat in INV_END_PATTERNS:
+            for pat in end_pats:
                 if pat.search(text):
                     end = i  # the page BEFORE the next section header
                     break
@@ -130,11 +156,21 @@ def _locate_via_text_search(doc: fitz.Document) -> tuple[int, int] | None:
     return (start, end)
 
 
-def locate_investment_section(pdf_path: str) -> tuple[int, int] | None:
-    """Return (start_page, end_page) 1-indexed for the Investment Section."""
+def locate_investment_section(pdf_path: str, start_patterns=None,
+                              end_patterns=None) -> tuple[int, int] | None:
+    """Return (start_page, end_page) 1-indexed for a CAFR section.
+
+    Defaults locate the Investment Section (existing behavior, unchanged).
+    Pass custom `start_patterns`/`end_patterns` to locate a different
+    section (e.g. the Actuarial Section) via the same TOC-then-text-search
+    strategy; both are forwarded to `_locate_via_toc` and
+    `_locate_via_text_search`, each of which falls back to its own
+    Investment-Section-specific default when not given.
+    """
     doc = fitz.open(pdf_path)
     try:
-        rng = _locate_via_toc(doc) or _locate_via_text_search(doc)
+        rng = (_locate_via_toc(doc, start_patterns=start_patterns, end_patterns=end_patterns)
+              or _locate_via_text_search(doc, start_patterns=start_patterns, end_patterns=end_patterns))
         return rng
     finally:
         doc.close()
