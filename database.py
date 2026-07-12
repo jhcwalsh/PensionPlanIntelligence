@@ -227,7 +227,8 @@ class CafrPerformance(Base):
 class IpsExtract(Base):
     """Extracted allocation and governance data from an Investment Policy Statement (IPS).
 
-    One row per IPS document we've structured; idempotent on ips_document_id
+    One row per IPS document we've structured; unique on ips_document_id
+    (replaced in place when text_hash or prompt_version changes)
     per prompt_version so a prompt bump triggers re-extraction.
     """
     __tablename__ = "ips_extracts"
@@ -238,7 +239,7 @@ class IpsExtract(Base):
     extracted_at = Column(DateTime, default=_utcnow, nullable=False)
     model_used = Column(String)
     prompt_version = Column(String)
-    text_hash = Column(String)                       # sha256 of the IPS text
+    text_hash = Column(String)                       # md5 of the IPS text
     target_return_pct = Column(Float)
     effective_date = Column(String(10))              # YYYY-MM-DD
     adopted_date = Column(String(10))                # YYYY-MM-DD
@@ -247,7 +248,7 @@ class IpsExtract(Base):
     permitted_prohibited = Column(Text)              # JSON
     governance = Column(Text)                        # JSON
     manager_structure = Column(Text)                 # JSON
-    esg_divestment_text = Column(Text)               # JSON
+    esg_divestment_text = Column(Text)               # plain text
     notes = Column(Text)
 
     plan = relationship("Plan")
@@ -305,7 +306,7 @@ class CafrActuarial(Base):
     amortization_years = Column(Float)
     employer_contribution_rate_pct = Column(Float)
     employee_contribution_rate_pct = Column(Float)
-    adc_millions = Column(Float)                     # Annual Defined Contribution
+    adc_millions = Column(Float)                     # Actuarially Determined Contribution
     adc_pct_contributed = Column(Float)
     members_active = Column(Integer)
     members_retired = Column(Integer)
@@ -313,7 +314,7 @@ class CafrActuarial(Base):
     extracted_at = Column(DateTime, default=_utcnow, nullable=False)
     model_used = Column(String)
     prompt_version = Column(String)
-    text_hash = Column(String)                       # sha256 of the source text
+    text_hash = Column(String)                       # md5 of the source text
     pages_used = Column(String)                      # e.g. "10-23"
     notes = Column(Text)
 

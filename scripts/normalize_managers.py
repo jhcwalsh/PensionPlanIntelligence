@@ -80,7 +80,7 @@ Example output:
 
 def _load_existing() -> dict:
     if MAPPINGS_PATH.exists():
-        return json.loads(MAPPINGS_PATH.read_text())
+        return json.loads(MAPPINGS_PATH.read_text(encoding="utf-8"))
     return {}
 
 
