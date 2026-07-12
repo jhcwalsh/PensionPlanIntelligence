@@ -27,7 +27,7 @@ def test_twin_detail_and_index(tmp_db):
     assert r.status_code == 200
     body = r.json()
     assert body["plan_id"] == "testplan"
-    assert body["schema_version"] == "twin_v0"
+    assert body["schema_version"] == "twin_v1"
     assert "identity" in body["facets"]
     idx = client.get("/api/v1/twins").json()
     assert idx["total"] == 1

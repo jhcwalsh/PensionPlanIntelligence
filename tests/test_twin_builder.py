@@ -53,7 +53,7 @@ def test_build_twin_facets(tmp_db):
     plan = _seed(session)
     twin = twin_builder.build_twin(session, plan)
     f = twin["facets"]
-    assert twin["schema_version"] == "twin_v0"
+    assert twin["schema_version"] == "twin_v1"
     assert f["identity"]["aum_billions"]["v"] == 10.0
     assert f["policy"]["investment_policy_text"]["v"] == "Prudent person rule."
     assert f["policy"]["investment_policy_text"]["as_of"] == "2025-06-30"
@@ -81,7 +81,7 @@ def test_run_builder_writes_snapshot_and_run_row(tmp_db):
     twin_builder.run_builder(["testplan"])
     session = get_session()
     snap = get_twin_snapshot(session, "testplan")
-    assert snap is not None and snap.schema_version == "twin_v0"
+    assert snap is not None and snap.schema_version == "twin_v1"
     run = session.query(TwinBuildRun).one()
     assert run.status == "succeeded" and run.snapshots_written == 1
     session.close()
@@ -309,4 +309,54 @@ def test_run_builder_rolls_back_poisoned_session_and_finalizes_run(tmp_db, monke
     assert run.snapshots_written == 1
     errors = json.loads(run.errors)
     assert any("badplan" in e for e in errors)
+    session.close()
+
+
+def test_v1_facets_from_new_tables(tmp_db):
+    session = get_session()
+    plan = _seed(session)  # existing helper: CAFR + summary + Consultant RFP
+    from database import CafrActuarial, IpsAllocation, IpsDocument, IpsExtract
+    ipsdoc = IpsDocument(plan_id="testplan", url="https://x/i.pdf", filename="i.pdf",
+                         extracted_text="policy", extraction_status="done",
+                         verification_verdict="yes", content_hash="h")
+    session.add(ipsdoc); session.commit()
+    ext = IpsExtract(plan_id="testplan", ips_document_id=ipsdoc.id,
+                     target_return_pct=7.0, effective_date="2026-01-01",
+                     governance='{"consultant_name": "Wilshire"}',
+                     rebalancing_policy='{"frequency": "quarterly"}',
+                     permitted_prohibited='{"permitted": ["Equity"], "prohibited": ["tobacco"]}')
+    session.add(ext); session.commit()
+    session.add(IpsAllocation(ips_extract_id=ext.id, asset_class="Global Equity",
+                              target_pct=42.0, range_low=37.0, range_high=47.0))
+    cafr_doc_id = session.query(CafrExtract).one().document_id
+    session.add(CafrActuarial(plan_id="testplan", document_id=cafr_doc_id,
+                              fiscal_year=2025, valuation_date="2025-06-30",
+                              funded_ratio_pct=75.0, discount_rate_pct=6.8,
+                              actuary_firm="Cavanaugh Macdonald"))
+    session.commit()
+
+    twin = twin_builder.build_twin(session, plan)
+    assert twin["schema_version"] == "twin_v1"
+    f = twin["facets"]
+    assert f["policy"]["ips"]["target_return_pct"] == 7.0
+    assert f["allocation"]["ips_targets"]["rows"][0]["target_pct"] == 42.0
+    assert f["allocation"]["rows"][0]["asset_class_canonical"] in (
+        "unmapped", "public_equity_global")
+    fund = f["funding_actuarial"]
+    assert fund["status"] == "captured" and fund["metrics"]["funded_ratio_pct"] == 75.0
+    assert twin["freshness"]["funding_actuarial"] == "2025-06-30"
+    roles = {(r["role"], r["name"]) for r in f["governance_people"]["relationships"]}
+    assert ("Consultant", "Wilshire") in roles and ("Actuary", "Cavanaugh Macdonald") in roles
+    assert twin["completeness"]["funding_actuarial"] == 1.0
+    session.close()
+
+
+def test_v0_shape_preserved_without_v1_data(tmp_db):
+    session = get_session()
+    plan = _seed(session)
+    twin = twin_builder.build_twin(session, plan)
+    f = twin["facets"]
+    assert f["funding_actuarial"] == {"status": "not_captured"}
+    assert f["policy"]["ips"] is None
+    assert f["allocation"]["ips_targets"] is None
     session.close()

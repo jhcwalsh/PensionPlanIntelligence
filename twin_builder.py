@@ -23,17 +23,31 @@ from pathlib import Path
 from rich.console import Console
 
 from database import (
-    CafrAllocation, CafrExtract, CafrPerformance, Document, Plan, RFPRecord,
+    CafrActuarial, CafrAllocation, CafrExtract, CafrPerformance, Document,
+    IpsAllocation, IpsDocument, IpsExtract, Plan, PlanManagerRoster, RFPRecord,
     Summary, TwinBuildRun, TwinSnapshot, get_session, get_twin_snapshot, init_db,
 )
 
 console = Console(legacy_windows=False)
 
-TWIN_SCHEMA_VERSION = "twin_v0"
+TWIN_SCHEMA_VERSION = "twin_v1"
 KEEP_RECENT = 8
 GOVERNANCE_RFP_TYPES = ("Consultant", "Custodian", "Actuary", "Audit", "Legal")
 MANAGER_MAPPINGS_PATH = Path(__file__).parent / "data" / "manager_mappings.json"
 ASSET_CLASS_MAPPINGS_PATH = Path(__file__).parent / "data" / "asset_class_mappings.json"
+
+# Every non-metadata payload column on CafrActuarial; surfaced verbatim (with
+# None values included) as facets["funding_actuarial"]["metrics"].
+FUNDING_METRIC_FIELDS = (
+    "funded_ratio_pct", "market_funded_ratio_pct",
+    "actuarial_value_assets_millions", "actuarial_accrued_liability_millions",
+    "unfunded_aal_millions", "net_pension_liability_millions",
+    "discount_rate_pct", "assumed_return_pct", "inflation_pct",
+    "payroll_growth_pct", "amortization_years",
+    "employer_contribution_rate_pct", "employee_contribution_rate_pct",
+    "adc_millions", "adc_pct_contributed", "members_active", "members_retired",
+    "actuary_firm", "valuation_date",
+)
 
 
 def _canonical_hash(facets: dict) -> str:
@@ -178,6 +192,16 @@ def _parse_json_list(text):
         return []
 
 
+def _parse_json_dict(text):
+    if not text:
+        return {}
+    try:
+        val = json.loads(text)
+        return val if isinstance(val, dict) else {}
+    except (json.JSONDecodeError, TypeError):
+        return {}
+
+
 def build_identity(plan) -> dict:
     """Plan-table facts; only aum_billions gets a provenance envelope."""
     return {
@@ -190,7 +214,7 @@ def build_identity(plan) -> dict:
     }
 
 
-def build_cafr_facets(session, plan):
+def build_cafr_facets(session, plan, asset_mappings):
     """policy, allocation, performance from the plan's latest CafrExtract."""
     extract = (
         session.query(CafrExtract)
@@ -235,6 +259,7 @@ def build_cafr_facets(session, plan):
             outside_range = r.actual_pct < r.target_range_low or r.actual_pct > r.target_range_high
         allocation_rows.append({
             "asset_class_raw": r.asset_class,
+            "asset_class_canonical": canonical_asset_class(r.asset_class, asset_mappings),
             "target_pct": r.target_pct,
             "actual_pct": r.actual_pct,
             "range_low": r.target_range_low,
@@ -259,6 +284,110 @@ def build_cafr_facets(session, plan):
                    "rows": performance_rows}
 
     return policy, allocation, performance
+
+
+def build_ips_facets(session, plan, asset_mappings):
+    """policy["ips"], allocation["ips_targets"], and an optional consultant
+    governance relationship from the plan's latest IpsExtract.
+
+    Returns (ips_policy, ips_targets, relationship) — all None when the plan
+    has no IpsExtract row.
+    """
+    extract = (
+        session.query(IpsExtract)
+        .filter(IpsExtract.plan_id == plan.id)
+        .order_by(IpsExtract.extracted_at.desc(), IpsExtract.id.desc())
+        .first()
+    )
+    if extract is None:
+        return None, None, None
+
+    ips_doc = session.get(IpsDocument, extract.ips_document_id)
+    as_of = extract.effective_date
+    if not as_of and ips_doc is not None and ips_doc.fetched_at is not None:
+        as_of = ips_doc.fetched_at.date().isoformat()
+
+    src = {"doc_id": ips_doc.id if ips_doc else None, "table": "ips_extract",
+           "row_id": extract.id, "url": ips_doc.url if ips_doc else None}
+
+    permitted_prohibited = _parse_json_dict(extract.permitted_prohibited)
+
+    ips_policy = {
+        "target_return_pct": extract.target_return_pct,
+        "rebalancing_policy": _parse_json_dict(extract.rebalancing_policy),
+        "permitted": permitted_prohibited.get("permitted") or [],
+        "prohibited": permitted_prohibited.get("prohibited") or [],
+        "effective_date": extract.effective_date,
+        "as_of": as_of,
+        "src": src,
+    }
+
+    alloc_rows = (
+        session.query(IpsAllocation)
+        .filter(IpsAllocation.ips_extract_id == extract.id)
+        .order_by(IpsAllocation.id)
+        .all()
+    )
+    ips_targets = {
+        "as_of": as_of,
+        "src": src,
+        "rows": [{
+            "asset_class_raw": r.asset_class,
+            "asset_class_canonical": canonical_asset_class(r.asset_class, asset_mappings),
+            "target_pct": r.target_pct,
+            "range_low": r.range_low,
+            "range_high": r.range_high,
+        } for r in alloc_rows],
+    }
+
+    governance = _parse_json_dict(extract.governance)
+    consultant_name = governance.get("consultant_name")
+    relationship = None
+    if consultant_name and str(consultant_name).strip():
+        relationship = {
+            "role": "Consultant", "name": str(consultant_name).strip(),
+            "basis": "ips", "doc_id": ips_doc.id if ips_doc else None,
+            "_date": as_of,
+        }
+
+    return ips_policy, ips_targets, relationship
+
+
+def build_actuarial_facets(session, plan):
+    """funding_actuarial + an optional actuary governance relationship from
+    the plan's latest CafrActuarial row.
+
+    Returns (facet, relationship) — facet is {"status": "not_captured"} and
+    relationship is None when the plan has no CafrActuarial row.
+    """
+    row = (
+        session.query(CafrActuarial)
+        .filter(CafrActuarial.plan_id == plan.id)
+        .order_by(CafrActuarial.fiscal_year.desc(), CafrActuarial.id.desc())
+        .first()
+    )
+    if row is None:
+        return {"status": "not_captured"}, None
+
+    doc = session.get(Document, row.document_id)
+    src = {"doc_id": row.document_id, "table": "cafr_actuarial",
+           "row_id": row.id, "url": doc.url if doc else None}
+    metrics = {field: getattr(row, field) for field in FUNDING_METRIC_FIELDS}
+
+    facet = {
+        "status": "captured", "as_of": row.valuation_date, "src": src,
+        "fiscal_year": row.fiscal_year, "metrics": metrics,
+    }
+
+    relationship = None
+    if row.actuary_firm and str(row.actuary_firm).strip():
+        relationship = {
+            "role": "Actuary", "name": str(row.actuary_firm).strip(),
+            "basis": "cafr_actuarial", "doc_id": row.document_id,
+            "_date": row.valuation_date,
+        }
+
+    return facet, relationship
 
 
 def build_roster_and_timeline(session, plan, mappings):
@@ -361,6 +490,33 @@ def build_roster_and_timeline(session, plan, mappings):
     dated_items.sort(key=lambda i: i["date"], reverse=True)
     timeline_items = dated_items + undated_items
 
+    roster_rows = (
+        session.query(PlanManagerRoster)
+        .filter(PlanManagerRoster.plan_id == plan.id)
+        .all()
+    )
+    if roster_rows:
+        entries = []
+        for r in roster_rows:
+            evidence = _parse_json_dict(r.evidence)
+            doc_ids = evidence.get("doc_ids") or evidence.get("rfp_doc_ids") or []
+            action_types = evidence.get("action_types")
+            action_types = action_types if isinstance(action_types, dict) else {}
+            entries.append({
+                "name_canonical": r.canonical_name,
+                "role": r.role,
+                "asset_class_raw": r.asset_class_raw,
+                "asset_class_canonical": r.asset_class_canonical,
+                "status": r.status,
+                "first_seen": r.first_seen,
+                "last_seen": r.last_seen,
+                "confidence": r.confidence,
+                "doc_ids": doc_ids,
+                "mention_count": sum(action_types.values()),
+                "action_types": action_types,
+            })
+        entries.sort(key=lambda e: (e["name_canonical"] is None, e["name_canonical"] or ""))
+
     manager_roster = {"entries": entries}
     activity_timeline = {"count": timeline_count, "items": timeline_items[:100]}
     return manager_roster, activity_timeline
@@ -396,6 +552,9 @@ def build_rfp_facets(session, plan):
 
         rfp_type = rec.get("rfp_type")
         if rfp_type in GOVERNANCE_RFP_TYPES:
+            rec_dates = [v for v in (rec.get("release_date"), rec.get("response_due_date"),
+                                     rec.get("award_date")) if v]
+            rec_date = max(rec_dates) if rec_dates else None
             for field, basis in (("awarded_manager", "rfp_awarded"),
                                  ("incumbent_manager", "rfp_incumbent")):
                 name = rec.get(field)
@@ -406,7 +565,8 @@ def build_rfp_facets(session, plan):
                     continue
                 seen.add(key)
                 relationships.append({"role": rfp_type, "name": name,
-                                      "basis": basis, "doc_id": row.document_id})
+                                      "basis": basis, "doc_id": row.document_id,
+                                      "_date": rec_date})
 
     rfp_state = {"by_status": dict(by_status), "records": records}
     governance_people = {"relationships": relationships}
@@ -426,7 +586,7 @@ def _completeness(facets: dict) -> dict:
         "rfp_state": round(min(1.0, len(facets["rfp_state"]["records"]) / 5), 2),
         "governance_people": round(
             min(1.0, len(facets["governance_people"]["relationships"]) * 0.2), 2),
-        "funding_actuarial": 0.0,
+        "funding_actuarial": 1.0 if facets["funding_actuarial"].get("status") == "captured" else 0.0,
     }
 
 
@@ -441,48 +601,85 @@ def _freshness(facets: dict) -> dict:
     ]
     rfp_freshness = max(rfp_dates) if rfp_dates else None
 
-    # Governance freshness: only from governance-type records (Consultant, Custodian, etc.)
+    # Governance freshness: the max date attached to each relationship as it
+    # was actually emitted (rfp record dates for rfp-basis, ips as_of for
+    # ips-basis, valuation_date for actuary-basis) -- not a facet-wide scan.
     governance_dates = [
-        v for rec in facets["rfp_state"]["records"]
-        if rec.get("rfp_type") in GOVERNANCE_RFP_TYPES
-        for v in (rec.get("release_date"), rec.get("response_due_date"), rec.get("award_date"))
+        rel["_date"] for rel in facets["governance_people"]["relationships"]
+        if rel.get("_date")
+    ]
+    governance_freshness = max(governance_dates) if governance_dates else None
+
+    ips_targets = facets["allocation"].get("ips_targets")
+    allocation_dates = [
+        v for v in (facets["allocation"].get("as_of"),
+                    ips_targets.get("as_of") if ips_targets else None)
         if v
     ]
-    governance_freshness = max(governance_dates) if governance_dates and facets["governance_people"]["relationships"] else None
+    allocation_freshness = max(allocation_dates) if allocation_dates else None
 
     return {
         "identity": None,
         "policy": pol["as_of"] if pol else None,
-        "allocation": facets["allocation"].get("as_of"),
+        "allocation": allocation_freshness,
         "performance": facets["performance"].get("as_of"),
         "manager_roster": max(roster_dates) if roster_dates else None,
         "activity_timeline": max(timeline_dates) if timeline_dates else None,
         "rfp_state": rfp_freshness,
         "governance_people": governance_freshness,
-        "funding_actuarial": None,
+        "funding_actuarial": facets["funding_actuarial"].get("as_of"),
     }
 
 
 def build_twin(session, plan) -> dict:
     mappings = _load_manager_mappings()
+    asset_mappings = load_asset_class_mappings()
+
     identity = build_identity(plan)
-    policy, allocation, performance = build_cafr_facets(session, plan)
+    policy, allocation, performance = build_cafr_facets(session, plan, asset_mappings)
+    ips_policy, ips_targets, ips_relationship = build_ips_facets(session, plan, asset_mappings)
+    funding_actuarial, actuary_relationship = build_actuarial_facets(session, plan)
     roster, timeline = build_roster_and_timeline(session, plan, mappings)
     rfp_state, governance = build_rfp_facets(session, plan)
+
+    policy["ips"] = ips_policy
+    allocation["ips_targets"] = ips_targets
+
+    relationships = governance["relationships"]
+    seen = {(rel["role"], rel["name"]) for rel in relationships}
+    for rel in (ips_relationship, actuary_relationship):
+        if rel is None:
+            continue
+        key = (rel["role"], rel["name"])
+        if key in seen:
+            continue
+        seen.add(key)
+        relationships.append(rel)
+
     facets = {
         "identity": identity, "policy": policy, "allocation": allocation,
         "performance": performance, "manager_roster": roster,
         "activity_timeline": timeline, "rfp_state": rfp_state,
         "governance_people": governance,
-        "funding_actuarial": {"status": "not_captured"},
+        "funding_actuarial": funding_actuarial,
     }
+
+    completeness = _completeness(facets)
+    freshness = _freshness(facets)
+
+    # "_date" is an internal bookkeeping field used only to compute
+    # governance_people freshness precisely per-relationship; strip it
+    # before the facets are hashed/persisted/returned.
+    for rel in relationships:
+        rel.pop("_date", None)
+
     return {
         "schema_version": TWIN_SCHEMA_VERSION,
         "plan_id": plan.id,
         "built_at": datetime.utcnow().isoformat(),
         "facets": facets,
-        "completeness": _completeness(facets),
-        "freshness": _freshness(facets),
+        "completeness": completeness,
+        "freshness": freshness,
     }
 
 
