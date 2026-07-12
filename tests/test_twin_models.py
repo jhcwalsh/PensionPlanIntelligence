@@ -60,3 +60,42 @@ def test_prune_keeps_8_plus_month_firsts(tmp_db):
     # eight most recent survive; total is bounded (8 recent + month-firsts, overlapping)
     assert len(rows) <= 8 + 7
     session.close()
+
+
+def test_get_twin_index_single_query_no_facets(tmp_db):
+    """The index helper returns latest-per-plan metadata without touching
+    the gzipped facets column, in a bounded number of statements."""
+    from datetime import datetime as _dt
+    from sqlalchemy import event
+    import database
+    from database import Plan, get_twin_index
+
+    session = get_session()
+    session.add_all([
+        Plan(id="p1", name="Plan One", abbreviation="P1", state="CA", aum_billions=10.0),
+        Plan(id="p2", name="Plan Two", abbreviation="P2", state="TX", aum_billions=5.0),
+    ])
+    session.commit()
+    twin_builder.save_snapshot(session, "p1", _twin({"identity": {"n": 1}}))
+    old = get_twin_snapshot(session, "p1")
+    old.built_at = _dt(2026, 1, 1)
+    session.commit()
+    twin_builder.save_snapshot(session, "p1", _twin({"identity": {"n": 2}}))
+
+    statements = []
+    def _count(conn, cursor, stmt, params, context, executemany):
+        statements.append(stmt)
+    event.listen(database.engine, "before_cursor_execute", _count)
+    try:
+        rows = get_twin_index(session)
+    finally:
+        event.remove(database.engine, "before_cursor_execute", _count)
+
+    assert len(rows) == 1  # p2 has no snapshot
+    row = rows[0]
+    assert row["plan_id"] == "p1" and row["name"] == "Plan One"
+    assert row["built_at"].year != 2026 or row["built_at"] != _dt(2026, 1, 1)
+    assert "facets" not in row
+    assert len(statements) <= 2
+    assert not any("facets" in s for s in statements)
+    session.close()

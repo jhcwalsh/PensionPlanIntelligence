@@ -39,6 +39,7 @@ from database import (
     count_search_summaries,
     get_new_meetings,
     get_session,
+    get_twin_index,
     get_twin_snapshot,
     init_db,
     search_summaries,
@@ -514,25 +515,23 @@ def _render_activity_by_document(plan_id, plan_label, sort: str = "Most recent")
         render_summary_card(doc, summary)
 
 
-def page_plans():
-    """Digital-twin index — one row per tracked plan, linking to its twin page."""
-    import pandas as pd
+@st.cache_data(ttl=300, show_spinner=False)
+def _plans_index_rows() -> list[dict]:
+    """Plans-tab index rows: every plan, joined to its latest twin metadata.
 
-    st.title("Tracked Plans")
+    One light query for the twin metadata (get_twin_index — no facets
+    gunzip) plus one for the plan list; cached so Streamlit reruns don't
+    refetch on every interaction.
+    """
     session = get_db_session()
-    plans = session.query(Plan).order_by(Plan.name).all()
-
-    if not plans:
-        st.warning("No plans loaded yet. Run the pipeline to initialize.")
-        return
-
+    twin_meta = {r["plan_id"]: r for r in get_twin_index(session)}
     rows = []
-    for plan in plans:
-        snap = get_twin_snapshot(session, plan.id)
-        if snap is not None:
-            comp = json.loads(snap.completeness or "{}")
+    for plan in session.query(Plan).order_by(Plan.name).all():
+        meta = twin_meta.get(plan.id)
+        if meta:
+            comp = meta["completeness"]
             completeness = f"{(sum(comp.values()) / len(comp)):.0%}" if comp else "—"
-            twin_built = snap.built_at.strftime("%Y-%m-%d") if snap.built_at else "—"
+            twin_built = meta["built_at"].strftime("%Y-%m-%d") if meta["built_at"] else "—"
         else:
             completeness = "—"
             twin_built = "—"
@@ -545,10 +544,23 @@ def page_plans():
             "Completeness": completeness,
             "Twin": f"?plan={plan.id}",
         })
+    return rows
+
+
+def page_plans():
+    """Digital-twin index — one row per tracked plan, linking to its twin page."""
+    import pandas as pd
+
+    st.title("Tracked Plans")
+    rows = _plans_index_rows()
+
+    if not rows:
+        st.warning("No plans loaded yet. Run the pipeline to initialize.")
+        return
 
     df = pd.DataFrame(rows)
     st.caption(
-        f"**{len(plans)} plan(s)** tracked. Click a row's link to open its "
+        f"**{len(rows)} plan(s)** tracked. Click a row's link to open its "
         "digital-twin detail page."
     )
     st.dataframe(

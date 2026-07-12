@@ -307,7 +307,10 @@ def build_ips_facets(session, plan, asset_mappings):
     if not as_of and ips_doc is not None and ips_doc.fetched_at is not None:
         as_of = ips_doc.fetched_at.date().isoformat()
 
-    src = {"doc_id": ips_doc.id if ips_doc else None, "table": "ips_extract",
+    # 'ips_doc_id', not 'doc_id': everywhere else in the twin, doc_id means
+    # documents.id (and the UI deep-links it via ?doc=). IPS extracts point
+    # at ips_documents rows — a distinct namespace.
+    src = {"ips_doc_id": ips_doc.id if ips_doc else None, "table": "ips_extract",
            "row_id": extract.id, "url": ips_doc.url if ips_doc else None}
 
     permitted_prohibited = _parse_json_dict(extract.permitted_prohibited)
@@ -346,7 +349,7 @@ def build_ips_facets(session, plan, asset_mappings):
     if consultant_name and str(consultant_name).strip():
         relationship = {
             "role": "Consultant", "name": str(consultant_name).strip(),
-            "basis": "ips", "doc_id": ips_doc.id if ips_doc else None,
+            "basis": "ips", "ips_doc_id": ips_doc.id if ips_doc else None,
             "_date": as_of,
         }
 

@@ -468,3 +468,32 @@ def test_deterministic_roster_entry_ordering_with_same_canonical_name(tmp_db):
         f"Facets hash should be deterministic, but got {hash_1} vs {hash_2}"
 
     session.close()
+
+
+def test_ips_sources_use_ips_doc_id_namespace(tmp_db):
+    """IPS-derived src blocks must not expose ips_documents ids as 'doc_id'.
+
+    'doc_id' means documents.id everywhere else in the twin (and the UI
+    deep-links it via ?doc=). IPS extracts point at ips_documents rows,
+    so their envelope key is 'ips_doc_id' to make conflation impossible.
+    """
+    from database import IpsDocument, IpsExtract
+    session = get_session()
+    plan = _seed(session)
+    ipsdoc = IpsDocument(plan_id="testplan", url="https://x/i.pdf", filename="i.pdf",
+                         extracted_text="policy", extraction_status="done",
+                         verification_verdict="yes", content_hash="h2")
+    session.add(ipsdoc); session.commit()
+    session.add(IpsExtract(plan_id="testplan", ips_document_id=ipsdoc.id,
+                           governance='{"consultant_name": "Wilshire"}'))
+    session.commit()
+
+    twin = twin_builder.build_twin(session, plan)
+    f = twin["facets"]
+    for src in (f["policy"]["ips"]["src"], f["allocation"]["ips_targets"]["src"]):
+        assert src["ips_doc_id"] == ipsdoc.id
+        assert "doc_id" not in src
+    ips_rel = [r for r in f["governance_people"]["relationships"]
+               if r.get("basis") == "ips"][0]
+    assert ips_rel["ips_doc_id"] == ipsdoc.id and "doc_id" not in ips_rel
+    session.close()

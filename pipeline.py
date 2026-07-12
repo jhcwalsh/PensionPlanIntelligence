@@ -65,6 +65,23 @@ def print_status(session):
 
     console.print(table)
 
+    # Twin-builder health: run_builder exits 0 on per-plan errors by design
+    # (a data quirk must not block the day's DB push), so a failed build is
+    # otherwise invisible — surface the latest run here.
+    from database import TwinBuildRun
+    last_twin = (session.query(TwinBuildRun)
+                 .order_by(TwinBuildRun.started_at.desc()).first())
+    if last_twin is not None:
+        color = "green" if last_twin.status == "succeeded" else "red"
+        console.print(
+            f"Twin builder: [{color}]{last_twin.status}[/{color}] "
+            f"({last_twin.snapshots_written}/{last_twin.plans_total} written, "
+            f"{last_twin.started_at:%Y-%m-%d %H:%M} UTC)")
+        if last_twin.status != "succeeded":
+            import json as _json
+            for err in _json.loads(last_twin.errors or "[]")[:5]:
+                console.print(f"  [red]{err}[/red]")
+
 
 LOCAL_ONLY_FILE = Path(__file__).parent / "data" / "local_only_plans.json"
 

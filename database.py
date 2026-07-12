@@ -1365,6 +1365,42 @@ def get_twin_snapshot(session: Session, plan_id: str,
     return q.order_by(TwinSnapshot.built_at.desc(), TwinSnapshot.id.desc()).first()
 
 
+def get_twin_index(session: Session) -> list[dict]:
+    """Latest twin snapshot metadata per plan, in one query.
+
+    Deliberately selects only the light columns — never ``facets``, whose
+    per-row gunzip made the naive per-plan loop the twin index's cost.
+    Plans without a snapshot are omitted.
+    """
+    import json as _json
+
+    latest_id = (
+        session.query(TwinSnapshot.id)
+        .filter(TwinSnapshot.plan_id == Plan.id)
+        .order_by(TwinSnapshot.built_at.desc(), TwinSnapshot.id.desc())
+        .limit(1)
+        .correlate(Plan)
+        .scalar_subquery()
+    )
+    rows = (
+        session.query(
+            Plan.id, Plan.name, Plan.abbreviation, Plan.state,
+            Plan.aum_billions,
+            TwinSnapshot.built_at, TwinSnapshot.schema_version,
+            TwinSnapshot.completeness, TwinSnapshot.freshness,
+        )
+        .join(TwinSnapshot, TwinSnapshot.id == latest_id)
+        .order_by(Plan.id)
+        .all()
+    )
+    return [{
+        "plan_id": r[0], "name": r[1], "abbreviation": r[2], "state": r[3],
+        "aum_billions": r[4], "built_at": r[5], "schema_version": r[6],
+        "completeness": _json.loads(r[7] or "{}"),
+        "freshness": _json.loads(r[8] or "{}"),
+    } for r in rows]
+
+
 def aggregate_managers(session: Session) -> list[dict]:
     """Aggregate manager mentions across every Summary's investment_actions.
 

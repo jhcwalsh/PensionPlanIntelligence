@@ -38,18 +38,15 @@ def _to_response(row: db.TwinSnapshot) -> TwinResponse:
 
 @router.get("/twins", response_model=TwinIndexResponse)
 def twin_index(session: Session = Depends(_session)) -> TwinIndexResponse:
-    rows = []
-    for plan in session.query(db.Plan).order_by(db.Plan.id).all():
-        snap = db.get_twin_snapshot(session, plan.id)
-        if snap is None:
-            continue
-        rows.append(TwinIndexRow(
-            plan_id=plan.id, name=plan.name, state=plan.state,
-            aum_billions=plan.aum_billions, built_at=snap.built_at,
-            schema_version=snap.schema_version,
-            completeness=json.loads(snap.completeness or "{}"),
-            freshness=json.loads(snap.freshness or "{}"),
-        ))
+    rows = [
+        TwinIndexRow(
+            plan_id=r["plan_id"], name=r["name"], state=r["state"],
+            aum_billions=r["aum_billions"], built_at=r["built_at"],
+            schema_version=r["schema_version"],
+            completeness=r["completeness"], freshness=r["freshness"],
+        )
+        for r in db.get_twin_index(session)
+    ]
     return TwinIndexResponse(results=rows, total=len(rows))
 
 
