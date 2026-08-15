@@ -1,5 +1,8 @@
 """Actuarial extraction: mock round-trip, skip logic, section location."""
+import warnings
+
 import fitz
+from sqlalchemy import event
 
 from database import CafrActuarial, Document, Plan, get_session
 import extract_cafr_actuarial
@@ -74,6 +77,68 @@ def test_mock_roundtrip_and_skip(tmp_db):
     session.close()
     counts = extract_cafr_actuarial.run_extraction(["p1"])
     assert counts["saved"] == 0 and counts["already_have"] == 1
+
+
+def test_revision_past_truncation_cap_is_detected(tmp_db, tmp_path, monkeypatch):
+    """A restated CAFR whose leading MAX_SECTION_CHARS chars are unchanged.
+
+    Hashing the *truncated* slice makes the two revisions indistinguishable,
+    so extract_one returns "already_have" forever. The hash must be taken
+    before truncation. Runs off the mock path (which short-circuits to a
+    per-document hash) with PDF handling stubbed out.
+    """
+    monkeypatch.setenv("LLM_MODE", "live")     # leave extract_one's mock branch
+    monkeypatch.setattr(extract_cafr_actuarial, "call_claude",
+                        lambda *a, **k: extract_cafr_actuarial.MOCK_PAYLOAD)
+    monkeypatch.setattr(extract_cafr_actuarial, "MAX_SECTION_CHARS", 500)
+    monkeypatch.setattr(extract_cafr_actuarial, "locate_actuarial_section",
+                        lambda path: (1, 1))
+
+    # Identical for the first 500 chars; the restatement differs only after.
+    section = ["A" * 1000 + " ORIGINAL"]
+    monkeypatch.setattr(extract_cafr_actuarial, "extract_section_text",
+                        lambda path, start, end: section[0])
+
+    pdf = tmp_path / "cafr.pdf"
+    pdf.write_bytes(b"%PDF-1.4 stub")  # only its existence is checked
+
+    session = get_session()
+    d = _seed(session)
+    d.local_path = str(pdf)
+    session.commit(); session.close()
+
+    assert extract_cafr_actuarial.run_extraction(["p1"])["saved"] == 1
+
+    section[0] = "A" * 1000 + " RESTATED"
+    counts = extract_cafr_actuarial.run_extraction(["p1"])
+    assert counts["saved"] == 1 and counts["already_have"] == 0
+
+
+def test_extracted_at_is_timezone_aware(tmp_db):
+    """`CafrActuarial.extracted_at` must come from database._utcnow (aware).
+
+    SQLite drops the offset on write, so the value has to be captured at
+    insert time; a naive datetime.utcnow() override would also raise a
+    DeprecationWarning on 3.12+.
+    """
+    captured = []
+
+    def _capture(mapper, connection, target):
+        captured.append(target.extracted_at)
+
+    event.listen(CafrActuarial, "after_insert", _capture)
+    try:
+        session = get_session()
+        _seed(session); session.close()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            assert extract_cafr_actuarial.run_extraction(["p1"])["saved"] == 1
+    finally:
+        event.remove(CafrActuarial, "after_insert", _capture)
+
+    assert len(captured) == 1
+    assert captured[0].tzinfo is not None
+    assert captured[0].utcoffset().total_seconds() == 0
 
 
 def test_locate_defaults_unchanged():

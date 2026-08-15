@@ -30,7 +30,6 @@ import hashlib
 import os
 import re
 import sys
-from datetime import datetime
 from pathlib import Path
 
 import anthropic
@@ -452,7 +451,10 @@ def save_actuarial(session, doc: Document, payload: dict, *,
         fiscal_year=doc.fiscal_year,
         valuation_date=payload.get("valuation_date"),
         actuary_firm=payload.get("actuary_firm"),
-        extracted_at=datetime.utcnow(),
+        # extracted_at deliberately omitted: the column default is
+        # database._utcnow, which is timezone-aware. Overriding it here with a
+        # naive datetime.utcnow() (deprecated in 3.12) would put naive and
+        # aware values in the same column depending on the insert path.
         model_used=MODEL,
         prompt_version=PROMPT_VERSION,
         text_hash=text_hash,
@@ -523,10 +525,15 @@ def extract_one(session, doc: Document, plan: Plan) -> str:
                 start, end = fallback
                 section_text = fallback_text
 
+    # Hash the FULL section text, before truncation. Hashing the truncated
+    # slice makes the idempotency check blind to any revision past
+    # MAX_SECTION_CHARS: a restated CAFR whose leading 200k characters are
+    # byte-identical would hash the same and return "already_have" forever.
+    text_hash = hashlib.md5(section_text.encode("utf-8", errors="ignore")).hexdigest()
+
     if len(section_text) > MAX_SECTION_CHARS:
         section_text = section_text[:MAX_SECTION_CHARS]
 
-    text_hash = hashlib.md5(section_text.encode("utf-8", errors="ignore")).hexdigest()
     pages_used = f"{start}-{end}"
 
     existing = session.query(CafrActuarial).filter_by(document_id=doc.id).first()
