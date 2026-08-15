@@ -42,11 +42,15 @@ if errorlevel 1 (
     exit /b 1
 )
 
+REM Same rule as the reminders block below, and for the same reason: the
+REM pipeline writes documents as it goes, so exiting here throws away the
+REM plans that DID succeed and strands db/pension.db dirty. Flag it, let the
+REM commit block run, and report the failure via the exit code at the end.
 echo [%TIME%] pipeline.py --local-only >> "%LOG%"
 python pipeline.py --local-only >> "%LOG%" 2>&1
 if errorlevel 1 (
+    set PIPELINE_FAILED=1
     python -m scripts.notify_failure %TASK% pipeline "%LOG%" %ERRORLEVEL%
-    exit /b 1
 )
 
 REM RFP extraction intentionally not in the daily cron until you're ready
@@ -98,6 +102,11 @@ if errorlevel 1 (
     echo [%TIME%] no changes to push >> "%LOG%"
 )
 
+if defined PIPELINE_FAILED (
+    echo === [%DATE% %TIME%] %TASK% completed with pipeline failure === >> "%LOG%"
+    endlocal
+    exit /b 1
+)
 if defined REMINDERS_FAILED (
     echo === [%DATE% %TIME%] %TASK% completed with reminders failure === >> "%LOG%"
     endlocal

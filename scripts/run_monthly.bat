@@ -45,11 +45,14 @@ if errorlevel 1 (
     exit /b 1
 )
 
+REM refresh_cafrs writes rows as it downloads, so a failure partway through
+REM still leaves new CAFRs in the DB. Flag rather than exit, so the push and
+REM commit below still run; the exit code at the end reports the failure.
 echo [%TIME%] refresh_cafrs.py --local-only >> "%LOG%"
 python refresh_cafrs.py --local-only >> "%LOG%" 2>&1
 if errorlevel 1 (
+    set REFRESH_FAILED=1
     python -m scripts.notify_failure %TASK% refresh_cafrs "%LOG%" %ERRORLEVEL%
-    exit /b 1
 )
 
 REM Structured extraction must run in the same job as the refresh so the
@@ -59,8 +62,8 @@ REM downloaded CAFRs would silently fail with "missing_file".
 echo [%TIME%] extract_cafr_investments.py >> "%LOG%"
 python extract_cafr_investments.py >> "%LOG%" 2>&1
 if errorlevel 1 (
+    set EXTRACT_FAILED=1
     python -m scripts.notify_failure %TASK% extract_cafr_investments "%LOG%" %ERRORLEVEL%
-    exit /b 1
 )
 
 REM Same reasoning as above: the GHA runner never sees these plans' PDFs, so
@@ -71,6 +74,7 @@ REM us the refresh that already landed in the DB.
 echo [%TIME%] extract_cafr_actuarial.py >> "%LOG%"
 python extract_cafr_actuarial.py >> "%LOG%" 2>&1
 if errorlevel 1 (
+    set EXTRACT_FAILED=1
     python -m scripts.notify_failure %TASK% extract_cafr_actuarial "%LOG%" %ERRORLEVEL%
 )
 
@@ -105,6 +109,16 @@ if errorlevel 1 (
     echo [%TIME%] no changes to push >> "%LOG%"
 )
 
+if defined REFRESH_FAILED (
+    echo === [%DATE% %TIME%] %TASK% completed with refresh failure === >> "%LOG%"
+    endlocal
+    exit /b 1
+)
+if defined EXTRACT_FAILED (
+    echo === [%DATE% %TIME%] %TASK% completed with extraction failure === >> "%LOG%"
+    endlocal
+    exit /b 1
+)
 echo === [%DATE% %TIME%] %TASK% completed === >> "%LOG%"
 endlocal
 exit /b 0
