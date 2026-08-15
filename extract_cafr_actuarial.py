@@ -2,9 +2,9 @@
 Extract structured funding / actuarial data from CAFR/ACFR PDFs.
 
 For each CAFR document we:
-  1. Locate the Actuarial Section pages (PDF TOC first; fallback to text
-     search), reusing `extract_cafr_investments.locate_investment_section`
-     with actuarial-specific `start_patterns`/`end_patterns`.
+  1. Locate the Actuarial Section pages via `locate_actuarial_section`
+     (PDF TOC first, then a contents-page-aware text scan, clamped to
+     `MAX_SECTION_PAGES`).
   2. If no Actuarial Section is found at all, fall back to the first page
      mentioning "net pension liability" (case-insensitive), +/- 3 pages
      (bounded to the document).
@@ -46,7 +46,7 @@ from database import (
     get_session,
     init_db,
 )
-from extract_cafr_investments import extract_section_text, locate_investment_section
+from extract_cafr_investments import _locate_via_toc, extract_section_text
 
 _ENV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
 load_dotenv(_ENV_PATH, override=True)
@@ -57,16 +57,52 @@ MODEL = "claude-sonnet-4-6"
 MAX_OUTPUT_TOKENS = 8192
 MAX_SECTION_CHARS = 200_000
 
+# Bound on the page span when no section end could be located and the range
+# therefore runs to EOF. A wide range is NOT by itself suspicious — VRS's
+# Actuarial Section legitimately spans 90 pages (pension + OPEB) — so this
+# only applies when the end is unknown, never to a range whose end came from
+# a real Statistical Section marker or the next top-level TOC entry.
+MAX_SECTION_PAGES = 80
+
 PROMPT_VERSION = "actuarial_v1"
 
-# Section-header phrases that mark the start/end of the Actuarial Section.
+# The Actuarial Section follows Introductory, Financial and Investment, so it
+# never begins in a CAFR's front matter. Measured over the 44 CAFR PDFs on
+# disk: every spurious start match landed on pages 3-8 (the table of contents,
+# where PyMuPDF splits titles and page numbers onto separate lines so the
+# anchored patterns below match a TOC line), while every genuine section start
+# was page 37 or later. 20 sits in that gap with margin on both sides.
+MIN_START_PAGE = 20
+
+# Matched with `.search()` against a single-line TOC title. Requiring the word
+# "section" matters: on flat outlines (KPERS ships 187 level-1 entries) a bare
+# "actuarial" also matches "Actuarial Assumptions" in the Financial Section
+# notes and anchors the range 28 pages too early. Prefixes and suffixes are
+# fine — "III. Actuarial Section (Unaudited)", "Actuarial Section Cover".
+ACTUARIAL_TOC_PATTERNS = (re.compile(r"\bactuarial\s+section\b", re.IGNORECASE),)
+
+# Page-text section headers, strongest signal first: `_actuarial_text_search`
+# only falls back to "Actuarial Valuation" when no "Actuarial Section" header
+# exists, since the former also appears inside the Financial Section. Note
+# `\s+` spans newlines, so on ACERA page 37 the pattern matches a table's
+# stacked column header ("Actuarial / Valuation / Date") 96 pages early.
 ACTUARIAL_START = (
     re.compile(r"^\s*actuarial\s+section\s*$", re.IGNORECASE | re.MULTILINE),
     re.compile(r"^\s*actuarial\s+valuation\s*$", re.IGNORECASE | re.MULTILINE),
 )
+
+# Start patterns at these indices of ACTUARIAL_START are only honoured on a
+# sparse page. A section divider carries little but its own title; the false
+# positives this rules out are dense pages of running text and tables (ACERA
+# page 37 is 3,974 characters of COLA notes).
+_SPARSE_ONLY_START_INDEXES = frozenset({1})
+_DIVIDER_MAX_CHARS = 1200
+# Standard CAFR ordering is Introductory -> Financial -> Investment ->
+# Actuarial -> Statistical, so only Statistical can legitimately follow the
+# Actuarial Section. "Investment Section" was previously listed here, but it
+# can only ever match ahead of a start that was itself matched too early.
 ACTUARIAL_END = (
     re.compile(r"^\s*statistical\s+section\s*$", re.IGNORECASE | re.MULTILINE),
-    re.compile(r"^\s*investment\s+section\s*$", re.IGNORECASE | re.MULTILINE),
 )
 
 # Fallback phrase used when no Actuarial Section can be located at all.
@@ -76,6 +112,82 @@ _NET_PENSION_LIABILITY = re.compile(r"net\s+pension\s+liability", re.IGNORECASE)
 # ---------------------------------------------------------------------------
 # Section location
 # ---------------------------------------------------------------------------
+
+def _find_section_end(doc: fitz.Document, start: int) -> int:
+    """First page after `start` bearing an end header, minus one; else EOF."""
+    for j in range(start, doc.page_count):  # 0-indexed j == page j+1, i.e. after start
+        text = doc.load_page(j).get_text()
+        if any(pat.search(text) for pat in ACTUARIAL_END):
+            return j  # the page BEFORE the next section header
+    return doc.page_count
+
+
+def _actuarial_text_search(doc: fitz.Document) -> tuple[int, int] | None:
+    """Scan page text for the Actuarial Section start, then its end.
+
+    Candidates before `MIN_START_PAGE` are ignored, weak patterns are only
+    honoured on a sparse page, and an "Actuarial Section" header always wins
+    over an "Actuarial Valuation" one anywhere in the document. Returns a
+    1-indexed inclusive range, or None.
+    """
+    first_hit: list[int | None] = [None] * len(ACTUARIAL_START)
+    for i in range(MIN_START_PAGE - 1, doc.page_count):
+        text = doc.load_page(i).get_text()
+        sparse = len(text.strip()) <= _DIVIDER_MAX_CHARS
+        for k, pat in enumerate(ACTUARIAL_START):
+            if first_hit[k] is not None:
+                continue
+            if k in _SPARSE_ONLY_START_INDEXES and not sparse:
+                continue
+            if pat.search(text):
+                first_hit[k] = i + 1  # PyMuPDF is 0-indexed; we use 1-indexed
+        if first_hit[0] is not None:
+            break  # strongest signal found; no weaker match can beat it
+
+    start = next((p for p in first_hit if p is not None), None)
+    if start is None:
+        return None
+    end = _find_section_end(doc, start)
+    return (start, end) if end >= start else None
+
+
+def locate_actuarial_section(pdf_path: str) -> tuple[int, int] | None:
+    """Return the 1-indexed inclusive page range of the Actuarial Section.
+
+    The PDF outline (TOC) supplies the start when it has one, falling back to
+    a text scan; the end always comes from the page text. The TOC's own end
+    is unusable because it is derived from outline hierarchy — on the flat
+    outlines many plans ship (KPERS: 187 level-1 entries) the "next entry at
+    the same level" is the next *heading*, so the section collapses to a
+    single page. A TOC start inside the front matter is rejected as spurious
+    (NMPERA's outline points its "Actuarial Section" entry at page 1;
+    PERS-MS's at page -1). When no end can be found the range runs to EOF and
+    is clamped to `MAX_SECTION_PAGES`; a wide range with a *located* end is
+    left alone, since VRS's section really does span 90 pages.
+    """
+    doc = fitz.open(pdf_path)
+    try:
+        toc_rng = _locate_via_toc(doc, start_patterns=ACTUARIAL_TOC_PATTERNS)
+        if toc_rng is not None and toc_rng[0] >= MIN_START_PAGE:
+            start, end = toc_rng[0], _find_section_end(doc, toc_rng[0])
+        else:
+            rng = _actuarial_text_search(doc)
+            if rng is None:
+                return None
+            start, end = rng
+        if start > doc.page_count or end < start:
+            return None  # corrupt outline pointing past the last page
+        if end >= doc.page_count and end - start + 1 > MAX_SECTION_PAGES:
+            clamped = start + MAX_SECTION_PAGES - 1
+            console.print(
+                f"  [yellow]no Actuarial Section end found; span {start}-{end} "
+                f"({end - start + 1} pages) clamped to {start}-{clamped}[/yellow]"
+            )
+            end = clamped
+        return (start, end)
+    finally:
+        doc.close()
+
 
 def _fallback_net_pension_liability(pdf_path: str) -> tuple[int, int] | None:
     """Fallback when no Actuarial Section is found via TOC/text search.
@@ -361,8 +473,7 @@ def extract_one(session, doc: Document, plan: Plan) -> str:
         console.print(f"  [yellow]{label}: missing local file[/yellow]")
         return "no_section"
 
-    rng = locate_investment_section(doc.local_path, start_patterns=ACTUARIAL_START,
-                                    end_patterns=ACTUARIAL_END)
+    rng = locate_actuarial_section(doc.local_path)
     if rng is None:
         rng = _fallback_net_pension_liability(doc.local_path)
     if rng is None:

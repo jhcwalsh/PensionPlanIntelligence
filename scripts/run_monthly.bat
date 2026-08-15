@@ -63,6 +63,17 @@ if errorlevel 1 (
     exit /b 1
 )
 
+REM Same reasoning as above: the GHA runner never sees these plans' PDFs, so
+REM if actuarial extraction doesn't run here the WAF-blocked plans can never
+REM get actuarial data at all. Notify but do NOT exit — the extractor returns
+REM 1 when any single document fails, and a per-document quirk must not cost
+REM us the refresh that already landed in the DB.
+echo [%TIME%] extract_cafr_actuarial.py >> "%LOG%"
+python extract_cafr_actuarial.py >> "%LOG%" 2>&1
+if errorlevel 1 (
+    python -m scripts.notify_failure %TASK% extract_cafr_actuarial "%LOG%" %ERRORLEVEL%
+)
+
 echo [%TIME%] db_sync push >> "%LOG%"
 python -m scripts.db_sync push --by %TASK% >> "%LOG%" 2>&1
 if errorlevel 1 (
