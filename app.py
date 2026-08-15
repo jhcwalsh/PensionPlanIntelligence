@@ -522,12 +522,24 @@ def _plans_index_rows() -> list[dict]:
     One light query for the twin metadata (get_twin_index — no facets
     gunzip) plus one for the plan list; cached so Streamlit reruns don't
     refetch on every interaction.
+
+    Both queries are needed: ``get_twin_index`` inner-joins twin_snapshots,
+    so it omits any plan that has no snapshot yet — a plan just added to
+    known_plans.json, or one whose ``build_twin`` raised (twin_builder
+    catches per-plan and moves on). Sourcing the row list from `plans`
+    keeps those visible with an em-dash twin column.
     """
     session = get_db_session()
     twin_meta = {r["plan_id"]: r for r in get_twin_index(session)}
     rows = []
-    for plan in session.query(Plan).order_by(Plan.name).all():
-        meta = twin_meta.get(plan.id)
+    plan_cols = (
+        session.query(Plan.id, Plan.name, Plan.abbreviation,
+                      Plan.state, Plan.aum_billions)
+        .order_by(Plan.name)
+        .all()
+    )
+    for plan_id, name, abbreviation, state, aum_billions in plan_cols:
+        meta = twin_meta.get(plan_id)
         if meta:
             comp = meta["completeness"]
             completeness = f"{(sum(comp.values()) / len(comp)):.0%}" if comp else "—"
@@ -536,13 +548,13 @@ def _plans_index_rows() -> list[dict]:
             completeness = "—"
             twin_built = "—"
         rows.append({
-            "Plan": plan.abbreviation or plan.id,
-            "Name": plan.name,
-            "State": plan.state or "—",
-            "AUM ($B)": plan.aum_billions,
+            "Plan": abbreviation or plan_id,
+            "Name": name,
+            "State": state or "—",
+            "AUM ($B)": aum_billions,
             "Twin built": twin_built,
             "Completeness": completeness,
-            "Twin": f"?plan={plan.id}",
+            "Twin": f"?plan={plan_id}",
         })
     return rows
 
