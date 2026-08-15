@@ -49,6 +49,16 @@ FUNDING_METRIC_FIELDS = (
     "actuary_firm", "valuation_date",
 )
 
+# How many populated funding metrics count as a fully-captured facet.
+# The mere existence of a CafrActuarial row is NOT evidence the CAFR was
+# parsed: extract_cafr_actuarial's prompt tells the model to return nulls for
+# an unparseable section, and save_actuarial writes the row either way — so an
+# all-null row used to score 1.0. Scoring on populated-metric count fixes that.
+# Saturating below len(FUNDING_METRIC_FIELDS) is deliberate: no real CAFR
+# reports all 19 fields (the observed range across the plans that have a row
+# is 13-17), so a full-set denominator would peg every plan under 1.0 forever.
+FUNDING_METRICS_FOR_FULL_SCORE = 10
+
 
 def _canonical_hash(facets: dict) -> str:
     return hashlib.sha256(
@@ -506,6 +516,15 @@ def build_roster_and_timeline(session, plan, mappings):
             doc_ids = evidence.get("doc_ids") or evidence.get("rfp_doc_ids") or []
             action_types = evidence.get("action_types")
             action_types = action_types if isinstance(action_types, dict) else {}
+            # build_manager_roster persists the true mention count in the
+            # evidence blob. Don't fall back to sum(action_types.values()):
+            # that drops every action whose `action` field is null and is 0
+            # for RFP-derived rows (consultant/custodian/actuary), which
+            # rendered as "Mentions: 0" on the twin page. Rows written before
+            # mention_count was persisted take the best available floor.
+            mention_count = evidence.get("mention_count")
+            if not isinstance(mention_count, int) or isinstance(mention_count, bool):
+                mention_count = max(sum(action_types.values()), len(doc_ids))
             entries.append({
                 "name_canonical": r.canonical_name,
                 "role": r.role,
@@ -516,7 +535,7 @@ def build_roster_and_timeline(session, plan, mappings):
                 "last_seen": r.last_seen,
                 "confidence": r.confidence,
                 "doc_ids": doc_ids,
-                "mention_count": sum(action_types.values()),
+                "mention_count": mention_count,
                 "action_types": action_types,
             })
         entries.sort(key=lambda e: (
@@ -584,6 +603,8 @@ def build_rfp_facets(session, plan):
 def _completeness(facets: dict) -> dict:
     pol = facets["policy"].get("investment_policy_text")
     timeline = facets["activity_timeline"]
+    funding_metrics = facets["funding_actuarial"].get("metrics") or {}
+    funding_populated = sum(1 for v in funding_metrics.values() if v is not None)
     return {
         "identity": 1.0,
         "policy": 1.0 if (pol and pol.get("v")) else 0.0,
@@ -594,7 +615,10 @@ def _completeness(facets: dict) -> dict:
         "rfp_state": round(min(1.0, len(facets["rfp_state"]["records"]) / 5), 2),
         "governance_people": round(
             min(1.0, len(facets["governance_people"]["relationships"]) * 0.2), 2),
-        "funding_actuarial": 1.0 if facets["funding_actuarial"].get("status") == "captured" else 0.0,
+        # 0.0 both when there's no CafrActuarial row at all and when the row
+        # exists but every metric came back null (see the constant's comment).
+        "funding_actuarial": round(
+            min(1.0, funding_populated / FUNDING_METRICS_FOR_FULL_SCORE), 2),
     }
 
 
