@@ -74,6 +74,10 @@ PROMPT_VERSION = "actuarial_v1"
 # was page 37 or later. 20 sits in that gap with margin on both sides.
 MIN_START_PAGE = 20
 
+# Below this average, the located pages are scanned images whose text layer
+# holds only headers, and every extracted field comes back null.
+MIN_CHARS_PER_PAGE = 400
+
 # Matched with `.search()` against a single-line TOC title. Requiring the word
 # "section" matters: on flat outlines (KPERS ships 187 level-1 entries) a bare
 # "actuarial" also matches "Actuarial Assumptions" in the Financial Section
@@ -189,25 +193,44 @@ def locate_actuarial_section(pdf_path: str) -> tuple[int, int] | None:
         doc.close()
 
 
+def _has_usable_text(text: str, start: int, end: int) -> bool:
+    """True if the located pages carry a real text layer, not just headers.
+
+    Measured across the CAFRs on disk: text-bearing Actuarial Sections run
+    ~2,000 characters per page (MN PERA 1,970; KPERS 2,345), while PERS-OR's
+    image-based one yields 89.
+    """
+    return len(text) / max(1, end - start + 1) >= MIN_CHARS_PER_PAGE
+
+
 def _fallback_net_pension_liability(pdf_path: str) -> tuple[int, int] | None:
     """Fallback when no Actuarial Section is found via TOC/text search.
 
-    Scans pages for "net pension liability" (case-insensitive) and returns
-    the first hit's page +/- 3 pages, bounded to the document. Returns None
-    if the phrase never appears.
+    Returns the span of pages mentioning "net pension liability"
+    (case-insensitive), or None if the phrase never appears. GASB 67/68
+    disclosures run across the notes and the RSI schedules, so the span is
+    what carries the figures — a narrow probe around the first hit lands in
+    MD&A and comes back with a funded ratio and nothing else. A lone hit
+    still gets +/- 3 pages of context. Capped at `MAX_SECTION_PAGES`.
+
+    The scan skips the front matter for the same reason the section locator
+    does: a CAFR's contents page lists the phrase, so an unfiltered scan
+    anchors on it (PERS-OR hits page 5 and returns pages 2-8 of cover art).
+    Documents too short to have front matter are scanned whole.
     """
     doc = fitz.open(pdf_path)
     try:
-        hit_page = None
-        for i in range(doc.page_count):
-            text = doc.load_page(i).get_text()
-            if _NET_PENSION_LIABILITY.search(text):
-                hit_page = i + 1  # 1-indexed
-                break
-        if hit_page is None:
+        first_page = MIN_START_PAGE if doc.page_count > MIN_START_PAGE else 1
+        hits = [i + 1 for i in range(first_page - 1, doc.page_count)
+                if _NET_PENSION_LIABILITY.search(doc.load_page(i).get_text())]
+        if not hits:
             return None
-        start = max(1, hit_page - 3)
-        end = min(doc.page_count, hit_page + 3)
+        if len(hits) == 1:
+            start, end = hits[0] - 3, hits[0] + 3
+        else:
+            start, end = hits[0], hits[-1]
+        start = max(1, start)
+        end = min(doc.page_count, end, start + MAX_SECTION_PAGES - 1)
         return (start, end)
     finally:
         doc.close()
@@ -480,8 +503,26 @@ def extract_one(session, doc: Document, plan: Plan) -> str:
         console.print(f"  [yellow]{label}: Actuarial Section not found[/yellow]")
         return "no_section"
     start, end = rng
-
     section_text = extract_section_text(doc.local_path, start, end)
+
+    # Locating the right pages is not enough: some plans publish the Actuarial
+    # Section as scanned images, so the pages carry a text layer of headers and
+    # nothing else (PERS-OR FY2024 yields 89 chars/page across 46 pages, and
+    # every extracted field comes back null). Prefer the net-pension-liability
+    # window in that case — it lands in the text-bearing Financial Section.
+    if not _has_usable_text(section_text, start, end):
+        fallback = _fallback_net_pension_liability(doc.local_path)
+        if fallback is not None:
+            fallback_text = extract_section_text(doc.local_path, *fallback)
+            if len(fallback_text) > len(section_text):
+                console.print(
+                    f"  [yellow]{label}: pages {start}-{end} have no usable text "
+                    f"layer ({len(section_text):,} chars); falling back to "
+                    f"pages {fallback[0]}-{fallback[1]}[/yellow]"
+                )
+                start, end = fallback
+                section_text = fallback_text
+
     if len(section_text) > MAX_SECTION_CHARS:
         section_text = section_text[:MAX_SECTION_CHARS]
 

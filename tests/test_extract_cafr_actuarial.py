@@ -192,6 +192,13 @@ def test_weak_pattern_alone_on_dense_page_finds_nothing(tmp_path):
     assert locate_actuarial_section(_make_pdf(tmp_path / "dense.pdf", pages)) is None
 
 
+def test_has_usable_text_rejects_header_only_pages():
+    """PERS-OR FY2024's Actuarial Section is scanned images: 46 pages whose
+    text layer is 4,088 characters of headers, extracting to all nulls."""
+    assert not extract_cafr_actuarial._has_usable_text("x" * 4088, 121, 166)
+    assert extract_cafr_actuarial._has_usable_text("x" * 61073, 109, 139)
+
+
 def test_locate_returns_none_when_absent(tmp_path):
     pdf = _make_pdf(tmp_path / "none.pdf", _pad(MIN_START_PAGE + 5,
                                                 "Nothing relevant here\n"))
