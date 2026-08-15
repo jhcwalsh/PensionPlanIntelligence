@@ -66,7 +66,14 @@ jobs:
             python -m scripts.compose_rfp_weekly
           fi
 
+      # `!cancelled()` for consistency with the other cadences. The exposure
+      # here is small — compose_rfp_weekly.py writes the .md as its last act
+      # (line 300 of 302) — but the brief IS the deliverable, so a failure
+      # after the write would otherwise strand it on the runner. Costs
+      # nothing when compose failed earlier: with no new file the step just
+      # reports "No new brief to commit".
       - name: Commit brief
+        if: ${{ !cancelled() }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

@@ -94,8 +94,15 @@ jobs:
           fi
           python -m insights.scheduler weekly $ARGS
 
+      # `!cancelled()` because the compose step has an irreversible side
+      # effect: insights/cycle_common.finalize_for_approval issues the
+      # approval tokens, sends the magic-link email, and only then commits.
+      # If a later step fails, the token-bearing DB is never pushed to R2 or
+      # to master, and the recipient's approve/reject link resolves against a
+      # DB that has no such token. The email cannot be unsent, so the DB
+      # state recording it has to be preserved regardless of step outcome.
       - name: Push DB to R2
-        if: ${{ github.event.inputs.dry_run != 'true' }}
+        if: ${{ !cancelled() && github.event.inputs.dry_run != 'true' }}
         env:
           R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -107,7 +114,7 @@ jobs:
       # Scheduled runs have no inputs, so this fires for cron and for
       # unchecked manual runs.
       - name: Commit DB + notes changes
-        if: ${{ github.event.inputs.dry_run != 'true' }}
+        if: ${{ !cancelled() && github.event.inputs.dry_run != 'true' }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

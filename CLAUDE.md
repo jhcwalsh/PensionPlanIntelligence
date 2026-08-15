@@ -127,6 +127,29 @@ Render hosts only two web services now: Streamlit (`pension-plan-intelligence`) 
 
 GHA secrets that must exist for the cron entries to work: `ANTHROPIC_API_KEY`, `RESEND_API_KEY`, `APPROVAL_EMAIL_RECIPIENT`, `APPROVAL_EMAIL_FROM`. Local cron uses the same names from `.env`. Schedules are UTC; ET drifts one hour between EDT and EST. The 1st-of-month sequence is deliberate: GHA CAFR refresh @ 15:00 UTC → local CAFR refresh runs early ET → GHA monthly-insights @ 18:00 UTC pulls a DB that already has both runs' new CAFRs.
 
+### Commit/push steps must never be gated on success alone
+Every workflow that writes the DB back guards its push/commit steps — and the
+derived-data steps ahead of them — with `if: ${{ !cancelled() && ... }}`, not
+with a bare `dry_run` check (which still implies `success()`). The reason is
+that by the time those steps run, irreversible work has already happened and
+lives only on the runner:
+
+- the pipeline and CAFR refresh have downloaded PDFs that are **never committed**, and written rows as they go;
+- `rfp/orchestrator.py` commits incrementally per document;
+- the insights cadences have already **sent the approval email**, and the matching token exists only in the DB — skip the commit and the recipient's magic link is dead;
+- the daily digest has already sent, and its `daily_runs` row is what stops tomorrow's digest repeating today's documents.
+
+The extractors exit `1` when *any single item* fails (one Claude error out of
+~138 documents is enough), so without the guard one data quirk discards the
+whole run. Use `!cancelled()` rather than `continue-on-error` so the job still
+goes red and the failure stays visible — only the discarding is removed. This
+mirrors `pipeline.py`'s own principle that "a data quirk must not block the
+day's DB push". `scripts/run_monthly.bat` follows the same rule locally by
+notifying on extractor failure without `exit /b 1`.
+
+Deliberate exception: `daily-pipeline.yml`'s "Send daily digest email" stays
+on `success()`, to avoid emailing a digest for a failed run.
+
 ## Conventions worth knowing
 
 - **Don't run `git add .`** — dozens of untracked scratch files at the repo root (`_cafr_*.json`, `*.log`, `data/known_plans.json.bak*`, screenshots, an empty stray `pension.db` at the repo root) are intentionally left out. Stage by name or path.

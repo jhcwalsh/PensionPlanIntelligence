@@ -87,8 +87,11 @@ jobs:
             python -m insights.scheduler annual
           fi
 
+      # `!cancelled()`: the compose step sends the approval email before the
+      # workflow commits, so skipping the commit on failure leaves the magic
+      # link pointing at a DB with no matching token. See weekly-insights.yml.
       - name: Push DB to R2
-        if: ${{ github.event.inputs.dry_run != 'true' }}
+        if: ${{ !cancelled() && github.event.inputs.dry_run != 'true' }}
         env:
           R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -97,7 +100,7 @@ jobs:
         run: python -m scripts.db_sync push --by "${{ github.workflow }}"
 
       - name: Commit DB + notes changes
-        if: ${{ github.event.inputs.dry_run != 'true' }}
+        if: ${{ !cancelled() && github.event.inputs.dry_run != 'true' }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

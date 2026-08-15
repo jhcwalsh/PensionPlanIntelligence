@@ -54,7 +54,12 @@ jobs:
       - name: Publish publication
         run: python -m scripts.publish_pending --id "${{ inputs.publication_id }}"
 
+      # `!cancelled()`: publish_pending flips the publication to `published`
+      # and writes notes/ before this step runs. Skipping the commit strands
+      # that transition on the runner, so the approval link stays live and the
+      # note never appears on the site.
       - name: Push DB to R2
+        if: ${{ !cancelled() }}
         env:
           R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -63,6 +68,7 @@ jobs:
         run: python -m scripts.db_sync push --by "${{ github.workflow }}"
 
       - name: Commit notes + DB
+        if: ${{ !cancelled() }}
         run: |
           git add notes/ db/pension.db
           if git diff --cached --quiet; then
