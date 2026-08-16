@@ -17,6 +17,7 @@ from pathlib import Path
 import streamlit as st
 from dotenv import load_dotenv
 
+import queries
 from database import (
     ApprovalToken,
     CafrAllocation,
@@ -153,40 +154,15 @@ def get_db_session():
 
 
 def load_plans():
-    session = get_db_session()
-    return session.query(Plan).order_by(Plan.name).all()
+    return queries.plans(get_db_session())
 
 
 def load_recent_summaries(plan_id=None, limit=20):
-    """Most recent summarized documents, sorted by meeting_date desc.
-
-    Filters out CAFRs / performance reports and caps meeting_date at
-    today + 60 days so the By-document view of Activity matches the
-    other two views — see ``database.get_new_meetings`` for the same
-    filter rationale.
-    """
-    session = get_db_session()
-    future_cap = datetime.utcnow() + timedelta(days=60)
-    q = (
-        session.query(Document, Summary)
-        .join(Summary, Document.id == Summary.document_id)
-        .filter(Document.doc_type.notin_(["cafr", "performance"]))
-        .filter((Document.meeting_date.is_(None)) |
-                (Document.meeting_date <= future_cap))
-    )
-    if plan_id and plan_id != "All":
-        q = q.filter(Document.plan_id == plan_id)
-    return q.order_by(Document.meeting_date.desc()).limit(limit).all()
+    return queries.recent_summaries(get_db_session(), plan_id, limit)
 
 
 def get_stats():
-    session = get_db_session()
-    plans = session.query(Plan).count()
-    docs = session.query(Document).count()
-    summarized = session.query(Summary).count()
-    downloaded = session.query(Document).filter(
-        Document.extraction_status == "done").count()
-    return plans, docs, downloaded, summarized
+    return queries.corpus_stats(get_db_session())
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -517,47 +493,8 @@ def _render_activity_by_document(plan_id, plan_label, sort: str = "Most recent")
 
 @st.cache_data(ttl=300, show_spinner=False)
 def _plans_index_rows() -> list[dict]:
-    """Plans-tab index rows: every plan, joined to its latest twin metadata.
-
-    One light query for the twin metadata (get_twin_index — no facets
-    gunzip) plus one for the plan list; cached so Streamlit reruns don't
-    refetch on every interaction.
-
-    Both queries are needed: ``get_twin_index`` inner-joins twin_snapshots,
-    so it omits any plan that has no snapshot yet — a plan just added to
-    known_plans.json, or one whose ``build_twin`` raised (twin_builder
-    catches per-plan and moves on). Sourcing the row list from `plans`
-    keeps those visible with an em-dash twin column.
-    """
-    session = get_db_session()
-    twin_meta = {r["plan_id"]: r for r in get_twin_index(session)}
-    rows = []
-    plan_cols = (
-        session.query(Plan.id, Plan.name, Plan.abbreviation,
-                      Plan.state, Plan.aum_billions)
-        .order_by(Plan.name)
-        .all()
-    )
-    for plan_id, name, abbreviation, state, aum_billions in plan_cols:
-        meta = twin_meta.get(plan_id)
-        if meta:
-            comp = meta["completeness"]
-            completeness = f"{(sum(comp.values()) / len(comp)):.0%}" if comp else "—"
-            twin_built = meta["built_at"].strftime("%Y-%m-%d") if meta["built_at"] else "—"
-        else:
-            completeness = "—"
-            twin_built = "—"
-        rows.append({
-            "Plan": abbreviation or plan_id,
-            "Name": name,
-            "State": state or "—",
-            "AUM ($B)": aum_billions,
-            "Twin built": twin_built,
-            "Completeness": completeness,
-            "Twin": f"?plan={plan_id}",
-        })
-    return rows
-
+    """Plans-tab index rows. Cached so Streamlit reruns don't refetch."""
+    return queries.plans_index_rows(get_db_session())
 
 def page_plans():
     """Digital-twin index — one row per tracked plan, linking to its twin page."""
@@ -2025,53 +1962,9 @@ def _render_cafr_refreshes():
 
 
 def _admin_plan_coverage_df():
-    """Build the per-plan coverage table used by the Admin page.
-
-    Returns a pandas DataFrame with one row per tracked plan, summarising
-    how many documents have been downloaded, extracted and summarised,
-    plus the timestamp of the most recent download.
-    """
+    """Per-plan coverage table for the Admin page, as a DataFrame."""
     import pandas as pd
-    from sqlalchemy import case, distinct, func
-
-    session = get_db_session()
-    rows = (
-        session.query(
-            Plan.name.label("plan"),
-            Plan.abbreviation.label("abbrev"),
-            Plan.state.label("state"),
-            func.count(distinct(Document.id)).label("downloaded"),
-            func.sum(
-                case((Document.extraction_status == "done", 1), else_=0)
-            ).label("extracted"),
-            func.count(distinct(Summary.id)).label("summarized"),
-            func.max(Document.downloaded_at).label("last_download"),
-        )
-        .outerjoin(Document, Document.plan_id == Plan.id)
-        .outerjoin(Summary, Summary.document_id == Document.id)
-        .group_by(Plan.id)
-        .order_by(Plan.name)
-        .all()
-    )
-
-    df = pd.DataFrame(
-        [
-            {
-                "Plan": r.plan,
-                "Abbrev": r.abbrev or "",
-                "State": r.state or "",
-                "Downloaded": int(r.downloaded or 0),
-                "Extracted": int(r.extracted or 0),
-                "Summarized": int(r.summarized or 0),
-                "Last download": (
-                    r.last_download.strftime("%Y-%m-%d %H:%M")
-                    if r.last_download else "—"
-                ),
-            }
-            for r in rows
-        ]
-    )
-    return df
+    return pd.DataFrame(queries.plan_coverage_rows(get_db_session()))
 
 
 @st.cache_data(ttl=300)
