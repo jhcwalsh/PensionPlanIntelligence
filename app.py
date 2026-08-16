@@ -1969,208 +1969,14 @@ def _admin_plan_coverage_df():
 
 @st.cache_data(ttl=300)
 def _cafr_coverage_df():
-    """Per-plan CAFR + extraction coverage table.
-
-    For each tracked plan, picks the most recent CAFR document (by
-    fiscal_year, then downloaded_at) and joins to its CafrExtract row if
-    one exists, plus counts of allocation and performance rows.
-
-    Cached for 5 minutes — the underlying tables are write-rare (CAFR
-    refresh is monthly; extraction is one-shot per plan).
-    """
+    """Per-plan CAFR + extraction coverage, as a DataFrame."""
     import pandas as pd
-    from sqlalchemy import func
-
-    session = get_db_session()
-
-    cafr_rows = (
-        session.query(Document)
-        .filter(Document.doc_type == "cafr")
-        .order_by(Document.plan_id)
-        .all()
-    )
-    # Reduce to the most recent CAFR per plan (highest fiscal_year, then
-    # most recent downloaded_at). Done in Python to avoid SQL nullslast
-    # portability concerns.
-    latest_cafr: dict[str, Document] = {}
-    cafr_count: dict[str, int] = {}
-    for d in cafr_rows:
-        cafr_count[d.plan_id] = cafr_count.get(d.plan_id, 0) + 1
-        prev = latest_cafr.get(d.plan_id)
-        if prev is None:
-            latest_cafr[d.plan_id] = d
-            continue
-        prev_key = (prev.fiscal_year or 0, prev.downloaded_at or datetime.min)
-        d_key = (d.fiscal_year or 0, d.downloaded_at or datetime.min)
-        if d_key > prev_key:
-            latest_cafr[d.plan_id] = d
-
-    extracts: dict[int, CafrExtract] = {
-        e.document_id: e for e in session.query(CafrExtract).all()
-    }
-    alloc_counts = dict(
-        session.query(
-            CafrAllocation.cafr_extract_id,
-            func.count(CafrAllocation.id),
-        ).group_by(CafrAllocation.cafr_extract_id).all()
-    )
-    perf_counts = dict(
-        session.query(
-            CafrPerformance.cafr_extract_id,
-            func.count(CafrPerformance.id),
-        ).group_by(CafrPerformance.cafr_extract_id).all()
-    )
-
-    # Plan metadata from JSON: cafr_format=aggregator marks a CAFR that
-    # covers a system-of-systems (e.g. NYC Retirement, MN SBI). The
-    # structured extractor intentionally skips these because the
-    # asset-allocation tables don't map to a single plan. Bucket them
-    # separately so they don't sit forever as "Pending extract".
-    # Read JSON directly (not via fetcher.load_plans) so this module
-    # doesn't drag in the pipeline-side bs4 / Playwright deps that
-    # aren't installed on the Render web service.
-    _plans_meta_path = Path(__file__).parent / "data" / "known_plans.json"
-    with open(_plans_meta_path, encoding="utf-8") as _f:
-        _plans_meta = json.load(_f)
-    aggregator_ids: set[str] = {
-        meta["id"] for meta in _plans_meta
-        if (meta.get("cafr_format") or "").lower() == "aggregator"
-    }
-
-    plans = session.query(Plan).order_by(Plan.name).all()
-    rows = []
-    for p in plans:
-        doc = latest_cafr.get(p.id)
-        if doc is None:
-            status = "Missing CAFR"
-            cafr_fy = ""
-            downloaded = ""
-            url = ""
-            extracted = "No"
-            extract_fy = ""
-            alloc = 0
-            perf = 0
-        else:
-            cafr_fy = str(doc.fiscal_year) if doc.fiscal_year else ""
-            downloaded = doc.downloaded_at.strftime("%Y-%m-%d") if doc.downloaded_at else ""
-            url = doc.url or ""
-            ext = extracts.get(doc.id)
-            if p.id in aggregator_ids:
-                status = "Aggregator (skipped)"
-                extracted = "N/A"
-                extract_fy = ""
-                alloc = 0
-                perf = 0
-            elif ext is None:
-                status = "Pending extract"
-                extracted = "No"
-                extract_fy = ""
-                alloc = 0
-                perf = 0
-            else:
-                status = "Extracted"
-                extracted = "Yes"
-                extract_fy = str(ext.fiscal_year) if ext.fiscal_year else ""
-                alloc = int(alloc_counts.get(ext.id, 0))
-                perf = int(perf_counts.get(ext.id, 0))
-
-        rows.append({
-            "plan_id": p.id,
-            "Plan": p.abbreviation or p.name,
-            "Name": p.name,
-            "State": p.state or "",
-            "FYE": p.fiscal_year_end or "",
-            "Status": status,
-            "CAFR FY": cafr_fy,
-            "Source": url or None,
-            "Extract FY": extract_fy,
-            "# Asset classes": alloc,
-            "# Perf rows": perf,
-            "Downloaded": downloaded,
-        })
-
-    return pd.DataFrame(rows)
-
+    return pd.DataFrame(queries.cafr_coverage_rows(get_db_session()))
 
 @st.cache_data(ttl=300)
 def _cafr_plan_detail_data(plan_id: str) -> dict:
-    """Fetch the latest CAFR extract for a plan, with allocations + performance."""
-    session = get_db_session()
-    plan = session.query(Plan).filter_by(id=plan_id).first()
-    if plan is None:
-        return {}
-
-    extract = (
-        session.query(CafrExtract)
-        .filter(CafrExtract.plan_id == plan_id)
-        .order_by(CafrExtract.fiscal_year.desc(), CafrExtract.id.desc())
-        .first()
-    )
-    if extract is None:
-        return {"plan": {
-            "name": plan.name,
-            "abbreviation": plan.abbreviation,
-            "state": plan.state,
-        }}
-
-    allocations = (
-        session.query(CafrAllocation)
-        .filter(CafrAllocation.cafr_extract_id == extract.id)
-        .order_by(CafrAllocation.id)
-        .all()
-    )
-    performance = (
-        session.query(CafrPerformance)
-        .filter(CafrPerformance.cafr_extract_id == extract.id)
-        .order_by(CafrPerformance.scope, CafrPerformance.period)
-        .all()
-    )
-    document = session.query(Document).filter_by(id=extract.document_id).first()
-
-    return {
-        "plan": {
-            "name": plan.name,
-            "abbreviation": plan.abbreviation,
-            "state": plan.state,
-        },
-        "extract": {
-            "id": extract.id,
-            "fiscal_year": extract.fiscal_year,
-            "extracted_at": extract.extracted_at,
-            "model_used": extract.model_used,
-            "pages_used": extract.pages_used,
-            "investment_policy_text": extract.investment_policy_text,
-            "notes": extract.notes,
-        },
-        "document": {
-            "id": document.id if document else None,
-            "url": document.url if document else None,
-            "filename": document.filename if document else None,
-        } if document else None,
-        "allocations": [
-            {
-                "Asset class": a.asset_class,
-                "Target %": a.target_pct,
-                "Actual %": a.actual_pct,
-                "Range low %": a.target_range_low,
-                "Range high %": a.target_range_high,
-                "Notes": a.notes or "",
-            }
-            for a in allocations
-        ],
-        "performance": [
-            {
-                "Scope": p.scope,
-                "Period": p.period,
-                "Return %": p.return_pct,
-                "Benchmark %": p.benchmark_return_pct,
-                "Benchmark": p.benchmark_name or "",
-                "Notes": p.notes or "",
-            }
-            for p in performance
-        ],
-    }
-
+    """Latest CAFR extract for a plan, with allocations and performance."""
+    return queries.cafr_plan_detail(get_db_session(), plan_id)
 
 def _twin_page_data(plan_id: str) -> dict:
     """Load the latest twin snapshot for the twin detail page."""
@@ -2579,83 +2385,22 @@ ASSET_ALLOCATION_VIEWS = (
 @st.cache_data(ttl=300)
 def _allocation_fy_range() -> tuple[int, int] | None:
     """Min/max fiscal_year across CAFR extracts. Returns ``None`` if empty."""
-    from sqlalchemy import func
-
-    session = get_db_session()
-    row = (
-        session.query(
-            func.min(CafrExtract.fiscal_year),
-            func.max(CafrExtract.fiscal_year),
-        )
-        .filter(CafrExtract.fiscal_year.isnot(None))
-        .one_or_none()
-    )
-    if not row or row[0] is None or row[1] is None:
-        return None
-    return int(row[0]), int(row[1])
-
+    return queries.cafr_extract_fy_range(get_db_session())
 
 @st.cache_data(ttl=300)
 def _allocation_df(match_patterns: tuple, exclude_patterns: tuple,
                    exact_label: str, min_fy: int | None = None):
     """Plans with both target and actual weights for a given asset class.
 
-    Pulls the latest CAFR extract per plan (whose fiscal_year is at least
-    ``min_fy`` if provided), filters allocation rows whose asset_class
-    matches any of ``match_patterns`` (case-insensitive LIKE) and matches
-    none of ``exclude_patterns``, and keeps only rows where both target_pct
-    and actual_pct are populated. When a plan has multiple matching rows,
-    the one whose asset_class equals ``exact_label`` is preferred;
-    otherwise the first row is kept.
+    The SQL lives in ``queries.allocation_rows``. What stays here is the
+    presentation-side reduction: when a plan has several matching rows, prefer
+    the one whose asset_class equals ``exact_label``, else keep the first.
     """
     import pandas as pd
-    from sqlalchemy import func, or_
 
-    session = get_db_session()
-
-    # The "latest extract per plan" subquery has to apply the same
-    # min_fy filter; otherwise a plan whose newest CAFR is older than
-    # min_fy would simply drop out (correct), but a plan whose newest
-    # CAFR is newer than min_fy would still be picked even when the
-    # user only wanted older data — apply consistently.
-    latest_extract_q = (
-        session.query(func.max(CafrExtract.id))
-        .filter(CafrExtract.plan_id == Plan.id)
-    )
-    if min_fy is not None:
-        latest_extract_q = latest_extract_q.filter(
-            CafrExtract.fiscal_year >= min_fy
-        )
-    latest_extract_id = latest_extract_q.correlate(Plan).scalar_subquery()
-
-    asset_class_lower = func.lower(CafrAllocation.asset_class)
-    match_clause = or_(*[asset_class_lower.like(p) for p in match_patterns])
-
-    query = (
-        session.query(
-            Plan.id,
-            Plan.name,
-            Plan.abbreviation,
-            Plan.state,
-            CafrExtract.fiscal_year,
-            CafrAllocation.asset_class,
-            CafrAllocation.target_pct,
-            CafrAllocation.actual_pct,
-        )
-        .join(CafrExtract, CafrExtract.id == latest_extract_id)
-        .join(CafrAllocation, CafrAllocation.cafr_extract_id == CafrExtract.id)
-        .filter(match_clause)
-        .filter(CafrAllocation.target_pct.isnot(None))
-        .filter(CafrAllocation.actual_pct.isnot(None))
-    )
-    for pat in exclude_patterns:
-        query = query.filter(~asset_class_lower.like(pat))
-    rows = query.all()
-
-    df = pd.DataFrame(rows, columns=[
-        "plan_id", "plan_name", "abbreviation", "state",
-        "fiscal_year", "asset_class", "target_pct", "actual_pct",
-    ])
+    rows = queries.allocation_rows(get_db_session(), match_patterns,
+                                   exclude_patterns, min_fy)
+    df = pd.DataFrame(rows, columns=list(queries.ALLOCATION_COLUMNS))
     if df.empty:
         return df
 
@@ -2663,14 +2408,12 @@ def _allocation_df(match_patterns: tuple, exclude_patterns: tuple,
         df["abbreviation"].astype(bool), df["plan_id"]
     )
     df["_priority"] = df["asset_class"].str.lower().eq(exact_label).astype(int)
-    df = (
+    return (
         df.sort_values(["plan_id", "_priority"], ascending=[True, False])
           .drop_duplicates(subset=["plan_id"], keep="first")
           .drop(columns="_priority")
           .reset_index(drop=True)
     )
-    return df
-
 
 def _render_allocation_view(df, asset_label: str) -> None:
     """Render the scatter chart + table for one asset-class view."""

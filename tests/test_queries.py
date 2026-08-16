@@ -82,3 +82,100 @@ def test_plans_index_includes_plans_without_a_twin(seeded):
     assert {r["Completeness"] for r in rows} == {"—"}
     # Falls back to plan id when abbreviation is null.
     assert {r["Plan"] for r in rows} == {"aaa", "BRAVO"}
+
+
+# ---------------------------------------------------------------------------
+# CAFR extraction
+# ---------------------------------------------------------------------------
+
+@pytest.fixture()
+def cafr_seeded(tmp_db):
+    """One plan with an extract, one with a CAFR but no extract, one bare."""
+    from database import CafrAllocation, CafrExtract, CafrPerformance
+
+    s = get_session()
+    s.add(Plan(id="alpha", name="Alpha", abbreviation="ALP", state="CA",
+               fiscal_year_end="06-30"))
+    s.add(Plan(id="beta", name="Beta", abbreviation=None, state=None))
+    s.add(Plan(id="gamma", name="Gamma", abbreviation="GAM", state="NY"))
+    s.flush()
+
+    # alpha: two CAFRs; the FY2025 one must win over FY2024.
+    old = Document(plan_id="alpha", url="https://x/a24.pdf", filename="a24.pdf",
+                   doc_type="cafr", fiscal_year=2024, extraction_status="done",
+                   downloaded_at=datetime(2025, 1, 1))
+    new = Document(plan_id="alpha", url="https://x/a25.pdf", filename="a25.pdf",
+                   doc_type="cafr", fiscal_year=2025, extraction_status="done",
+                   downloaded_at=datetime(2026, 1, 1))
+    beta_doc = Document(plan_id="beta", url="https://x/b.pdf", filename="b.pdf",
+                        doc_type="cafr", fiscal_year=2025,
+                        extraction_status="done",
+                        downloaded_at=datetime(2026, 2, 2))
+    s.add_all([old, new, beta_doc]); s.flush()
+
+    ext = CafrExtract(plan_id="alpha", document_id=new.id, fiscal_year=2025,
+                      model_used="test", investment_policy_text="policy")
+    s.add(ext); s.flush()
+    s.add(CafrAllocation(cafr_extract_id=ext.id, asset_class="Public Equity",
+                         target_pct=60.0, actual_pct=61.0))
+    s.add(CafrAllocation(cafr_extract_id=ext.id, asset_class="Global Equity",
+                         target_pct=10.0, actual_pct=9.0))
+    s.add(CafrAllocation(cafr_extract_id=ext.id, asset_class="Real Estate",
+                         target_pct=8.0, actual_pct=None))   # dropped: no actual
+    s.add(CafrPerformance(cafr_extract_id=ext.id, scope="total",
+                          period="1yr", return_pct=7.5))
+    s.commit()
+    yield s
+    s.close()
+
+
+def test_cafr_coverage_picks_the_latest_fiscal_year(cafr_seeded):
+    rows = {r["plan_id"]: r for r in queries.cafr_coverage_rows(cafr_seeded)}
+    assert rows["alpha"]["CAFR FY"] == "2025"
+    assert rows["alpha"]["Status"] == "Extracted"
+    assert rows["alpha"]["# Asset classes"] == 3
+    assert rows["alpha"]["# Perf rows"] == 1
+
+
+def test_cafr_coverage_buckets_missing_and_pending(cafr_seeded):
+    rows = {r["plan_id"]: r for r in queries.cafr_coverage_rows(cafr_seeded)}
+    assert rows["beta"]["Status"] == "Pending extract"    # has CAFR, no extract
+    assert rows["gamma"]["Status"] == "Missing CAFR"      # no CAFR at all
+    assert rows["beta"]["Plan"] == "Beta"                 # falls back to name
+
+
+def test_cafr_plan_detail_unknown_and_unextracted(cafr_seeded):
+    assert queries.cafr_plan_detail(cafr_seeded, "nope") == {}
+    beta = queries.cafr_plan_detail(cafr_seeded, "beta")
+    assert set(beta) == {"plan"}          # plan exists, no extract yet
+
+
+def test_cafr_plan_detail_full_shape(cafr_seeded):
+    d = queries.cafr_plan_detail(cafr_seeded, "alpha")
+    assert d["plan"]["name"] == "Alpha"
+    assert d["extract"]["fiscal_year"] == 2025
+    assert d["document"]["filename"] == "a25.pdf"
+    assert len(d["allocations"]) == 3 and len(d["performance"]) == 1
+    assert d["allocations"][0]["Asset class"] == "Public Equity"
+
+
+def test_cafr_extract_fy_range(cafr_seeded):
+    assert queries.cafr_extract_fy_range(cafr_seeded) == (2025, 2025)
+
+
+def test_allocation_rows_requires_both_target_and_actual(cafr_seeded):
+    rows = queries.allocation_rows(cafr_seeded, ("%equity%",), ())
+    classes = {r[5] for r in rows}
+    assert classes == {"Public Equity", "Global Equity"}
+    # Real Estate has no actual_pct and must not appear even if matched.
+    assert not queries.allocation_rows(cafr_seeded, ("%real%",), ())
+
+
+def test_allocation_rows_honours_exclusions(cafr_seeded):
+    rows = queries.allocation_rows(cafr_seeded, ("%equity%",), ("%global%",))
+    assert {r[5] for r in rows} == {"Public Equity"}
+
+
+def test_allocation_rows_min_fy_filters_the_subquery_too(cafr_seeded):
+    assert queries.allocation_rows(cafr_seeded, ("%equity%",), (), 2026) == []
+    assert queries.allocation_rows(cafr_seeded, ("%equity%",), (), 2025)
