@@ -2,7 +2,7 @@ name: Monthly CAFR refresh (GHA edition)
 
 # Pulls each plan's most-recently-closed-FY ACFR into the DB. Idempotent:
 # already_have rows are no-ops, so re-runs are cheap. The 5 WAF-blocked
-# CAFR sources stay on local Task Scheduler (data/local_only_cafr_plans.json);
+# CAFR sources are skipped entirely (data/waf_blocked_cafr_plans.json);
 # the rest run from GHA.
 #
 # Runs the 1st of every month at 15:00 UTC (~11 AM EDT / 10 AM EST).

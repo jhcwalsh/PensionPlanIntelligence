@@ -1,9 +1,9 @@
 name: Daily pipeline (GHA edition)
 
-# Fetch + extract + summarize for the GHA-eligible plans (137 of 148;
-# the WAF-blocked 11 stay on local Task Scheduler -- see
-# data/local_only_plans.json). Runs daily at 11:00 UTC (~7 AM EDT /
-# 6 AM EST) and on manual dispatch.
+# Fetch + extract + summarize for the reachable plans (137 of 148). The
+# WAF-blocked plans in data/waf_blocked_plans.json are skipped everywhere --
+# they used to run from a local Task Scheduler task, removed 2026-08-16.
+# Runs daily at 11:00 UTC (~7 AM EDT / 6 AM EST) and on manual dispatch.
 #
 # Manual dispatch defaults to actually pushing the resulting db/pension.db.
 # Tick "Skip the final commit/push" for a debug run that exercises

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Two layered systems sharing one SQLite database (`db/pension.db`, ~64 MB, tracked in git):
 
-1. **Meeting-document pipeline** (`pipeline.py`, `fetcher.py`, `extractor.py`, `summarizer.py`) — fetches board materials and CAFRs from ~148 U.S. public pension plans, extracts text, summarizes with Claude per-document. Hybrid: GHA cron handles 137 of 148 plans daily; local Windows Task Scheduler handles the 11 WAF-blocked plans (see `data/local_only_plans.json`).
+1. **Meeting-document pipeline** (`pipeline.py`, `fetcher.py`, `extractor.py`, `summarizer.py`) — fetches board materials and CAFRs from ~148 U.S. public pension plans, extracts text, summarizes with Claude per-document. Cloud-only: GHA cron handles 137 of 148 plans daily. The 14 WAF-blocked plans in `data/waf_blocked_plans.json` / `data/waf_blocked_cafr_plans.json` are skipped everywhere (no runner can reach them) — 8.5% of tracked AUM, though 4 of the 14 had no documents anyway.
 2. **Insights automation** (`insights/` package) — composes monthly / quarterly / annual editorial briefings from the existing summaries, plus a daily digest. All auto-publish and email a copy; nothing waits on approval. The weekly cadence still runs but is **silent** (no email, no notes file) because monthly composes from weekly publications — see the cadence-cascade note below.
 
 The Streamlit app (`app.py`) reads from the same DB and surfaces both layers as tabs.
@@ -56,12 +56,11 @@ streamlit run app.py
 ## Architecture you have to internalize before editing
 
 ### The DB IS the deploy mechanism for data
-`db/pension.db` is committed. Pushing to `master` is how new data lands on Render. The Streamlit web service on Render mounts the persistent disk at `/data` but read from the deployed `db/pension.db` until something writes back. Three things now write back to master:
+`db/pension.db` is committed. Pushing to `master` is how new data lands on Render. The Streamlit web service on Render mounts the persistent disk at `/data` but read from the deployed `db/pension.db` until something writes back. Two things now write back to master:
 1. **GHA daily-pipeline** (~11:00 UTC) — fetches/extracts/summarizes 137 plans, commits the DB.
-2. **Local Windows Task Scheduler daily** — same pipeline scoped to the 11 WAF-blocked plans via `--local-only`, commits the DB.
 3. **GHA weekly-insights** (Sundays 12:30 UTC, silent) and **GHA monthly-insights** (1st of month 18:00 UTC) — compose digests, auto-publish, commit the DB + `notes/` (+ `cafr_summaries/` for monthly).
 
-Local Task Scheduler still owns the WAF-blocked subset of monthly CAFR refresh (5 plans via `--local-only`) — a `git push`-back operation on the same master branch. Each writer runs at a distinct time; conflicts haven't been observed but a `git pull --rebase` would be the next defensive step if they appear.
+Local Task Scheduler now owns exactly one job: the weekly meeting-recordings catalogue (`scripts/run_recordings.bat`). It is a deliberate, best-effort exception — a side dataset that no cloud job depends on, so if this machine is off for a month nothing else degrades.
 
 GitHub's hard 100 MB single-file limit is the ceiling on this model. The DB started bumping into it once `documents.extracted_text` accumulated, which forced the gzip wrapper (next section). When the DB approaches ~80 MB again, plan a real fix (Git LFS, or moving the DB out of git onto Render's persistent disk via a separate sync) rather than another column-level workaround.
 
@@ -138,11 +137,9 @@ Render hosts one web service: Streamlit (`pension-plan-intelligence`), mounting 
 | Cadence | Trigger | Where | Workflow / .bat |
 |---|---|---|---|
 | Daily document pipeline (137 plans) | cron 11:00 UTC | GHA | `.github/workflows/daily-pipeline.yml` |
-| Daily document pipeline (11 WAF-blocked plans) | Task Scheduler | local Windows | `scripts/run_daily.bat` |
 | Weekly Insights composition (silent — feeds monthly) | cron Sundays 12:30 UTC | GHA | `.github/workflows/weekly-insights.yml` |
 | Monthly CAFR refresh + structured extraction (~92 plans) | cron 1st of month 15:00 UTC | GHA | `.github/workflows/monthly-cafr-refresh.yml` |
-| Monthly CAFR refresh + structured extraction (5 WAF-blocked plans) | Task Scheduler | local Windows | `scripts/run_monthly.bat` |
-| Monthly IPS refresh (all 148 plans, auto-discover + verify via Haiku 4.5) | Task Scheduler | local Windows | `scripts/run_ips.bat` |
+| Monthly IPS refresh (auto-discover + verify via Haiku 4.5) | cron 1st of month 16:00 UTC | GHA | `.github/workflows/monthly-ips.yml` |
 | Weekly meeting-recordings catalogue (discover sources → poll via yt-dlp → email digest; no video downloads) | Task Scheduler Sat 08:00 local | local Windows | `scripts/run_recordings.bat --no-downloads` |
 | Monthly insights composition + auto-publish | cron 1st of month 18:00 UTC | GHA | `.github/workflows/monthly-insights.yml` |
 | Quarterly insights composition + auto-publish | cron 1st of Jan/Apr/Jul/Oct 19:00 UTC | GHA | `.github/workflows/quarterly-insights.yml` |
@@ -166,8 +163,8 @@ The extractors exit `1` when *any single item* fails (one Claude error out of
 whole run. Use `!cancelled()` rather than `continue-on-error` so the job still
 goes red and the failure stays visible — only the discarding is removed. This
 mirrors `pipeline.py`'s own principle that "a data quirk must not block the
-day's DB push". `scripts/run_monthly.bat` follows the same rule locally by
-notifying on extractor failure without `exit /b 1`.
+day's DB push". `scripts/run_recordings.bat`, the one remaining local job,
+follows the same rule by notifying on failure without `exit /b 1`.
 
 Deliberate exception: `daily-pipeline.yml`'s "Send daily digest email" stays
 on `success()`, to avoid emailing a digest for a failed run.

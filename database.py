@@ -696,7 +696,8 @@ class FetchRun(Base):
     """One row per pipeline.py invocation, capturing what was scraped.
 
     Source distinguishes GHA cron (the 137 GHA-eligible plans) from local
-    Task Scheduler (the 11 WAF-blocked plans in data/local_only_plans.json).
+    Task Scheduler. Local runs ended 2026-08-16; the WAF-blocked plans in
+    data/waf_blocked_plans.json are now skipped everywhere.
     new_document_ids is a JSON list of Document.id values inserted between
     started_at and completed_at.
     """
