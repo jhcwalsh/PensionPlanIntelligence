@@ -55,6 +55,27 @@ def _filename_for(publication: Publication) -> str:
     raise ValueError(f"Unknown cadence: {publication.cadence}")
 
 
+# Frozen copy of the committed notes path. The mock guard compares against
+# this rather than NOTES_DIR so it cannot be disarmed by monkeypatching, while
+# a test that legitimately redirects NOTES_DIR still writes where it points.
+_COMMITTED_NOTES_DIR = NOTES_DIR
+MOCK_NOTES_DIR = config.TMP_DIR / "notes_mock"
+
+
+def _target_dir() -> Path:
+    """Where write_note() may write.
+
+    In mock mode, redirect away from the committed notes/ directory. Without
+    this a test run overwrites real published briefings with canned mock text:
+    the auto-publish path calls write_note for monthly/quarterly/annual, and
+    the filename is derived from the period, so a mock cycle for a period that
+    has already been published lands on exactly that file.
+    """
+    if config.is_mock() and NOTES_DIR == _COMMITTED_NOTES_DIR:
+        return MOCK_NOTES_DIR
+    return NOTES_DIR
+
+
 def write_note(publication: Publication) -> Path:
     """Write a publication's draft to its canonical ``notes/`` file.
 
@@ -65,8 +86,9 @@ def write_note(publication: Publication) -> Path:
     if not publication.draft_markdown:
         raise ValueError("publication has no draft_markdown")
 
-    NOTES_DIR.mkdir(parents=True, exist_ok=True)
-    path = NOTES_DIR / _filename_for(publication)
+    target = _target_dir()
+    target.mkdir(parents=True, exist_ok=True)
+    path = target / _filename_for(publication)
     path.write_text(publication.draft_markdown, encoding="utf-8")
     logger.info("Wrote %s (%d chars)", path, len(publication.draft_markdown))
     return path
