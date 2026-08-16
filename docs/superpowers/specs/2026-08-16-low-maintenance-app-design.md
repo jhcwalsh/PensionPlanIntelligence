@@ -1,7 +1,8 @@
 # Low-maintenance app: design
 
 **Date:** 2026-08-16
-**Status:** approved design, not yet implemented
+**Status:** approved. **Step 1 implemented 2026-08-16** — see the
+corrections marked CORRECTED below, which were found while implementing it.
 **Supersedes:** the hybrid GHA + local Windows Task Scheduler model described in CLAUDE.md
 
 ## Goal
@@ -88,12 +89,31 @@ Deliberately unchanged:
 |---|---|
 | `rfp/`, `lib/`, `scripts/run_rfp_extraction.py`, `scripts/run_eval.py`, RFP tab | Subsystem cut |
 | FastAPI service (`api/`) on Render | Existed mainly to serve RFP records |
-| `weekly-rfp.yml`, `weekly-rfp-brief.yml`, `weekly-insights.yml`, `nightly_eval.yml` | Cut subsystem; no weekly cadence |
+| `weekly-rfp.yml`, `weekly-rfp-brief.yml`, `nightly_eval.yml` | Cut subsystem |
 | `publish-approved.yml`, `approval_tokens`, magic-link approval, reminders job | Auto-publish replaces the gate |
-| `scripts/run_daily.bat`, `run_monthly.bat`, `run_ips.bat`, `data/local_only_*.json` | Fully cloud |
+| `scripts/run_daily.bat`, `run_monthly.bat`, `run_ips.bat`, `run_weekly.bat`, `run_quarterly.bat` | Fully cloud |
 | `scripts/db_sync.py` and every DB-commit step in every workflow | Postgres removes the mechanism |
 
-`rfp_records` may stay in the schema; it is inert and dropping it is optional.
+**CORRECTED — `rfp_records` is NOT inert.** `twin_builder.build_rfp_facets`
+and `scripts/build_manager_roster._apply_rfp_entries` both read it, so dropping
+the data would degrade the digital twins, which are first-class scope. Measured
+before deleting anything: 189 records across 36 of 148 plans feed the
+`rfp_state` facet, and 31 governance roster rows across 21 plans (23
+consultant, 6 actuary, 2 custodian).
+
+The resolution (agreed 2026-08-16): **cut the code, freeze the data.** The
+table and its rows stay; nothing refreshes them, so those facets' freshness
+dates stop advancing and the app shows them honestly as stale. The extraction
+code remains recoverable from git history if fresh consultant data is ever
+wanted.
+
+**CORRECTED — `weekly-insights.yml` must NOT be deleted.** The cadences are a
+cascade: `insights/monthly.py` composes from weekly publications and raises
+outright when it finds none for its period, and quarterly and annual compose
+from monthlies in turn. Deleting the weekly cron would have broken the monthly
+briefing a month later, silently. What was actually wanted was no weekly
+briefing *in the inbox*, so weekly now composes **silently**
+(`notify=False, archive=False`) purely to feed monthly.
 
 Note: the `!cancelled()` guards added on 2026-08-15 protect commit steps that
 this design deletes. They remain correct until step 5 of the migration, and are
@@ -111,14 +131,16 @@ logging.
 
 ## 4. Jobs and cadences
 
-Ten scheduled workflows become **seven**: four are deleted
-(`weekly-rfp`, `weekly-rfp-brief`, `weekly-insights`, `nightly_eval`) and one is
-new — IPS, arriving from local Task Scheduler.
+Ten scheduled workflows become **eight**: three are deleted (`weekly-rfp`,
+`weekly-rfp-brief`, `nightly_eval`) and one is new — IPS, arriving from local
+Task Scheduler. `weekly-insights` survives per the correction above, and
+`daily-digest` survives because the daily digest was explicitly kept.
 
 | Job | When | Does |
 |---|---|---|
 | `daily-pipeline` | 11:00 UTC | Fetch/extract/summarise 137 plans → Postgres, PDFs → R2; rebuild rosters and twins |
 | `daily-digest` | 13:00 UTC | Auto-send digest of new documents; `daily_runs` anchors lookback |
+| `weekly-insights` | Sundays 12:30 UTC | **Silent** — no email, no `notes/` file. Exists only so monthly has weeklies to synthesize |
 | `monthly-cafr` | 1st, 15:00 UTC | CAFR refresh, investment + actuarial extraction, asset-class normalisation |
 | `monthly-ips` | 1st, 16:00 UTC | IPS discovery + Haiku verification. **Moves from local Task Scheduler to GHA** (~$1–2/cycle). Slotted between the CAFR refresh and monthly-insights so a single monthly DB state feeds the briefing |
 | `monthly-insights` | 1st, 18:00 UTC | Compose → auto-publish → FYI email |
@@ -225,10 +247,14 @@ same data-layer functions. Running cost afterwards drops toward $0–5/month.
 Ordered so the system is never in a broken state, and so the largest maintenance
 win lands first with zero migration risk.
 
-1. **Delete, still on SQLite.** RFP subsystem, local job scripts, approval gate,
-   weekly workflows. Suite green. *This alone removes most of the maintenance
-   burden.*
+1. ~~**Delete, still on SQLite.**~~ **DONE 2026-08-16** (commits `e742197`,
+   `4a5b561`, `4512e04`, `67c842b`). RFP subsystem and FastAPI service removed;
+   every cadence auto-publishes; all local jobs except recordings retired.
+   Suite green at 246 tests. Two corrections above were found doing it.
+   Also fixed on the way: a second redundant daily digest, and a bug this step
+   introduced where mock-mode cycles overwrote committed briefings in `notes/`.
 2. **Move remaining queries out of `app.py`** into the data layer. Suite green.
+   *In progress.*
 3. **Stand up Neon.** One-shot SQLite→Postgres migration preserving ids. Verify
    by comparing every plan's twin `_canonical_hash` before and after, plus row
    counts per table.
