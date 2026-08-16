@@ -5,9 +5,10 @@ alongside weekly / monthly / annual. Runs from a GitHub
 Actions cron, not Windows Task Scheduler — the lookback window
 (``daily_runs.sent_at``) makes the cycle resilient to skipped days.
 
-Unlike weekly/monthly, most days auto-send (no approval gate). The
-approval flow is invoked only when ``apply_triggers`` returns reasons
-(volume / keyword / reappearing-plan).
+Auto-sends every day. ``apply_triggers`` still computes reasons
+(volume / keyword / reappearing-plan), but since 2026-08-16 they only
+annotate the digest and land in ``daily_runs.triggers`` — they no longer
+gate it behind an approval email.
 """
 
 from __future__ import annotations
@@ -362,7 +363,7 @@ def run_daily_cycle(
         2. select_new_docs since last_sent_at.
         3. apply_triggers → reasons.
         4. compose_daily(docs, reasons).
-        5. if reasons: finalize_for_approval; else: finalize_and_send.
+        5. finalize_and_send (auto-publish); triggers only annotate.
         6. record_daily_run.
 
     Returns the Publication for the CLI to print. ``--force`` expires any
@@ -413,17 +414,16 @@ def run_daily_cycle(
         triggers = apply_triggers(docs, now_utc=now_utc, session=session)
         draft = compose_daily(docs, triggers=triggers, digest_date=now_utc, session=session)
 
-        approval_gated = bool(triggers)
         title_for_pdf = f"Daily Pension Digest — {today.isoformat()}"
 
-        if approval_gated:
-            cycle_common.finalize_for_approval(
-                session, publication, draft, title_for_pdf=title_for_pdf,
-            )
-        else:
-            cycle_common.finalize_and_send(
-                session, publication, draft, title_for_pdf=title_for_pdf,
-            )
+        # Every cadence auto-publishes since 2026-08-16. Triggers used to route
+        # the digest through an approval email; they now only annotate it, so a
+        # busy day is flagged in the content and in daily_runs rather than
+        # waiting on a click. `approval_gated` stays in daily_runs as a
+        # permanently-False audit column so historical rows remain readable.
+        cycle_common.finalize_and_send(
+            session, publication, draft, title_for_pdf=title_for_pdf,
+        )
 
         record_daily_run(
             session,
@@ -431,7 +431,7 @@ def run_daily_cycle(
             publication_id=publication.id,
             docs_count=len(docs),
             triggers=triggers,
-            approval_gated=approval_gated,
+            approval_gated=False,
         )
         session.commit()
         return cycle_common.detach_for_caller(session, publication)

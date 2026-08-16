@@ -4,7 +4,6 @@ Cron-invoked:
     python -m insights.scheduler weekly
     python -m insights.scheduler monthly
     python -m insights.scheduler annual
-    python -m insights.scheduler reminders
 
 Manual / backfill:
     python -m insights.scheduler weekly --period 2026-04-19
@@ -20,7 +19,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
-from datetime import date, datetime
+from datetime import date
 
 from database import init_db
 
@@ -61,8 +60,6 @@ def main(argv: list[str] | None = None) -> int:
     p_annual.add_argument("--year", type=int, help="Target year — default = prior calendar year")
     p_annual.add_argument("--force", action="store_true")
 
-    sub.add_parser("reminders", help="Send 72h reminders and expire stale drafts")
-
     p_daily = sub.add_parser("daily", help="Run the daily pension digest")
     p_daily.add_argument("--force", action="store_true",
                          help="Expire today's existing publication and re-send")
@@ -97,10 +94,6 @@ def main(argv: list[str] | None = None) -> int:
             from insights.annual import run_annual_cycle
             pub = run_annual_cycle(year=args.year, force=args.force)
             print(f"annual cycle complete: publication_id={pub.id} status={pub.status}")
-        elif args.cycle == "reminders":
-            from insights.reminders import run_reminders
-            stats = run_reminders(datetime.utcnow())
-            print(f"reminders complete: {stats}")
         elif args.cycle == "daily":
             from insights.daily import run_daily_cycle
             pub = run_daily_cycle(force=args.force)

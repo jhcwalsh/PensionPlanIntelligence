@@ -1,10 +1,7 @@
 name: Monthly insights (GHA edition)
 
-# Extracts CAFR investment data from already-downloaded CAFRs, then
-# composes the monthly Insights digest and sends the approve/reject
-# magic-link email. CAFR fetching itself stays on local Task Scheduler
-# (it's a Playwright scrape with the same WAF risks the daily had) --
-# see scripts/run_monthly.bat.
+# Composes the monthly Insights digest, auto-publishes it to notes/, and
+# emails a copy. No approval step — nothing waits on a click.
 #
 # Runs the 1st of each month at 18:00 UTC (~2 PM EDT / 1 PM EST). Late
 # in the day deliberately, so the local CAFR refresh has time to fire,
@@ -74,7 +71,7 @@ jobs:
       # to monthly-cafr-refresh.yml so it runs in the same job as the
       # refresh while the PDFs are still on disk.
 
-      - name: Compose monthly insights + send approval email
+      - name: Compose monthly insights + auto-publish
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
@@ -83,9 +80,9 @@ jobs:
           INSIGHTS_MODE: live
         run: python -m insights.scheduler monthly
 
-      # `!cancelled()`: the compose step sends the approval email before the
-      # workflow commits, so skipping the commit on failure leaves the magic
-      # link pointing at a DB with no matching token. See weekly-insights.yml.
+      # `!cancelled()`: the compose step auto-publishes and emails before the
+      # workflow commits, so skipping the commit on failure would leave a
+      # briefing that was sent to readers but never recorded as published.
       - name: Push DB to R2
         if: ${{ !cancelled() && github.event.inputs.dry_run != 'true' }}
         env:

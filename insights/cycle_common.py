@@ -14,7 +14,7 @@ from typing import Optional
 from sqlalchemy.exc import IntegrityError
 
 from database import Publication, get_session
-from insights import approval, config, render
+from insights import approval, config, publish, render
 
 logger = logging.getLogger(__name__)
 
@@ -112,55 +112,6 @@ def find_or_create_publication(session, *, cadence: str, period_start: date,
     return pub
 
 
-def finalize_for_approval(session, publication: Publication,
-                           draft_markdown: str, *, title_for_pdf: str) -> None:
-    """Common tail: store draft, render PDF, send email, transition to awaiting.
-
-    Idempotent against re-runs: if the publication is already
-    ``awaiting_approval`` we leave it alone.
-    """
-    if publication.status == "awaiting_approval":
-        logger.info(
-            "Publication %s already awaiting approval — skipping re-send.",
-            publication.id
-        )
-        return
-
-    if publication.status != "generating":
-        raise ValueError(
-            f"finalize_for_approval requires status='generating'; got '{publication.status}'"
-        )
-
-    now = datetime.utcnow()
-    publication.draft_markdown = draft_markdown
-    publication.composed_at = now
-    publication.expires_at = config.expires_at_default(now)
-
-    # Render PDF and persist its path before we send anything.
-    pdf_path = render.write_pdf(
-        publication_id=publication.id,
-        title=title_for_pdf,
-        date_str=now.strftime("%B %d, %Y"),
-        markdown_text=draft_markdown,
-    )
-    publication.pdf_path = _portable_pdf_path(pdf_path)
-    pdf_bytes = pdf_path.read_bytes()
-
-    # Issue tokens; flush so they're visible if the email send fails.
-    approve_tok, reject_tok = approval.issue_tokens(session, publication)
-    transition_status(publication, "awaiting_approval")
-    session.flush()
-
-    email = approval.render_approval_email(publication, approve_tok, reject_tok, pdf_bytes)
-    delivery_id = approval.send_email(email)
-    logger.info(
-        "Approval email sent for publication %s (delivery_id=%s)",
-        publication.id, delivery_id
-    )
-
-    session.commit()
-
-
 def detach_for_caller(session, publication: Publication) -> Publication:
     """Refresh + expunge so callers can read attrs after session.close().
 
@@ -174,35 +125,21 @@ def detach_for_caller(session, publication: Publication) -> Publication:
     return publication
 
 
-def expire_stale_drafts(session, *, now: Optional[datetime] = None) -> list[int]:
-    """Move any ``awaiting_approval`` rows older than the TTL to ``expired``.
-
-    Returns the list of publication ids that were expired.
-    """
-    cutoff = config.expiry_threshold(now)
-    rows = (
-        session.query(Publication)
-        .filter(Publication.status == "awaiting_approval")
-        .filter(Publication.composed_at < cutoff)
-        .all()
-    )
-    expired_ids = []
-    for pub in rows:
-        transition_status(pub, "expired")
-        expired_ids.append(pub.id)
-    if rows:
-        session.commit()
-    return expired_ids
-
-
 def finalize_and_send(session, publication: Publication,
-                       draft_markdown: str, *, title_for_pdf: str) -> None:
-    """Auto-send path: render PDF, send informational email, mark published.
+                       draft_markdown: str, *, title_for_pdf: str,
+                       notify: bool = True, archive: bool = False) -> None:
+    """Auto-publish path: render PDF, optionally archive and email, publish.
 
-    Mirrors ``finalize_for_approval`` but skips approval-token creation
-    and uses a content-style subject (no magic-link buttons in the
-    body). Used by the daily digest on calm days where no triggers
-    fired.
+    Since 2026-08-16 this is the only publication path for every cadence.
+    The approval-gated sibling, its tokens and the reminders job are gone.
+
+    ``notify=False`` composes silently. The weekly cadence uses it: weekly
+    briefings are no longer sent to anyone, but weekly *publications* remain
+    the input monthly composes from (``monthly._gather_approved_weeklies``
+    raises if none exist), so the cycle must still run.
+
+    ``archive=True`` writes the canonical ``notes/`` file, which the app
+    serves. The daily digest leaves it False — daily content isn't archived.
     """
     if publication.status != "generating":
         raise ValueError(
@@ -223,12 +160,19 @@ def finalize_and_send(session, publication: Publication,
     publication.pdf_path = _portable_pdf_path(pdf_path)
     pdf_bytes = pdf_path.read_bytes()
 
-    email = _render_informational_email(publication, pdf_bytes)
-    delivery_id = approval.send_email(email)
-    logger.info(
-        "Auto-send email delivered for publication %s (delivery_id=%s)",
-        publication.id, delivery_id,
-    )
+    if archive:
+        publish.write_note(publication)
+
+    if notify:
+        email = _render_informational_email(publication, pdf_bytes)
+        delivery_id = approval.send_email(email)
+        logger.info(
+            "Auto-send email delivered for publication %s (delivery_id=%s)",
+            publication.id, delivery_id,
+        )
+    else:
+        logger.info("Composed publication %s silently (notify=False)",
+                    publication.id)
 
     transition_status(publication, "published")
     publication.published_at = now

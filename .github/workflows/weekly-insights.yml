@@ -1,14 +1,16 @@
 name: Weekly insights (GHA edition)
 
-# Composes the weekly Insights digest and sends the approve/reject
-# magic-link email to APPROVAL_EMAIL_RECIPIENT. Pure composition --
-# uses documents already in the DB (--skip-scrape). Pushes the resulting
-# db/pension.db + notes/ so the production Streamlit can resolve the
-# token when the user clicks the magic link.
+# Composes the weekly Insights digest SILENTLY: no email, no notes/ file,
+# no approval. Nobody receives a weekly briefing any more.
 #
-# Runs Sundays at 12:30 UTC (~8:30 AM EDT / 7:30 AM EST), staggered
-# after daily-pipeline (11:00 UTC) and weekly-rfp (12:00 UTC) so the
-# digest sees today's fresh summaries and RFP records.
+# This workflow survives the 2026-08-16 cadence cut because the weekly
+# Publication row is the input monthly composes from —
+# insights/monthly._gather_approved_weeklies raises outright when it finds
+# no weeklies for its period. Deleting this would silently break the
+# monthly briefing a month later.
+#
+# Pure composition — uses documents already in the DB (--skip-scrape).
+# Runs Sundays at 12:30 UTC, staggered after daily-pipeline (11:00 UTC).
 
 on:
   schedule:
@@ -77,7 +79,7 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
         run: python -m scripts.db_sync pull
 
-      - name: Compose weekly insights + send approval email
+      - name: Compose weekly insights (silent — feeds monthly)
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
@@ -94,13 +96,10 @@ jobs:
           fi
           python -m insights.scheduler weekly $ARGS
 
-      # `!cancelled()` because the compose step has an irreversible side
-      # effect: insights/cycle_common.finalize_for_approval issues the
-      # approval tokens, sends the magic-link email, and only then commits.
-      # If a later step fails, the token-bearing DB is never pushed to R2 or
-      # to master, and the recipient's approve/reject link resolves against a
-      # DB that has no such token. The email cannot be unsent, so the DB
-      # state recording it has to be preserved regardless of step outcome.
+      # `!cancelled()`: the weekly publication row is what monthly reads. If
+      # a later step fails and the commit is skipped, the row is lost with the
+      # runner and next month's briefing has one fewer week to synthesize —
+      # or none at all, which makes monthly raise.
       - name: Push DB to R2
         if: ${{ !cancelled() && github.event.inputs.dry_run != 'true' }}
         env:

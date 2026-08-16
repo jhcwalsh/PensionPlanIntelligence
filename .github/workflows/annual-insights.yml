@@ -1,8 +1,8 @@
 name: Annual insights (GHA edition)
 
-# Composes the year-in-review CIO Insight digest and sends the
-# approve/reject magic-link email. Pure composition — uses approved
-# monthly publications already in the DB. No Playwright, no scrape.
+# Composes a year-in-review CIO Insight digest, auto-publishes it to
+# notes/, and emails a copy. No approval step. Pure composition — uses
+# published monthly publications already in the DB. No Playwright.
 #
 # Runs Jan 5 at 19:00 UTC — a few days after monthly-insights and
 # quarterly-insights (both Jan 1) so December's monthly and the Q4
@@ -73,7 +73,7 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
         run: python -m scripts.db_sync pull
 
-      - name: Compose annual insights + send approval email
+      - name: Compose annual insights + auto-publish
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
@@ -87,9 +87,9 @@ jobs:
             python -m insights.scheduler annual
           fi
 
-      # `!cancelled()`: the compose step sends the approval email before the
-      # workflow commits, so skipping the commit on failure leaves the magic
-      # link pointing at a DB with no matching token. See weekly-insights.yml.
+      # `!cancelled()`: the compose step auto-publishes and emails before the
+      # workflow commits, so skipping the commit on failure would leave a
+      # briefing that was sent to readers but never recorded as published.
       - name: Push DB to R2
         if: ${{ !cancelled() && github.event.inputs.dry_run != 'true' }}
         env:

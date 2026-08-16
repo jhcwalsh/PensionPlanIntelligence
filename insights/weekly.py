@@ -196,9 +196,12 @@ def run_weekly_cycle(period_start: Optional[date] = None,
 
         # Compose draft and finalize.
         draft = compose.compose_weekly(session, period_start, period_end)
-        cycle_common.finalize_for_approval(
+        # Silent: weekly briefings are no longer sent or archived. The
+        # publication row still matters — monthly composes from it.
+        cycle_common.finalize_and_send(
             session, publication, draft,
             title_for_pdf=f"7-Day Highlights: {period_start.isoformat()} – {period_end.isoformat()}",
+            notify=False, archive=False,
         )
 
         run.status = "succeeded"
