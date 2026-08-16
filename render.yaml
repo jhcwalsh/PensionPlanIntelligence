@@ -31,51 +31,17 @@ services:
       - key: APPROVAL_EMAIL_RECIPIENT
         sync: false
 
-  # ---------------------------------------------------------------------------
-  # FastAPI read API for RFP records.
-  # Reads from the git-tracked db/pension.db (no persistent disk needed —
-  # the API is read-only; the pipeline that writes records runs locally).
-  # ---------------------------------------------------------------------------
-
-  - type: web
-    name: pension-rfp-api
-    runtime: python
-    buildCommand: pip install -r requirements-pipeline.txt
-    startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT
-    envVars:
-      - key: ANTHROPIC_API_KEY
-        sync: false
-      - key: CORS_ORIGIN
-        value: https://pensionplanintelligence.onrender.com
-      - key: SLACK_WEBHOOK_URL
-        sync: false
-      - key: LOG_LEVEL
-        value: INFO
-
 # ---------------------------------------------------------------------------
-# Cron services intentionally NOT deployed on Render.
+# The FastAPI service (pension-rfp-api) was removed on 2026-08-16 along with
+# the RFP subsystem it served. Streamlit is the only Render service.
 #
-# Render cron jobs cannot mount persistent disks, which means cron writes
-# would be ephemeral and not visible to the web services. We run the
-# equivalent work locally instead:
+# Nothing cron-shaped runs on Render: Render cron jobs cannot mount persistent
+# disks, so their writes would be ephemeral and invisible to the web service.
+# All scheduled work runs from GitHub Actions instead — see
+# .github/workflows/ and the cadence table in CLAUDE.md.
 #
-#   python pipeline.py                          # daily/weekly fetch + summarize
-#   python refresh_cafrs.py                     # monthly CAFR refresh
-#   python extract_cafr_investments.py          # extract investment data
-#   python -m scripts.run_rfp_extraction        # RFP records
-#   python -m insights.scheduler weekly --skip-scrape   # Insights weekly
-#   python -m insights.scheduler monthly                # Insights monthly
-#   python -m insights.scheduler annual                 # Insights annual
-#   python -m insights.scheduler reminders              # 72h reminders + 7d expiry
-#
-# After running, commit db/pension.db and push — Render redeploys
-# automatically and the web services pick up the new state.
-#
-# See README.md "Running the pipeline (local, weekly)" for the full
-# workflow, and the Windows Task Scheduler scripts in scripts/run_*.bat
-# for automating the local schedule.
-#
-# Long-term: migrate db/pension.db → Render Postgres. Then crons can run
-# on Render again because they'll connect via DATABASE_URL instead of
-# needing a shared disk.
+# Next: migrate db/pension.db → managed Postgres, per
+# docs/superpowers/specs/2026-08-16-low-maintenance-app-design.md. That
+# removes the persistent disk, the DB-in-git deploy mechanism, and the
+# 100 MB single-file ceiling in one step.
 # ---------------------------------------------------------------------------

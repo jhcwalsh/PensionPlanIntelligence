@@ -143,18 +143,10 @@ jobs:
             fi
           fi
 
-      # Email a daily digest summarising the new documents from this run
-      # (and any local-pipeline FetchRun rows from the same 26-hour window).
-      # Reuses the Resend secrets configured for insights approval emails.
-      # `if: success()` avoids spamming on red-flag pipeline failures —
-      # in that case the FetchRun row will be status=failed and the next
-      # day's digest will surface it. Skipped on dry_run dispatches.
-      - name: Send daily digest email
-        if: ${{ success() && github.event.inputs.dry_run != 'true' }}
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          APPROVAL_EMAIL_RECIPIENT: ${{ secrets.APPROVAL_EMAIL_RECIPIENT }}
-          APPROVAL_EMAIL_FROM: ${{ secrets.APPROVAL_EMAIL_FROM }}
-          INSIGHTS_MODE: live
-        run: python -m scripts.send_daily_digest
+      # The digest email used to be sent from here too, via
+      # scripts/send_daily_digest.py. That was a second, redundant digest
+      # alongside daily-digest.yml's `insights.scheduler daily`, and its one
+      # distinctive feature — regex RFP/consultant alerts from
+      # lib/rfp_alerts.py — went with the RFP subsystem on 2026-08-16.
+      # daily-digest.yml is now the only digest: it has lookback state in
+      # daily_runs and the volume/keyword/reappearing-plan trigger rules.

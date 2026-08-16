@@ -110,7 +110,6 @@ _CADENCE_DISPLAY: dict[str, tuple[str, str, str]] = {
     "monthly":    ("Monthly", "CIO Insights",         "monthly_cio_insights"),
     "quarterly":  ("Quarterly", "CIO Insights",       "quarterly_cio_insights"),
     "annual":     ("Annual",  "CIO Insights",         "annual_cio_insights"),
-    "rfp_weekly": ("Weekly",  "Consultant RFP Brief", "weekly_consultant_rfps"),
     "daily":      ("Daily",   "Pension Digest",       "daily_digest"),
 }
 

@@ -2,14 +2,12 @@
 
 Cron-invoked:
     python -m insights.scheduler weekly
-    python -m insights.scheduler rfp_weekly
     python -m insights.scheduler monthly
     python -m insights.scheduler annual
     python -m insights.scheduler reminders
 
 Manual / backfill:
     python -m insights.scheduler weekly --period 2026-04-19
-    python -m insights.scheduler rfp_weekly --period 2026-04-19
     python -m insights.scheduler monthly --period 2026-03
     python -m insights.scheduler annual --year 2025
     python -m insights.scheduler weekly --period 2026-04-19 --force
@@ -47,12 +45,6 @@ def main(argv: list[str] | None = None) -> int:
                           help="Expire any awaiting_approval row for this period and re-compose")
     p_weekly.add_argument("--skip-scrape", action="store_true",
                           help="Don't refresh documents — compose from current DB state only")
-
-    p_rfp = sub.add_parser("rfp_weekly", help="Run the weekly consultant RFP brief")
-    p_rfp.add_argument("--period", type=_parse_period_date,
-                       help="Period start date (Sunday) — default = most recent completed week")
-    p_rfp.add_argument("--force", action="store_true",
-                       help="Expire any awaiting_approval row for this period and re-compose")
 
     p_monthly = sub.add_parser("monthly", help="Run the monthly cycle")
     p_monthly.add_argument("--period", type=_parse_month,
@@ -93,13 +85,6 @@ def main(argv: list[str] | None = None) -> int:
                 skip_scrape=args.skip_scrape,
             )
             print(f"weekly cycle complete: publication_id={pub.id} status={pub.status}")
-        elif args.cycle == "rfp_weekly":
-            from insights.rfp_weekly import run_rfp_weekly_cycle
-            pub = run_rfp_weekly_cycle(
-                period_start=args.period,
-                force=args.force,
-            )
-            print(f"rfp_weekly cycle complete: publication_id={pub.id} status={pub.status}")
         elif args.cycle == "monthly":
             from insights.monthly import run_monthly_cycle
             pub = run_monthly_cycle(period_start=args.period, force=args.force)

@@ -1,7 +1,7 @@
 """Daily Pension Digest — selector, triggers, composer, orchestrator.
 
 Slots into the existing ``insights/`` package as a fifth cadence
-alongside weekly / rfp_weekly / monthly / annual. Runs from a GitHub
+alongside weekly / monthly / annual. Runs from a GitHub
 Actions cron, not Windows Task Scheduler — the lookback window
 (``daily_runs.sent_at``) makes the cycle resilient to skipped days.
 
