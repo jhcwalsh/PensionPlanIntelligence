@@ -404,7 +404,24 @@ def build_actuarial_facets(session, plan):
 
 
 def build_roster_and_timeline(session, plan, mappings):
-    """manager_roster + activity_timeline in one pass over the plan's summaries."""
+    """manager_roster + activity_timeline in one pass over the plan's summaries.
+
+    The roster comes from the reconciled ``plan_manager_roster`` table when it
+    has rows for this plan — `scripts.build_manager_roster` runs immediately
+    before this builder in the daily pipeline, so that is the normal case. The
+    summary-derived roster below is only a fallback for a plan whose roster has
+    never been built; it used to be computed unconditionally and then thrown
+    away, which repeated the whole manager grouping and status heuristic 148
+    times per build for nothing.
+
+    The timeline is always derived here — it has no reconciled table.
+    """
+    roster_rows = (
+        session.query(PlanManagerRoster)
+        .filter(PlanManagerRoster.plan_id == plan.id)
+        .order_by(PlanManagerRoster.canonical_name, PlanManagerRoster.role)
+        .all()
+    )
     rows = (
         session.query(Summary, Document)
         .join(Document, Summary.document_id == Document.id)
@@ -429,6 +446,9 @@ def build_roster_and_timeline(session, plan, mappings):
                 "description": act.get("description"), "vote": None,
                 "doc_id": doc.id, "url": doc.url,
             })
+
+            if roster_rows:
+                continue  # roster comes from the table; skip the derivation
 
             manager_raw = act.get("manager")
             if not manager_raw or not str(manager_raw).strip() \
@@ -503,12 +523,6 @@ def build_roster_and_timeline(session, plan, mappings):
     dated_items.sort(key=lambda i: i["date"], reverse=True)
     timeline_items = dated_items + undated_items
 
-    roster_rows = (
-        session.query(PlanManagerRoster)
-        .filter(PlanManagerRoster.plan_id == plan.id)
-        .order_by(PlanManagerRoster.canonical_name, PlanManagerRoster.role)
-        .all()
-    )
     if roster_rows:
         entries = []
         for r in roster_rows:
@@ -663,9 +677,19 @@ def _freshness(facets: dict) -> dict:
     }
 
 
-def build_twin(session, plan) -> dict:
-    mappings = _load_manager_mappings()
-    asset_mappings = load_asset_class_mappings()
+def build_twin(session, plan, mappings=None, asset_mappings=None) -> dict:
+    """Build one plan's twin. Pass the mapping dicts when building many.
+
+    Both files are re-read and re-parsed per call when not supplied, and
+    data/asset_class_mappings.json is ~6,000 lines — run_builder loads them
+    once and threads them through rather than paying that 148 times. They are
+    kept as parameters rather than module-level caches so callers that point
+    MANAGER_MAPPINGS_PATH / ASSET_CLASS_MAPPINGS_PATH at a fixture still get
+    a fresh read.
+    """
+    mappings = _load_manager_mappings() if mappings is None else mappings
+    asset_mappings = (load_asset_class_mappings() if asset_mappings is None
+                      else asset_mappings)
 
     identity = build_identity(plan)
     policy, allocation, performance = build_cafr_facets(session, plan, asset_mappings)
@@ -723,6 +747,9 @@ def run_builder(plan_ids=None) -> None:
     errors = []
     written = 0
     plans = []
+    # Loaded once for the whole run, not once per plan — see build_twin.
+    mappings = _load_manager_mappings()
+    asset_mappings = load_asset_class_mappings()
     try:
         q = session.query(Plan).order_by(Plan.id)
         if plan_ids:
@@ -731,7 +758,8 @@ def run_builder(plan_ids=None) -> None:
         run.plans_total = len(plans)
         for plan in plans:
             try:
-                if save_snapshot(session, plan.id, build_twin(session, plan)):
+                twin = build_twin(session, plan, mappings, asset_mappings)
+                if save_snapshot(session, plan.id, twin):
                     written += 1
                     console.print(f"  [green]snapshot[/green] {plan.id}")
             except Exception as exc:  # noqa: BLE001

@@ -292,15 +292,30 @@ def _apply_rfp_entries(session, plan_id: str, manager_mappings: dict,
                          evidence=data["evidence"])
 
 
-def build_roster_for_plan(session, plan_id: str) -> int:
+def build_roster_for_plan(session, plan_id: str,
+                          manager_mappings=None, asset_mappings=None) -> int:
     """Rebuild the reconciled manager roster for one plan.
 
-    Deletes any existing plan_manager_roster rows for ``plan_id`` and
-    inserts the freshly-computed set. Returns the number of rows written.
-    Deterministic — no LLM calls.
+    Reconciles ``plan_manager_roster`` in place against the freshly-computed
+    set: existing (canonical_name, role) rows are updated only where a column
+    actually changed, new keys are inserted, and keys that no longer appear
+    are deleted. Returns the number of rows the plan now has. Deterministic —
+    no LLM calls.
+
+    This used to delete every row for the plan and re-insert. That rewrote the
+    whole table into db/pension.db on each of the daily runs that commit it,
+    even though the derived data mostly does not change day to day, and it
+    burned autoincrement ids fast enough to reach id 33150 for 1532 live rows.
+    The DB is committed to git, so a full-table rewrite of unchanged data is
+    pure growth against the 100 MB single-file ceiling CLAUDE.md warns about.
+
+    Pass the mapping dicts when building many plans; they are re-read and
+    re-parsed per call otherwise (asset_class_mappings.json is ~6,000 lines).
     """
-    manager_mappings = _load_manager_mappings()
-    asset_mappings = load_asset_class_mappings()
+    if manager_mappings is None:
+        manager_mappings = _load_manager_mappings()
+    if asset_mappings is None:
+        asset_mappings = load_asset_class_mappings()
 
     entries: dict[tuple[str, str], dict] = {}
     for canonical, data in _summary_manager_entries(
@@ -309,20 +324,38 @@ def build_roster_for_plan(session, plan_id: str) -> int:
 
     _apply_rfp_entries(session, plan_id, manager_mappings, entries)
 
-    session.query(PlanManagerRoster).filter(PlanManagerRoster.plan_id == plan_id).delete()
-    for (canonical_name, role), data in entries.items():
-        session.add(PlanManagerRoster(
-            plan_id=plan_id,
-            canonical_name=canonical_name,
-            role=role,
-            asset_class_raw=data.get("asset_class_raw"),
-            asset_class_canonical=data.get("asset_class_canonical"),
-            status=data["status"],
-            first_seen=data.get("first_seen"),
-            last_seen=data.get("last_seen"),
-            evidence=json.dumps(data.get("evidence") or {}),
-            confidence=data.get("confidence"),
-        ))
+    existing = {
+        (row.canonical_name, row.role): row
+        for row in session.query(PlanManagerRoster)
+                          .filter(PlanManagerRoster.plan_id == plan_id).all()
+    }
+
+    for key, data in entries.items():
+        canonical_name, role = key
+        fields = {
+            "asset_class_raw": data.get("asset_class_raw"),
+            "asset_class_canonical": data.get("asset_class_canonical"),
+            "status": data["status"],
+            "first_seen": data.get("first_seen"),
+            "last_seen": data.get("last_seen"),
+            "evidence": json.dumps(data.get("evidence") or {}),
+            "confidence": data.get("confidence"),
+        }
+        row = existing.pop(key, None)
+        if row is None:
+            session.add(PlanManagerRoster(
+                plan_id=plan_id, canonical_name=canonical_name, role=role,
+                **fields))
+            continue
+        for column, value in fields.items():
+            # Assign only on change so SQLAlchemy emits no UPDATE for rows
+            # whose derived data is identical to yesterday's.
+            if getattr(row, column) != value:
+                setattr(row, column, value)
+
+    for row in existing.values():  # keys that no longer appear
+        session.delete(row)
+
     session.commit()
     return len(entries)
 
@@ -337,6 +370,9 @@ def main() -> None:
     total_rows = 0
     plan_ids: list[str] = []
     failed: list[str] = []
+    # Loaded once for the whole run — see build_roster_for_plan.
+    manager_mappings = _load_manager_mappings()
+    asset_mappings = load_asset_class_mappings()
     try:
         q = session.query(Plan.id).order_by(Plan.id)
         if args.plan_ids:
@@ -345,7 +381,8 @@ def main() -> None:
 
         for plan_id in plan_ids:
             try:
-                n = build_roster_for_plan(session, plan_id)
+                n = build_roster_for_plan(session, plan_id,
+                                          manager_mappings, asset_mappings)
                 total_rows += n
                 print(f"  {plan_id}: {n} roster rows")
             except Exception as exc:  # noqa: BLE001
