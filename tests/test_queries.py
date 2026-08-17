@@ -179,3 +179,41 @@ def test_allocation_rows_honours_exclusions(cafr_seeded):
 def test_allocation_rows_min_fy_filters_the_subquery_too(cafr_seeded):
     assert queries.allocation_rows(cafr_seeded, ("%equity%",), (), 2026) == []
     assert queries.allocation_rows(cafr_seeded, ("%equity%",), (), 2025)
+
+
+# ---------------------------------------------------------------------------
+# The rule itself
+# ---------------------------------------------------------------------------
+
+def test_app_py_contains_no_queries():
+    """The spec's rule: app.py holds no queries.
+
+    Every read goes through queries.py so the phase-2 static-site port is a
+    front-end-only job. If this fails, a query crept back into the view layer.
+    """
+    import pathlib
+    src = pathlib.Path(__file__).resolve().parents[1] / "app.py"
+    text = src.read_text(encoding="utf-8")
+    assert ".query(" not in text, (
+        "app.py must not build queries — move it into queries.py")
+
+
+def test_queries_module_does_not_depend_on_streamlit():
+    """The read layer has to be importable outside a Streamlit runtime.
+
+    A build script or an API will import it; pulling in streamlit would drag a
+    web-server dependency into a batch job, and would make these functions
+    untestable again.
+    """
+    import subprocess
+    import sys
+
+    out = subprocess.run(
+        [sys.executable, "-c",
+         "import sys, queries; print('streamlit' in sys.modules)"],
+        capture_output=True, text=True, cwd=str(
+            __import__("pathlib").Path(__file__).resolve().parents[1]),
+    )
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.strip() == "False", (
+        "queries.py pulled in streamlit: " + out.stdout)

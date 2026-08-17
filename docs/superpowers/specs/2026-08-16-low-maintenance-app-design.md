@@ -253,8 +253,11 @@ win lands first with zero migration risk.
    Suite green at 246 tests. Two corrections above were found doing it.
    Also fixed on the way: a second redundant daily digest, and a bug this step
    introduced where mock-mode cycles overwrote committed briefings in `notes/`.
-2. **Move remaining queries out of `app.py`** into the data layer. Suite green.
-   *In progress.*
+2. ~~**Move remaining queries out of `app.py`** into the data layer.~~
+   **DONE 2026-08-16.** All 41 call sites moved to `queries.py`; app.py holds
+   zero. Verified by a characterization harness (0 of 14 data-function outputs
+   differ vs HEAD) and guarded by two tests: app.py must contain no `.query(`,
+   and importing `queries` must not pull in streamlit.
 3. **Stand up Neon.** One-shot SQLite→Postgres migration preserving ids. Verify
    by comparing every plan's twin `_canonical_hash` before and after, plus row
    counts per table.

@@ -4,13 +4,10 @@ Streamlit UI — search and browse pension plan meeting documents and summaries.
 Run with: streamlit run app.py
 """
 
-import html as _html
-import io
 import json
 import os
 import re
 import sys
-import textwrap
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -19,28 +16,13 @@ from dotenv import load_dotenv
 
 import queries
 from database import (
-    ApprovalToken,
-    CafrAllocation,
-    CafrExtract,
-    CafrPerformance,
-    CafrRefreshLog,
     Document,
-    DocumentHealth,
-    DocumentSkip,
-    ExtractionDetail,
-    FetchRun,
-    MeetingRecording,
-    PipelineRun,
     Plan,
-    PlanVideoSource,
-    Publication,
-    RFPRecord,
     Summary,
     aggregate_managers,
     count_search_summaries,
     get_new_meetings,
     get_session,
-    get_twin_index,
     get_twin_snapshot,
     init_db,
     search_summaries,
@@ -1102,17 +1084,7 @@ def page_investment_actions(plan_id, plan_label):
     )
     cutoff = datetime.utcnow().date() - timedelta(days=days_back)
 
-    session = get_db_session()
-    q = (
-        session.query(Document, Summary)
-        .join(Summary, Document.id == Summary.document_id)
-        .filter(Summary.investment_actions != "[]")
-        .filter(Summary.investment_actions.isnot(None))
-        .filter(Document.meeting_date >= cutoff)
-    )
-    if plan_id:
-        q = q.filter(Document.plan_id == plan_id)
-    results = q.order_by(Document.meeting_date.desc()).all()
+    results = queries.investment_action_docs(get_db_session(), plan_id, cutoff)
 
     if not results:
         st.info(f"No investment actions in the last {days_back} days.")
@@ -1405,14 +1377,7 @@ def page_managers():
                 variants_str = " · ".join(f"`{v}`" for v in r["variants"])
                 st.markdown(f"**Raw variants ({len(r['variants'])}):** {variants_str}")
 
-            session = get_db_session()
-            docs = (
-                session.query(Document)
-                .filter(Document.id.in_(r["doc_ids"]))
-                .order_by(Document.meeting_date.desc())
-                .limit(20)
-                .all()
-            )
+            docs = queries.documents_by_ids(get_db_session(), r["doc_ids"])
             st.markdown(f"**Recent documents ({min(len(docs), 20)} of {len(r['doc_ids'])}):**")
             for d in docs:
                 date_str = d.meeting_date.strftime("%Y-%m-%d") if d.meeting_date else "—"
@@ -1434,13 +1399,10 @@ def page_document_detail(doc_id: int):
     """Display a single document's summary when accessed via ?doc=ID."""
     session = get_session()
     try:
-        doc = session.query(Document).get(doc_id)
+        doc, plan, summary = queries.document_with_context(session, doc_id)
         if not doc:
             st.error(f"Document #{doc_id} not found.")
             return
-
-        plan = session.query(Plan).get(doc.plan_id) if doc.plan_id else None
-        summary = session.query(Summary).filter_by(document_id=doc.id).first()
 
         plan_name = (plan.abbreviation or plan.name) if plan else doc.plan_id
         date_str = doc.meeting_date.strftime("%B %d, %Y") if doc.meeting_date else "Unknown"
@@ -1528,12 +1490,7 @@ def _render_recent_runs():
 
     session = get_session()
     try:
-        runs = (
-            session.query(FetchRun)
-            .order_by(desc(FetchRun.started_at))
-            .limit(RECENT_RUNS_LIMIT)
-            .all()
-        )
+        runs = queries.recent_fetch_runs(session, RECENT_RUNS_LIMIT)
         if not runs:
             st.info("No pipeline runs recorded yet. The next GHA cron or "
                     "local Task Scheduler invocation will populate this.")
@@ -1574,13 +1531,7 @@ def _render_recent_runs():
                     continue
 
                 # Group filenames under their plan name
-                rows = (
-                    session.query(Plan.name, Document.filename, Document.downloaded_at)
-                    .join(Document, Document.plan_id == Plan.id)
-                    .filter(Document.id.in_(doc_ids))
-                    .order_by(Document.downloaded_at)
-                    .all()
-                )
+                rows = queries.documents_for_run(session, doc_ids)
                 grouped = defaultdict(list)
                 for plan_name, filename, downloaded_at in rows:
                     grouped[plan_name].append((filename, downloaded_at))
@@ -1610,22 +1561,8 @@ def _render_failed_docs():
     session = get_session()
     try:
         # Two queries, then merge by plan
-        ext_rows = (
-            session.query(Plan.id, Plan.name, Document.id, Document.filename,
-                          ExtractionDetail.reason)
-            .join(Document, Document.plan_id == Plan.id)
-            .outerjoin(ExtractionDetail,
-                       ExtractionDetail.document_id == Document.id)
-            .filter(Document.extraction_status == "failed")
-            .all()
-        )
-        skip_rows = (
-            session.query(Plan.id, Plan.name, Document.id, Document.filename,
-                          DocumentSkip.reason, DocumentSkip.error_message)
-            .join(Document, Document.plan_id == Plan.id)
-            .join(DocumentSkip, DocumentSkip.document_id == Document.id)
-            .all()
-        )
+        ext_rows = queries.failed_extraction_rows(session)
+        skip_rows = queries.skipped_document_rows(session)
 
         if not ext_rows and not skip_rows:
             st.success(
@@ -1701,7 +1638,6 @@ def _render_failed_docs():
 def _render_cafr_coverage():
     """Render the 'CAFR Coverage' Admin sub-tab: how many plans have a
     recent ACFR/CAFR in the DB, broken down by latest fiscal year."""
-    from sqlalchemy import func
 
     st.caption(
         "Latest CAFR/ACFR fiscal year held per plan. 'FY2024+' is the "
@@ -1711,35 +1647,11 @@ def _render_cafr_coverage():
 
     session = get_session()
     try:
-        # Latest CAFR FY per plan (one row per plan that has any CAFR)
-        latest_rows = (
-            session.query(
-                Document.plan_id,
-                func.max(Document.fiscal_year).label("latest_fy"),
-            )
-            .filter(Document.doc_type == "cafr")
-            .filter(Document.fiscal_year.isnot(None))
-            .group_by(Document.plan_id)
-            .all()
-        )
-        latest_by_plan = {pid: fy for pid, fy in latest_rows}
-
-        # All plans (so we can count "none")
-        plans = session.query(Plan).order_by(Plan.id).all()
+        summary = queries.cafr_coverage_summary(session)
+        latest_by_plan = summary["latest_by_plan"]
+        plans = summary["plans"]
         total_plans = len(plans)
-
-        # CAFR documents by fiscal year (across all plans, not just latest)
-        by_fy_rows = (
-            session.query(
-                Document.fiscal_year,
-                func.count(Document.id).label("n"),
-            )
-            .filter(Document.doc_type == "cafr")
-            .filter(Document.fiscal_year.isnot(None))
-            .group_by(Document.fiscal_year)
-            .order_by(Document.fiscal_year.desc())
-            .all()
-        )
+        by_fy_rows = summary["by_fiscal_year"]
     finally:
         session.close()
 
@@ -1850,14 +1762,8 @@ def _render_cafr_refreshes():
     session = get_session()
     try:
         # Distinct run timestamps, newest first
-        recent_run_ats = [
-            row[0] for row in
-            session.query(CafrRefreshLog.run_at)
-            .distinct()
-            .order_by(desc(CafrRefreshLog.run_at))
-            .limit(CAFR_REFRESH_LIMIT)
-            .all()
-        ]
+        recent_run_ats = queries.recent_cafr_refresh_runs(
+            session, CAFR_REFRESH_LIMIT)
         if not recent_run_ats:
             st.info(
                 "No CAFR refresh runs recorded yet. The next monthly cron "
@@ -1866,22 +1772,8 @@ def _render_cafr_refreshes():
             return
 
         # Pull every row for those run_ats in one query
-        rows = (
-            session.query(
-                CafrRefreshLog.run_at,
-                CafrRefreshLog.plan_id,
-                CafrRefreshLog.expected_year,
-                CafrRefreshLog.status,
-                CafrRefreshLog.url_tried,
-                CafrRefreshLog.notes,
-            )
-            .filter(CafrRefreshLog.run_at.in_(recent_run_ats))
-            .order_by(desc(CafrRefreshLog.run_at), CafrRefreshLog.plan_id)
-            .all()
-        )
-        # Plan abbreviations for display
-        plans = {p.id: (p.abbreviation or p.id, p.name or p.id)
-                 for p in session.query(Plan).all()}
+        rows = queries.cafr_refresh_rows(session, recent_run_ats)
+        plans = queries.plan_labels(session)
     finally:
         session.close()
 
@@ -2657,20 +2549,9 @@ def page_meeting_recordings(plan_id, plan_label):
 
     session = get_db_session()
 
-    src_q = session.query(PlanVideoSource)
-    rec_q = session.query(MeetingRecording)
-    if plan_id:
-        src_q = src_q.filter(PlanVideoSource.plan_id == plan_id)
-        rec_q = rec_q.filter(MeetingRecording.plan_id == plan_id)
-
-    sources = src_q.order_by(PlanVideoSource.plan_id, PlanVideoSource.platform).all()
-    recordings = rec_q.order_by(
-        MeetingRecording.published_at.desc().nullslast(),
-        MeetingRecording.discovered_at.desc(),
-    ).all()
-
-    # Build a {plan_id: Plan} lookup once
-    all_plans = {p.id: p for p in session.query(Plan).all()}
+    sources = queries.video_sources(session, plan_id)
+    recordings = queries.meeting_recordings(session, plan_id)
+    all_plans = queries.plans_by_id(session)
 
     # ---- summary metrics
     total_plans = len(all_plans) if not plan_id else 1
@@ -3229,13 +3110,7 @@ def page_drafts():
         "the canonical way to act on these — this view is for visibility."
     )
 
-    session = get_db_session()
-    rows = (
-        session.query(Publication)
-        .filter(Publication.status == "awaiting_approval")
-        .order_by(Publication.composed_at.desc())
-        .all()
-    )
+    rows = queries.drafts_awaiting_approval(get_db_session())
 
     if not rows:
         st.info("No drafts awaiting approval right now.")
@@ -3279,13 +3154,8 @@ def page_archive():
         "audit trail."
     )
 
-    session = get_db_session()
-    rows = (
-        session.query(Publication)
-        .filter(Publication.status.in_(("approved", "published")))
-        .order_by(Publication.period_start.desc())
-        .all()
-    )
+    rows = queries.publications_by_status(
+        get_db_session(), ("approved", "published"))
     if not rows:
         st.info("No approved publications yet.")
         return
