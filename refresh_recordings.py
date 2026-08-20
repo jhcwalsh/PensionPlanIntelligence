@@ -203,7 +203,7 @@ def _ts_to_dt(ts) -> datetime | None:
     if ts is None:
         return None
     try:
-        return datetime.fromtimestamp(int(ts), tz=timezone.utc).replace(tzinfo=None)
+        return datetime.fromtimestamp(int(ts), tz=timezone.utc)
     except (TypeError, ValueError, OSError):
         return None
 

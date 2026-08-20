@@ -23,7 +23,7 @@ import os
 import re
 import sqlite3
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 DB_PATH = (
@@ -102,7 +102,7 @@ def main(argv: list[str] | None = None) -> int:
             print("\nDry-run only. Re-run with --apply to execute.")
             return 0
 
-        now_iso = datetime.utcnow().isoformat()
+        now_iso = datetime.now(timezone.utc).isoformat()
         n_pruned = conn.execute(
             f"INSERT OR IGNORE INTO pruned_documents "
             f"(url, plan_id, doc_type, meeting_date, pruned_at, reason) "

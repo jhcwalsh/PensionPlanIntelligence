@@ -21,7 +21,7 @@ from typing import Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from database import DailyRun, Document, Plan, Publication, Summary, get_session
+from database import as_utc, utcnow, DailyRun, Document, Plan, Publication, Summary, get_session
 from insights import config, cycle_common
 
 logger = logging.getLogger(__name__)
@@ -92,6 +92,9 @@ def apply_triggers(
             reasons.append(f"keyword:{matched}")
             break  # one keyword reason is enough — avoid spam
 
+    # Callers may inject a naive `now_utc` (tests do, and so does anything
+    # parsing a timestamp). Normalise at the boundary rather than trusting it.
+    now_utc = as_utc(now_utc)
     reappear_cutoff = now_utc - timedelta(days=config.DAILY_REAPPEAR_DAYS)
     plan_ids = sorted({d.plan_id for d in docs})
     today_min = min(d.downloaded_at for d in docs)
@@ -104,7 +107,9 @@ def apply_triggers(
             .scalar()
         )
         # Brand-new plans (prior_max is None) do NOT trigger reappear.
-        if prior_max is not None and prior_max < reappear_cutoff:
+        # A SQL aggregate returns naive on SQLite, aware on Postgres;
+        # reappear_cutoff is always aware.
+        if prior_max is not None and as_utc(prior_max) < reappear_cutoff:
             reasons.append(f"reappear:{plan_id}")
 
     return reasons
@@ -370,7 +375,7 @@ def run_daily_cycle(
     existing publication for today (including auto-sent ones) and starts
     over.
     """
-    now_utc = now if now is not None else datetime.utcnow()
+    now_utc = as_utc(now) if now is not None else utcnow()
     today = now_utc.date()
 
     session = get_session()

@@ -40,6 +40,8 @@ from collections import Counter
 from datetime import datetime, timedelta
 
 from database import (
+    as_utc,
+    utcnow,
     Document, Plan, PlanManagerRoster, RFPRecord, Summary, get_session, init_db,
 )
 from twin_builder import (
@@ -185,7 +187,7 @@ def _summary_manager_entries(session, plan_id: str, manager_mappings: dict,
                 if entry["last_seen"] is None or doc_date > entry["last_seen"]:
                     entry["last_seen"] = doc_date
 
-    now = datetime.utcnow()
+    now = utcnow()
     result: dict[str, dict] = {}
     for canonical, m in managers.items():
         # Sort by date only — action_type can be None and a plain tuple
@@ -198,7 +200,8 @@ def _summary_manager_entries(session, plan_id: str, manager_mappings: dict,
         if dated and dated[-1][1] == "fire":
             status = "terminated"
         elif m["last_seen"]:
-            last_seen_dt = datetime.fromisoformat(m["last_seen"])
+            # Stored as an ISO string, so it parses naive; `now` is aware.
+            last_seen_dt = as_utc(datetime.fromisoformat(m["last_seen"]))
             if last_seen_dt >= now - timedelta(days=730):
                 status = "current"
 

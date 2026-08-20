@@ -25,7 +25,7 @@ from typing import Iterable, Optional
 
 from sqlalchemy import func
 
-from database import Publication, Subscriber, SubscriberToken, get_session
+from database import as_utc, utcnow, Publication, Subscriber, SubscriberToken, get_session
 from insights import config
 from insights.approval import (
     ApprovalEmail,
@@ -91,7 +91,7 @@ def issue_unsubscribe_token(subscriber: Subscriber, session=None) -> str:
     Caller is responsible for committing the session. If ``session`` is
     None a new session is opened, committed, and closed.
     """
-    expires = datetime.utcnow() + UNSUBSCRIBE_TOKEN_TTL
+    expires = utcnow() + UNSUBSCRIBE_TOKEN_TTL
     if session is None:
         session = get_session()
         try:
@@ -183,7 +183,7 @@ def recent_signup_count(email: str,
     email_norm = _normalize_email(email)
     if not email_norm:
         return 0
-    cutoff = datetime.utcnow() - window
+    cutoff = utcnow() - window
     session = get_session()
     try:
         return (
@@ -216,9 +216,9 @@ def _consume(session, raw_token: str, expected_action: str) -> SubscriberToken:
         )
     if token.consumed_at is not None:
         raise SubscriberError("Token already used")
-    if token.expires_at < datetime.utcnow():
+    if as_utc(token.expires_at) < utcnow():
         raise SubscriberError("Token expired")
-    token.consumed_at = datetime.utcnow()
+    token.consumed_at = utcnow()
     return token
 
 
@@ -234,7 +234,7 @@ def consume_confirm_token(raw_token: str) -> Subscriber:
             raise SubscriberError("This subscription has been disabled by the site administrator.")
         if sub.status != "confirmed":
             sub.status = "confirmed"
-            sub.confirmed_at = datetime.utcnow()
+            sub.confirmed_at = utcnow()
         session.commit()
         session.refresh(sub)
         session.expunge(sub)
@@ -252,7 +252,7 @@ def consume_unsubscribe_token(raw_token: str) -> Subscriber:
         if sub is None:
             raise SubscriberError("Subscriber missing")
         sub.status = "unsubscribed"
-        sub.unsubscribed_at = datetime.utcnow()
+        sub.unsubscribed_at = utcnow()
         sub.weekly = False
         sub.monthly = False
         sub.quarterly = False
@@ -302,7 +302,7 @@ def set_preferences(subscriber_id: int, *, weekly: bool, monthly: bool,
         sub.quarterly = quarterly
         if not (weekly or monthly or quarterly):
             sub.status = "unsubscribed"
-            sub.unsubscribed_at = datetime.utcnow()
+            sub.unsubscribed_at = utcnow()
         elif sub.status == "unsubscribed":
             # Picking a cadence after unsubscribing reactivates the row.
             sub.status = "confirmed"
@@ -364,7 +364,7 @@ def set_status(subscriber_id: int, status: str) -> Subscriber:
             raise SubscriberError("Subscriber missing")
         sub.status = status
         if status == "unsubscribed" and sub.unsubscribed_at is None:
-            sub.unsubscribed_at = datetime.utcnow()
+            sub.unsubscribed_at = utcnow()
         session.commit()
         session.refresh(sub)
         session.expunge(sub)
@@ -551,7 +551,7 @@ def fan_out_digest(publication: Publication) -> dict:
     session = get_session()
     try:
         pub = session.get(Publication, publication.id)
-        pub.subscribers_notified_at = datetime.utcnow()
+        pub.subscribers_notified_at = utcnow()
         session.commit()
     finally:
         session.close()
@@ -564,7 +564,7 @@ def _mark_sent(subscriber_id: int) -> None:
     try:
         sub = session.get(Subscriber, subscriber_id)
         if sub is not None:
-            sub.last_email_sent_at = datetime.utcnow()
+            sub.last_email_sent_at = utcnow()
             session.commit()
     finally:
         session.close()

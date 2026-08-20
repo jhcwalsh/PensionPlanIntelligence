@@ -21,7 +21,7 @@ without touching Anthropic, so tests run in CI without an API key.
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Iterable
 
 from insights import config
@@ -32,7 +32,7 @@ from insights import config
 # ---------------------------------------------------------------------------
 
 def _mock_markdown(title: str, period_start: date, period_end: date) -> str:
-    today = datetime.utcnow().strftime("%B %d, %Y")
+    today = datetime.now(timezone.utc).strftime("%B %d, %Y")
     range_str = f"{period_start.isoformat()} – {period_end.isoformat()}"
     return (
         f"# {title}: {range_str}\n"
@@ -74,7 +74,7 @@ def compose_weekly(session, period_start: date, period_end: date) -> str:
     if not data["meetings"]:
         return (
             f"# 7-Day Highlights: {period_start.isoformat()} – {period_end.isoformat()}\n"
-            f"*Generated: {datetime.utcnow().strftime('%B %d, %Y')}*\n\n"
+            f"*Generated: {datetime.now(timezone.utc).strftime('%B %d, %Y')}*\n\n"
             "---\n\n"
             "_No board or investment-committee activity recorded in this window._\n"
         )
@@ -139,7 +139,7 @@ def compose_monthly(weekly_markdowns: list[str],
     from generate_notes import generate_note  # noqa: F401  (verifies import path)
     from summarizer import _get_client
 
-    today_str = datetime.utcnow().strftime("%B %d, %Y")
+    today_str = datetime.now(timezone.utc).strftime("%B %d, %Y")
     month_label = period_start.strftime("%B %Y")
     weeklies_block = "\n\n".join(
         f"=== Weekly {i + 1} ===\n{md.strip()}"
@@ -276,7 +276,7 @@ def compose_annual(monthlies: list[tuple[date, str]],
 
     from summarizer import _get_client
 
-    today_str = datetime.utcnow().strftime("%B %d, %Y")
+    today_str = datetime.now(timezone.utc).strftime("%B %d, %Y")
     year = period_start.year
     n_months = len(monthlies)
     theme_min = 3 if n_months >= 6 else 2
@@ -425,7 +425,7 @@ def compose_quarterly(monthlies: list[tuple[date, str]],
 
     from summarizer import _get_client
 
-    today_str = datetime.utcnow().strftime("%B %d, %Y")
+    today_str = datetime.now(timezone.utc).strftime("%B %d, %Y")
     n_months = len(monthlies)
     monthlies_block = _monthlies_block(monthlies)
 

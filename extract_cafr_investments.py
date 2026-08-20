@@ -37,6 +37,7 @@ from rich.console import Console
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from database import (
+    utcnow,
     CafrAllocation,
     CafrExtract,
     CafrPerformance,
@@ -385,7 +386,7 @@ def save_extract(session, doc: Document, payload: dict, *,
         document_id=doc.id,
         fiscal_year=doc.fiscal_year,
         investment_policy_text=payload.get("investment_policy_text"),
-        extracted_at=datetime.utcnow(),
+        extracted_at=utcnow(),
         model_used=MODEL,
         pages_used=pages_used,
         text_hash=text_hash,

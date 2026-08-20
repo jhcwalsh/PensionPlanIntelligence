@@ -27,6 +27,7 @@ from pathlib import Path
 from sqlalchemy import case, desc, distinct, func, or_
 
 from database import (
+    utcnow,
     CafrAllocation,
     CafrExtract,
     CafrPerformance,
@@ -64,7 +65,7 @@ def recent_summaries(session, plan_id=None, limit: int = 20):
 
     Returns a list of (Document, Summary) ORM tuples.
     """
-    future_cap = datetime.utcnow() + timedelta(days=60)
+    future_cap = utcnow() + timedelta(days=60)
     q = (
         session.query(Document, Summary)
         .join(Summary, Document.id == Summary.document_id)

@@ -23,7 +23,7 @@ if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
 from rich.console import Console
 from rich.table import Table
 
-from database import Document, Plan, Summary, get_session, init_db
+from database import utcnow, Document, Plan, Summary, get_session, init_db
 
 console = Console(legacy_windows=False)
 
@@ -41,7 +41,7 @@ def main():
     init_db()
     session = get_session()
 
-    cutoff = datetime.utcnow() - timedelta(days=args.days)
+    cutoff = utcnow() - timedelta(days=args.days)
 
     docs = (
         session.query(Document)

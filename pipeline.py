@@ -34,7 +34,7 @@ from dotenv import load_dotenv
 from rich.console import Console
 from rich.table import Table
 
-from database import Document, FetchRun, Plan, Summary, get_session, init_db
+from database import utcnow, Document, FetchRun, Plan, Summary, get_session, init_db
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 console = Console(legacy_windows=False)
@@ -118,7 +118,7 @@ def run_pipeline(
     retry_failed: bool = False,
 ):
     init_db()
-    start = datetime.utcnow()
+    start = utcnow()
     source = "gha" if os.environ.get("GITHUB_ACTIONS") == "true" else "local"
     console.rule("[bold blue]Pension Plan Intelligence Pipeline[/bold blue]")
 
@@ -152,7 +152,7 @@ def run_pipeline(
         run = log_session.get(FetchRun, fetch_run_id)
         run.status = "failed"
         run.error_message = f"{type(exc).__name__}: {exc}"
-        run.completed_at = datetime.utcnow()
+        run.completed_at = utcnow()
         log_session.commit()
         log_session.close()
         raise
@@ -165,7 +165,7 @@ def run_pipeline(
     ]
     run = log_session.get(FetchRun, fetch_run_id)
     run.status = "success"
-    run.completed_at = datetime.utcnow()
+    run.completed_at = utcnow()
     run.new_document_ids = json.dumps(new_doc_ids)
     log_session.commit()
     log_session.close()
@@ -173,7 +173,7 @@ def run_pipeline(
     session = get_session()
     try:
         console.rule("[bold]Pipeline Complete[/bold]")
-        elapsed = (datetime.utcnow() - start).seconds
+        elapsed = (utcnow() - start).seconds
         console.print(f"Total time: {elapsed}s ({len(new_doc_ids)} new documents)\n")
         print_status(session)
     finally:

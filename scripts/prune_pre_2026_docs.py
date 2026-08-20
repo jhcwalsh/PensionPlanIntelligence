@@ -22,7 +22,7 @@ import argparse
 import os
 import sqlite3
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 DB_PATH = (
@@ -74,7 +74,7 @@ def main(argv: list[str] | None = None) -> int:
         # Record URLs in pruned_documents so the fetcher's document_pruned()
         # gate skips them on future runs. INSERT OR IGNORE keeps this
         # idempotent across re-runs and tolerant of pre-existing rows.
-        now_iso = datetime.utcnow().isoformat()
+        now_iso = datetime.now(timezone.utc).isoformat()
         n_pruned = conn.execute(
             f"INSERT OR IGNORE INTO pruned_documents "
             f"(url, plan_id, doc_type, meeting_date, pruned_at, reason) "

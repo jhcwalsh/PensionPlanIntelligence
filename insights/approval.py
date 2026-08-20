@@ -25,7 +25,7 @@ from typing import Optional
 
 import requests
 
-from database import ApprovalToken, Publication, get_session
+from database import utcnow, ApprovalToken, Publication, get_session
 from insights import config
 
 logger = logging.getLogger(__name__)
@@ -126,7 +126,7 @@ def send_email(email: ApprovalEmail,
 
 def _write_mock_email(email: ApprovalEmail, recipients: list[str]) -> str:
     config.SENT_EMAILS_DIR.mkdir(parents=True, exist_ok=True)
-    ts = datetime.utcnow().strftime("%Y%m%dT%H%M%S%f")
+    ts = utcnow().strftime("%Y%m%dT%H%M%S%f")
     base = config.SENT_EMAILS_DIR / f"{ts}"
 
     metadata = {

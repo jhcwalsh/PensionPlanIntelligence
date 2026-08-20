@@ -13,7 +13,7 @@ from typing import Optional
 
 from sqlalchemy.exc import IntegrityError
 
-from database import Publication, get_session
+from database import utcnow, Publication, get_session
 from insights import approval, config, publish, render
 
 logger = logging.getLogger(__name__)
@@ -147,7 +147,7 @@ def finalize_and_send(session, publication: Publication,
             f"got '{publication.status}'"
         )
 
-    now = datetime.utcnow()
+    now = utcnow()
     publication.draft_markdown = draft_markdown
     publication.composed_at = now
 

@@ -34,7 +34,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).parent.parent
@@ -136,7 +136,7 @@ def main(argv: list[str] | None = None) -> int:
 
         # 1. Insert pruned URLs. (Raw sqlite3 doesn't honor the SQLAlchemy
         # default for pruned_at, so set it explicitly.)
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         conn.executemany(
             "INSERT INTO pruned_documents "
             "(url, plan_id, doc_type, meeting_date, pruned_at, reason) "

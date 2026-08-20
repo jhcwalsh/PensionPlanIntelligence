@@ -62,8 +62,8 @@ def fiscal_year_from_pdf(path: str | Path,
         return None
 
     if max_year is None:
-        from datetime import datetime
-        max_year = datetime.utcnow().year + 1
+        from datetime import datetime, timezone
+        max_year = datetime.now(timezone.utc).year + 1
 
     try:
         doc = fitz.open(path)

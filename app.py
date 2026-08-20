@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 
 import queries
 from database import (
+    utcnow,
     Document,
     Plan,
     Summary,
@@ -1083,7 +1084,7 @@ def page_investment_actions(plan_id, plan_label):
         key="invest_actions_days",
         help="Filters by document meeting date.",
     )
-    cutoff = datetime.utcnow().date() - timedelta(days=days_back)
+    cutoff = utcnow().date() - timedelta(days=days_back)
 
     results = queries.investment_action_docs(get_db_session(), plan_id, cutoff)
 

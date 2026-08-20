@@ -19,7 +19,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from database import Document, ExtractionDetail, get_session, init_db
+from database import utcnow, Document, ExtractionDetail, get_session, init_db
 from extractor import MAX_VISION_OCR_DOC_PAGES, MAX_VISION_OCR_PAGES, OCR_DOC_TYPES
 
 
@@ -35,7 +35,7 @@ def _pdf_pages(path: str) -> int | None:
 def main() -> int:
     init_db()
     session = get_session()
-    now = datetime.utcnow()
+    now = utcnow()
     counts: dict[str, int] = {}
     try:
         for doc in session.query(Document).filter(

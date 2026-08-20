@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import pathlib
 
+import pytest
+
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SKIP_DIRS = {".venv", ".claude", "build", "tests", "node_modules",
              "__pycache__", "tmp", "db"}
@@ -18,23 +20,7 @@ SKIP_DIRS = {".venv", ".claude", "build", "tests", "node_modules",
 # Every file that still calls the banned naive constructor. This list may only
 # ever SHRINK. Delete an entry when you convert that file; the ratchet test
 # fails if you leave a stale entry behind.
-KNOWN_OFFENDERS = {
-    "app.py", "backfill_downloads.py", "cafr_year_check.py", "database.py",
-    "discover_video_sources.py", "export_cafr_summaries.py",
-    "extract_cafr_investments.py", "extractor.py", "fetch_cafr.py",
-    "fetcher.py", "generate_notes.py", "insights/approval.py",
-    "insights/compose.py", "insights/config.py", "insights/cycle_common.py",
-    "insights/daily.py", "insights/subscribers.py", "insights/weekly.py",
-    "pipeline.py", "publish_notes.py", "queries.py", "refresh_cafrs.py",
-    "refresh_ips.py", "retry_asrs.py", "run_report.py",
-    "scripts/backfill_april_monthly.py", "scripts/backfill_extraction_details.py",
-    "scripts/backfill_pruned_documents.py", "scripts/build_manager_roster.py",
-    "scripts/cleanup_video_sources.py", "scripts/hydrate_recording_metadata.py",
-    "scripts/notify_failure.py", "scripts/probe_scrape.py",
-    "scripts/prune_pre_2026_docs.py", "scripts/prune_pre_2026_failed_docs.py",
-    "scripts/send_publication_notice.py", "scripts/send_test_email.py",
-    "summarizer.py", "twin_builder.py",
-}
+KNOWN_OFFENDERS: set[str] = set()
 
 
 def _scan_offenders() -> dict[str, list[int]]:
@@ -135,3 +121,51 @@ def test_no_column_default_is_naive():
                 bad.append(f"{name}.{col.name}")
     assert not bad, (
         f"{len(bad)} column default(s) produce naive datetimes: " + ", ".join(bad))
+
+
+# ---------------------------------------------------------------------------
+# as_utc — the bridge between the two engines
+# ---------------------------------------------------------------------------
+
+def test_as_utc_attaches_utc_to_naive_values():
+    """SQLite returns naive reads. Every stored value is UTC, so attach it."""
+    from datetime import datetime, timezone
+    import database
+    got = database.as_utc(datetime(2026, 8, 20, 11, 0, 0))
+    assert got == datetime(2026, 8, 20, 11, 0, 0, tzinfo=timezone.utc)
+    assert got.tzinfo is not None
+
+
+def test_as_utc_leaves_aware_values_untouched():
+    """Postgres returns aware reads. Do not shift them."""
+    from datetime import datetime, timezone
+    import database
+    already = datetime(2026, 8, 20, 11, 0, 0, tzinfo=timezone.utc)
+    assert database.as_utc(already) is already
+
+
+def test_as_utc_passes_none_through():
+    """Nullable columns are everywhere; None must not become a datetime."""
+    import database
+    assert database.as_utc(None) is None
+
+
+def test_as_utc_makes_a_sqlite_read_comparable_to_utcnow(tmp_db):
+    """The exact failure this exists to prevent, exercised through the ORM."""
+    import database
+    session = database.get_session()
+    try:
+        run = database.PipelineRun(started_at=database.utcnow(), status="test")
+        session.add(run)
+        session.commit()
+        read_back = session.query(database.PipelineRun.started_at).scalar()
+
+        # SQLite strips the offset, so the raw value cannot be compared.
+        if read_back.tzinfo is None:
+            with pytest.raises(TypeError):
+                database.utcnow() - read_back
+
+        # Normalised, it always can — on either engine.
+        assert (database.utcnow() - database.as_utc(read_back)).total_seconds() >= 0
+    finally:
+        session.close()

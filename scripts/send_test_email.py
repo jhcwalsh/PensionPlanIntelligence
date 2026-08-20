@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 
 from insights import config
 from insights.approval import ApprovalEmail, send_email
@@ -74,7 +74,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    sent_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    sent_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     email = ApprovalEmail(
         subject=SUBJECT,
         html=HTML_TEMPLATE.format(

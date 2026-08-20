@@ -69,7 +69,7 @@ def utcnow() -> datetime:
     """Current UTC time, timezone-aware.
 
     The single source of truth for "now" across the codebase. Never use
-    datetime.utcnow(): it is naive (so it cannot survive a Postgres
+    utcnow(): it is naive (so it cannot survive a Postgres
     TIMESTAMPTZ round-trip) and deprecated since Python 3.12.
     """
     return datetime.now(timezone.utc)
@@ -77,6 +77,27 @@ def utcnow() -> datetime:
 
 # Retained so the 17 existing column defaults keep working unchanged.
 _utcnow = utcnow
+
+
+def as_utc(value: Optional[datetime]) -> Optional[datetime]:
+    """Normalise a datetime read from the database to aware UTC.
+
+    Reads come back aware on Postgres (TIMESTAMPTZ) but naive on SQLite, which
+    ignores the timezone flag entirely. Every stored value is UTC on both (see
+    the 2026-08-19 audit: no writer has ever used local time), so a missing
+    tzinfo can simply be attached rather than computed.
+
+    Needed wherever a stored value meets utcnow() *in Python* — comparison or
+    arithmetic — because mixing naive and aware raises TypeError. Values bound
+    into SQL do not need it: SQLAlchemy strips the offset when binding to
+    SQLite.
+
+    This is not a transitional shim. Step 4 of the migration dual-runs
+    Postgres beside SQLite, so both shapes are live at the same time.
+    """
+    if value is None:
+        return None
+    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
 
 
 # ---------------------------------------------------------------------------
@@ -1233,8 +1254,8 @@ def get_new_meetings(session: Session, days: int = 7) -> list[dict]:
         meetings (next ~2 months) stay visible; far-future parse errors
         (Dec 31 FY stamps, multi-year workplans) drop out.
     """
-    cutoff = datetime.utcnow() - timedelta(days=days)
-    future_cap = datetime.utcnow() + timedelta(days=60)
+    cutoff = utcnow() - timedelta(days=days)
+    future_cap = utcnow() + timedelta(days=60)
     recent_docs = (
         session.query(Document)
         .filter(Document.downloaded_at >= cutoff)

@@ -26,7 +26,7 @@ import argparse
 import sys
 from datetime import datetime
 
-from database import Publication, get_session
+from database import utcnow, Publication, get_session
 from insights import config, notice
 
 
@@ -68,7 +68,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"NOTE: --force in effect — promoting status '{pub.status}' → 'published' (in-memory only).")
             pub.status = "published"
             if pub.published_at is None:
-                pub.published_at = pub.approved_at or datetime.utcnow()
+                pub.published_at = pub.approved_at or utcnow()
 
         recipient = args.recipient or config.APPROVAL_EMAIL_RECIPIENT
         print("Publication notice send")

@@ -23,6 +23,8 @@ from pathlib import Path
 from rich.console import Console
 
 from database import (
+    as_utc,
+    utcnow,
     CafrActuarial, CafrAllocation, CafrExtract, CafrPerformance, Document,
     IpsAllocation, IpsDocument, IpsExtract, Plan, PlanManagerRoster, RFPRecord,
     Summary, TwinBuildRun, TwinSnapshot, get_session, get_twin_snapshot, init_db,
@@ -505,7 +507,7 @@ def build_roster_and_timeline(session, plan, mappings):
                 "doc_id": doc.id, "url": doc.url,
             })
 
-    now = datetime.utcnow()
+    now = utcnow()
     entries = []
     for canonical, entry in managers.items():
         # Sort by date only: `action_type` (the second tuple element) can be
@@ -520,7 +522,8 @@ def build_roster_and_timeline(session, plan, mappings):
         if dated and dated[-1][1] == "fire":
             status = "terminated"
         elif entry["last_seen"]:
-            last_seen_dt = datetime.fromisoformat(entry["last_seen"])
+            # Stored as an ISO string, so it parses naive; `now` is aware.
+            last_seen_dt = as_utc(datetime.fromisoformat(entry["last_seen"]))
             if last_seen_dt >= now - timedelta(days=730):
                 status = "current"
         entries.append({
@@ -753,7 +756,7 @@ def build_twin(session, plan, mappings=None, asset_mappings=None) -> dict:
     return {
         "schema_version": TWIN_SCHEMA_VERSION,
         "plan_id": plan.id,
-        "built_at": datetime.utcnow().isoformat(),
+        "built_at": utcnow().isoformat(),
         "facets": facets,
         "completeness": completeness,
         "freshness": freshness,
@@ -796,7 +799,7 @@ def run_builder(plan_ids=None) -> None:
             run.snapshots_written = written
             run.errors = json.dumps(errors)
             run.status = "succeeded" if not errors else "failed"
-            run.completed_at = datetime.utcnow()
+            run.completed_at = utcnow()
             session.commit()
             console.print(f"[bold]{written}/{len(plans)} snapshots written[/bold]")
         except Exception as exc:  # noqa: BLE001
@@ -807,7 +810,7 @@ def run_builder(plan_ids=None) -> None:
                 run.snapshots_written = written
                 run.errors = json.dumps(errors)
                 run.status = "succeeded" if not errors else "failed"
-                run.completed_at = datetime.utcnow()
+                run.completed_at = utcnow()
                 session.commit()
             except Exception as exc2:  # noqa: BLE001
                 print(f"twin_builder: failed to finalize run {run.run_id}: {exc2}",

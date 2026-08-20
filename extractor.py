@@ -23,6 +23,8 @@ from pathlib import Path
 from rich.console import Console
 
 from database import (
+    as_utc,
+    utcnow,
     Document, ExtractionDetail, get_session, get_unextracted_documents,
 )
 
@@ -350,6 +352,11 @@ def _date_is_plausible(d: datetime, downloaded_at: datetime | None) -> bool:
     """
     if downloaded_at is None:
         return True
+    # `d` is parsed out of text or a filename and is always naive;
+    # downloaded_at comes from the DB and is aware on Postgres. Normalise both
+    # rather than assume either shape.
+    d = as_utc(d)
+    downloaded_at = as_utc(downloaded_at)
     if d > downloaded_at + timedelta(days=60):
         return False
     if d < downloaded_at - timedelta(days=5 * 365):
@@ -487,7 +494,7 @@ def run_extractor(doc_ids: list[int] = None, retry_failed: bool = False):
                     document_id=doc.id, reason=outcome.reason,
                     pages_total=outcome.pages or None,
                     pages_ocred=outcome.pages_ocred,
-                    detected_at=datetime.utcnow()))
+                    detected_at=utcnow()))
             else:
                 session.query(ExtractionDetail).filter(
                     ExtractionDetail.document_id == doc.id).delete()

@@ -26,6 +26,7 @@ from tenacity import (
 )
 
 from database import (
+    utcnow,
     Document, DocumentSkip, Summary, get_session, get_unsummarized_documents,
     summary_exists_for_hash, Plan,
 )
@@ -337,7 +338,7 @@ def summarize_document(doc: Document, plan_name: str,
             investment_actions=existing.investment_actions,
             decisions=existing.decisions,
             performance_data=existing.performance_data,
-            generated_at=datetime.utcnow(),
+            generated_at=utcnow(),
             model_used=f"dedup:{existing.model_used}",
             text_hash=text_hash,
         )
@@ -385,7 +386,7 @@ def summarize_document(doc: Document, plan_name: str,
         investment_actions=json.dumps(data.get("investment_actions", [])),
         decisions=json.dumps(data.get("decisions", [])),
         performance_data=json.dumps(data.get("performance_data", [])),
-        generated_at=datetime.utcnow(),
+        generated_at=utcnow(),
         model_used=model,
         text_hash=text_hash,
     )

@@ -37,6 +37,7 @@ from rich.console import Console
 
 from cafr_year_check import fiscal_year_from_pdf
 from database import (
+    utcnow,
     CafrRefreshLog,
     Document,
     Plan,
@@ -323,7 +324,7 @@ def run_refresh(plan_ids: list[str] | None = None,
         wanted = set(plan_ids)
         plans = [p for p in plans if p["id"] in wanted]
 
-    run_at = datetime.utcnow()
+    run_at = utcnow()
     counts: dict[str, int] = {}
 
     session = get_session()

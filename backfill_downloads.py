@@ -28,7 +28,7 @@ from pathlib import Path
 
 import requests
 
-from database import Document, get_session, init_db
+from database import utcnow, Document, get_session, init_db
 
 DOWNLOADS_DIR = Path(os.environ.get("DOWNLOADS_DIR") or (Path(__file__).parent / "downloads"))
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; PensionPlanIntelligence/1.0)"}
@@ -141,7 +141,7 @@ def main():
             # Stamp downloaded_at so the Admin pipeline-coverage view sees
             # these records as freshly downloaded rather than "never".
             if doc.downloaded_at is None:
-                doc.downloaded_at = datetime.utcnow()
+                doc.downloaded_at = utcnow()
             session.commit()
             ok += 1
             print(f"[{i}/{len(missing)}] OK   {doc.plan_id}/{path.name} ({size:,} bytes)")
