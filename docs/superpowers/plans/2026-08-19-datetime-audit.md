@@ -150,14 +150,15 @@ from the offender list.
 
 # Part 2 — Decisions and follow-ups
 
-**Decision required before Task 4: `TIMESTAMPTZ` or naive `TIMESTAMP`?**
+**DECIDED 2026-08-19: `TIMESTAMPTZ`.** All 58 columns become
+`DateTime(timezone=True)`, per spec §10's "Postgres will not discard it".
 
-This plan assumes **`TIMESTAMPTZ`** (`DateTime(timezone=True)`), per spec §10's
-"Postgres will not discard it". The alternative — leave all 58 columns naive on
-Postgres — is less work and preserves current behaviour exactly, but bakes in a
-schema that cannot represent when anything actually happened and pushes the same
-migration cost to whoever adds the first non-UTC data source. Recommend
-`TIMESTAMPTZ`. **Confirm before starting Task 4.**
+The alternative considered and rejected — leaving all 58 columns naive on
+Postgres — was less work and would have preserved current behaviour exactly, but
+it bakes in a schema that cannot represent when anything actually happened, and
+pushes the same migration cost onto whoever adds the first non-UTC data source.
+
+Task 4 is unblocked. The whole plan is now executable end to end.
 
 **Non-blocking follow-ups (not in this plan):**
 - The 4 `date.today()` period selectors (Finding 3) should take an injected `now` for testability.
@@ -525,7 +526,7 @@ git commit -m "Add a Postgres CI job — the only harness that can test timezone
 - Modify: `database.py` (all `Column(DateTime` declarations, plus 4 naive defaults at lines 415, 468, 498, 516)
 - Modify: `tests/test_datetime_discipline.py`
 
-**Blocked on:** the `TIMESTAMPTZ` decision in Part 2.
+**Unblocked:** `TIMESTAMPTZ` confirmed 2026-08-19 (Part 2).
 
 - [ ] **Step 1: Write the failing schema test** (append to `tests/test_datetime_discipline.py`)
 
