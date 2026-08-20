@@ -2,7 +2,17 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status (2026-08-19):** Tasks 1, 2, 3, 4, 6, 7 landed. **Task 5 remains** — and nothing is verified until the Postgres CI job runs, which needs a push.
+**Status (2026-08-20):** COMPLETE. All seven tasks landed; the Postgres CI
+job is green, so the TIMESTAMPTZ semantics are verified on a real Postgres
+rather than inferred.
+
+**Added during Task 5, not in the original plan:** `database.as_utc()`.
+Reads are aware on Postgres and naive on SQLite, so any Python-level
+comparison against `utcnow()` needs normalising — and step 4's dual-run
+means both shapes are live simultaneously. Six such sites were found; one
+(`insights/daily.py`'s reappear trigger) passed all 284 unit tests and
+still raised TypeError on the first real cadence run, which is exactly what
+Step 4's smoke test exists to catch.
 
 **Goal:** Make every datetime in the codebase timezone-aware UTC — in the schema, in the code, and in the existing data — so the SQLite→Postgres migration (step 3) cannot silently shift or crash on timestamps.
 
@@ -616,7 +626,7 @@ half-converted codebase raises `TypeError` at runtime in whichever half lags.
 The suite passing is not evidence here — SQLite hides it. The Postgres job and a
 live smoke run are the evidence.
 
-- [ ] **Step 1: Convert every site**
+- [x] **Step 1: Convert every site**
 
 For each file in `KNOWN_OFFENDERS`, replace `datetime.utcnow()` with `utcnow()`
 and add `from database import utcnow` (adjust to each module's import style).
@@ -639,18 +649,18 @@ comparison must be aware.
 2. **`insights/config.py:127-142`** — the 4 helpers take an optional `now`; change only the fallback, keep the parameter.
 3. **`strftime` display sites** (~30, mostly `generate_notes.py` and `insights/compose.py`) — swapping to `utcnow()` is safe; the format strings already say "UTC".
 
-- [ ] **Step 2: Empty the ratchet**
+- [x] **Step 2: Empty the ratchet**
 
 ```python
 KNOWN_OFFENDERS: set[str] = set()
 ```
 
-- [ ] **Step 3: Run the full suite**
+- [x] **Step 3: Run the full suite**
 
 Run: `LLM_MODE=mock INSIGHTS_MODE=mock python -m pytest tests/ -q`
 Expected: 269 passed, and the DeprecationWarning count drops sharply (the 485 warnings at baseline are dominated by these calls).
 
-- [ ] **Step 4: Smoke-test the two cadences that do the most datetime arithmetic**
+- [x] **Step 4: Smoke-test the two cadences that do the most datetime arithmetic**
 
 ```bash
 INSIGHTS_MODE=mock python -m insights.scheduler daily --force
@@ -661,7 +671,7 @@ Expected: both complete; artifacts land in `tmp/sent_emails/`. These exercise th
 `daily_runs` lookback and `weekly_runs` resumability paths — the densest
 naive/aware comparison sites in the codebase.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -u

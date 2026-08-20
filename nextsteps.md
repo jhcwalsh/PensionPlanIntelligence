@@ -49,17 +49,19 @@ stamp all 40,820 values as UTC wholesale.
 | 2. Single `database.utcnow()`; 3 shadowing `_utcnow` deleted | Done — `2144b73` |
 | 3. Postgres CI job (service container) | Done — `a9f7b7c` |
 | 4. All 58 columns `timezone=True` | Done — `fd621da` |
-| 5. Convert the 81 call sites | **Not started** |
+| 5. Convert the 81 call sites | Done — `be7fcb1` |
 | 6. One-shot UTC backfill script | Done — `e27ef41` |
 | 7. Correct the docs | Done |
 
-Task 5 is the remaining one, and the plan says not to split it: ~20 cutoff
-sites compare against DB reads, so a half-converted codebase raises TypeError.
-It is also the commit most likely to break a running pipeline, so it should
-land after CI has gone green on Task 4.
+**All seven tasks are done, and verified.** The Postgres CI job ran green on
+2026-08-20: the columns really are TIMESTAMPTZ, offsets survive a round trip,
+and a read can be compared against utcnow(). That is the first real evidence in
+the exercise — SQLite could never have shown it.
 
-**Nothing here is verified yet.** SQLite cannot test any of it; the Postgres
-job only runs on a push, which has not happened.
+Task 5 added `database.as_utc()`, which the plan had not anticipated: reads are
+aware on Postgres and naive on SQLite, and step 4 dual-runs both, so any
+Python-level comparison needs normalising. Six sites needed it. One passed all
+284 unit tests and still raised TypeError on the first real cadence run.
 
 ### 2. Two decisions needed from James
 
@@ -156,13 +158,13 @@ any of the above and doable at any time:
 
 ## Recommendation
 
-**Push the branch.** Everything landed since 2026-08-19 — 58 timezone-aware
-columns, the search dialect fix, the backfill script — is unverified by
-anything stronger than a SQLite suite that is structurally blind to all of it.
-The Postgres CI job exists and has never run. One push converts a pile of
-plausible work into evidence, and stops the branch drifting further from a
-master that moves twice a day.
+The datetime prerequisite is finished and green. **Step 3 — stand up Neon —
+is now unblocked**, with two additions the portal spec makes to it: the search
+schema (`tsvector` + GIN) and the gzip decision both have to land *inside* step
+3, because they are expensive to reverse once data is in Neon.
 
-Then **datetime Task 5** (the 81 call sites), which the plan deliberately keeps
-as one commit, and which is the change most likely to break a running pipeline
-— so it wants a green CI behind it.
+Before that, two things still want a decision: **Auth0** and **whether the repo
+goes public**. Neither blocks step 3.
+
+`db/pension.db` remains uncommitted, and the branch is not merged to master —
+so none of this is deployed.
