@@ -93,3 +93,45 @@ def test_no_module_defines_its_own_utcnow():
     ]
     assert not offenders, (
         "Local _utcnow definitions shadow database.utcnow(): " + ", ".join(offenders))
+
+
+def test_all_datetime_columns_declare_timezone():
+    """Every timestamp column must be TIMESTAMPTZ on Postgres.
+
+    SQLite ignores this flag, so this metadata check is only an approximation;
+    tests/postgres/test_tz_semantics.py asserts the real column type.
+    """
+    import sqlalchemy as sa
+    import database
+    naive = [
+        f"{name}.{col.name}"
+        for name, table in database.Base.metadata.tables.items()
+        for col in table.columns
+        if isinstance(col.type, sa.DateTime) and not col.type.timezone
+    ]
+    assert not naive, f"{len(naive)} naive DateTime column(s): " + ", ".join(naive)
+
+
+def test_no_column_default_is_naive():
+    """A column whose default returns a naive value writes naive values forever.
+
+    Asserted by calling the default rather than comparing it to
+    database.utcnow: SQLAlchemy wraps a zero-argument callable in one that
+    takes a context, so `default.arg is database.utcnow` is False even when
+    the column is correct. The behaviour is what matters anyway.
+    """
+    import sqlalchemy as sa
+    import database
+    bad = []
+    for name, table in database.Base.metadata.tables.items():
+        for col in table.columns:
+            if not isinstance(col.type, sa.DateTime):
+                continue
+            default = col.default
+            if default is None or not getattr(default, "is_callable", False):
+                continue
+            produced = default.arg(None)  # the wrapper takes an ExecutionContext
+            if produced.tzinfo is None:
+                bad.append(f"{name}.{col.name}")
+    assert not bad, (
+        f"{len(bad)} column default(s) produce naive datetimes: " + ", ".join(bad))

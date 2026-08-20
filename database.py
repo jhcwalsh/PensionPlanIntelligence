@@ -102,7 +102,7 @@ class Meeting(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     plan_id = Column(String, ForeignKey("plans.id"), nullable=False)
-    meeting_date = Column(DateTime)
+    meeting_date = Column(DateTime(timezone=True))
     meeting_type = Column(String)       # board, investment, audit, etc.
     title = Column(String)
     source_url = Column(String)
@@ -126,11 +126,11 @@ class Document(Base):
     doc_type = Column(String)           # agenda, board_pack, minutes, performance
     local_path = Column(String)         # path to downloaded file
     file_size_bytes = Column(Integer)
-    downloaded_at = Column(DateTime)
+    downloaded_at = Column(DateTime(timezone=True))
     extracted_text = Column(GzippedText)
     extraction_status = Column(String, default="pending")   # pending, done, failed
     page_count = Column(Integer)
-    meeting_date = Column(DateTime)     # parsed from document or filename
+    meeting_date = Column(DateTime(timezone=True))     # parsed from document or filename
     fiscal_year = Column(Integer)       # CAFR/ACFR fiscal year (e.g. 2024); null for non-CAFR docs
 
     plan = relationship("Plan", back_populates="documents")
@@ -151,7 +151,7 @@ class CafrRefreshLog(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     plan_id = Column(String, ForeignKey("plans.id"), nullable=False)
-    run_at = Column(DateTime, nullable=False)
+    run_at = Column(DateTime(timezone=True), nullable=False)
     expected_year = Column(Integer)            # the FY we were checking for
     status = Column(String, nullable=False)
     # status values: "saved" | "already_have" | "not_yet_published" | "url_failed"
@@ -174,7 +174,7 @@ class CafrExtract(Base):
     document_id = Column(Integer, ForeignKey("documents.id"), nullable=False, unique=True)
     fiscal_year = Column(Integer)
     investment_policy_text = Column(Text)
-    extracted_at = Column(DateTime)
+    extracted_at = Column(DateTime(timezone=True))
     model_used = Column(String)
     pages_used = Column(String)        # e.g. "45-78" — which PDF pages fed the extraction
     text_hash = Column(String)         # MD5 of the section text — skip re-extraction
@@ -245,7 +245,7 @@ class IpsExtract(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     plan_id = Column(String, ForeignKey("plans.id"), nullable=False)
     ips_document_id = Column(Integer, ForeignKey("ips_documents.id"), nullable=False, unique=True)
-    extracted_at = Column(DateTime, default=_utcnow, nullable=False)
+    extracted_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
     model_used = Column(String)
     prompt_version = Column(String)
     text_hash = Column(String)                       # md5 of the IPS text
@@ -320,7 +320,7 @@ class CafrActuarial(Base):
     members_active = Column(Integer)
     members_retired = Column(Integer)
     actuary_firm = Column(String)
-    extracted_at = Column(DateTime, default=_utcnow, nullable=False)
+    extracted_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
     model_used = Column(String)
     prompt_version = Column(String)
     text_hash = Column(String)                       # md5 of the source text
@@ -355,7 +355,7 @@ class PlanManagerRoster(Base):
     last_seen = Column(String(10))                   # YYYY-MM-DD
     evidence = Column(Text)                          # JSON: array of {source, date, context}
     confidence = Column(Float)
-    derived_at = Column(DateTime, default=_utcnow, nullable=False)
+    derived_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
 
     plan = relationship("Plan")
 
@@ -387,14 +387,14 @@ class Publication(Base):
 
     draft_markdown = Column(Text)               # populated after compose
     pdf_path = Column(String)                   # populated after render
-    composed_at = Column(DateTime)
-    approved_at = Column(DateTime)
-    rejected_at = Column(DateTime)
-    published_at = Column(DateTime)
-    expires_at = Column(DateTime)               # 7 days after composed_at
+    composed_at = Column(DateTime(timezone=True))
+    approved_at = Column(DateTime(timezone=True))
+    rejected_at = Column(DateTime(timezone=True))
+    published_at = Column(DateTime(timezone=True))
+    expires_at = Column(DateTime(timezone=True))               # 7 days after composed_at
     error_message = Column(Text)                # if status='failed'
-    reminder_sent_at = Column(DateTime)         # 72-hour nudge
-    subscribers_notified_at = Column(DateTime)  # set once subscriber fan-out has run
+    reminder_sent_at = Column(DateTime(timezone=True))         # 72-hour nudge
+    subscribers_notified_at = Column(DateTime(timezone=True))  # set once subscriber fan-out has run
 
     # For monthly/annual: the publication ids of the lower-cadence inputs
     source_publication_ids = Column(JSON)       # list[int] or null
@@ -421,9 +421,9 @@ class ApprovalToken(Base):
     publication_id = Column(Integer, ForeignKey("publications.id"), nullable=False)
     token_hash = Column(String, nullable=False, unique=True)  # sha256 of raw token
     action = Column(String, nullable=False)     # 'approve' | 'reject'
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    expires_at = Column(DateTime, nullable=False)
-    consumed_at = Column(DateTime)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    consumed_at = Column(DateTime(timezone=True))
 
     publication = relationship("Publication", back_populates="tokens")
 
@@ -443,7 +443,7 @@ class DailyRun(Base):
     __tablename__ = "daily_runs"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    sent_at = Column(DateTime, nullable=False)
+    sent_at = Column(DateTime(timezone=True), nullable=False)
     publication_id = Column(Integer, ForeignKey("publications.id"), nullable=False)
     docs_count = Column(Integer, nullable=False)
     triggers = Column(JSON, nullable=False, default=list)
@@ -474,10 +474,10 @@ class Subscriber(Base):
     quarterly = Column(Boolean, default=False, nullable=False)
     status = Column(String, nullable=False, default="pending")
     # status values: pending, confirmed, disabled, unsubscribed
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    confirmed_at = Column(DateTime)
-    unsubscribed_at = Column(DateTime)
-    last_email_sent_at = Column(DateTime)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    confirmed_at = Column(DateTime(timezone=True))
+    unsubscribed_at = Column(DateTime(timezone=True))
+    last_email_sent_at = Column(DateTime(timezone=True))
     signup_ip = Column(String)
 
     tokens = relationship("SubscriberToken", back_populates="subscriber",
@@ -504,9 +504,9 @@ class SubscriberToken(Base):
     subscriber_id = Column(Integer, ForeignKey("subscribers.id"), nullable=False)
     token_hash = Column(String, nullable=False, unique=True)
     action = Column(String, nullable=False)     # 'confirm' | 'unsubscribe' | 'update_preferences'
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    expires_at = Column(DateTime, nullable=False)
-    consumed_at = Column(DateTime)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    consumed_at = Column(DateTime(timezone=True))
 
     subscriber = relationship("Subscriber", back_populates="tokens")
 
@@ -522,8 +522,8 @@ class WeeklyRun(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     period_start = Column(Date, nullable=False)
     period_end = Column(Date, nullable=False)
-    started_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    completed_at = Column(DateTime)
+    started_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    completed_at = Column(DateTime(timezone=True))
     status = Column(String, nullable=False, default="running")
     # status: running, succeeded, failed, partial
 
@@ -552,8 +552,8 @@ class WeeklyRunPlan(Base):
     status = Column(String, nullable=False, default="pending")
     # status: pending, fetching, extracting, succeeded, failed, skipped
     error_message = Column(Text)
-    started_at = Column(DateTime)
-    completed_at = Column(DateTime)
+    started_at = Column(DateTime(timezone=True))
+    completed_at = Column(DateTime(timezone=True))
     documents_fetched = Column(Integer, default=0)
 
     run = relationship("WeeklyRun", back_populates="plan_runs")
@@ -574,7 +574,7 @@ class Summary(Base):
     investment_actions = Column(Text)   # JSON list: manager hires/fires, allocation changes
     decisions = Column(Text)            # JSON list of formal decisions/votes
     performance_data = Column(Text)     # JSON: returns by asset class if present
-    generated_at = Column(DateTime)
+    generated_at = Column(DateTime(timezone=True))
     model_used = Column(String)
     text_hash = Column(String)          # MD5 of extracted_text — skip re-summarizing duplicates
 
@@ -619,7 +619,7 @@ class DocumentHealth(Base):
     task_relevant_pages = Column(Integer, default=0)
     structure_score = Column(Float)
     rationale = Column(Text)                          # JSON list of strings
-    evaluated_at = Column(DateTime, default=_utcnow, nullable=False)
+    evaluated_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
 
 
 class RFPRecord(Base):
@@ -634,7 +634,7 @@ class RFPRecord(Base):
     extraction_confidence = Column(Float, nullable=False)
     needs_review = Column(Boolean, nullable=False, default=False)
     prompt_version = Column(String, nullable=False, default=RFP_PROMPT_VERSION)
-    extracted_at = Column(DateTime, default=_utcnow, nullable=False)
+    extracted_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
 
     __table_args__ = (
         Index("ix_rfp_plan", "plan_id"),
@@ -649,8 +649,8 @@ class PipelineRun(Base):
     __tablename__ = "pipeline_runs"
 
     run_id = Column(String(32), primary_key=True, default=_new_run_id)
-    started_at = Column(DateTime, default=_utcnow, nullable=False)
-    completed_at = Column(DateTime)
+    started_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    completed_at = Column(DateTime(timezone=True))
     documents_discovered = Column(Integer, default=0)
     documents_processed = Column(Integer, default=0)
     records_extracted = Column(Integer, default=0)
@@ -674,7 +674,7 @@ class TwinSnapshot(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     plan_id = Column(String, ForeignKey("plans.id"), nullable=False)
-    built_at = Column(DateTime, default=_utcnow, nullable=False)
+    built_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
     schema_version = Column(String, nullable=False)
     facets = Column(GzippedText)                      # full twin JSON (str)
     facets_hash = Column(String(64), nullable=False)
@@ -693,8 +693,8 @@ class TwinBuildRun(Base):
     __tablename__ = "twin_build_runs"
 
     run_id = Column(String(32), primary_key=True, default=_new_run_id)
-    started_at = Column(DateTime, default=_utcnow, nullable=False)
-    completed_at = Column(DateTime)
+    started_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    completed_at = Column(DateTime(timezone=True))
     plans_total = Column(Integer, default=0)
     snapshots_written = Column(Integer, default=0)
     errors = Column(Text, default="[]")               # JSON list of strings
@@ -715,8 +715,8 @@ class FetchRun(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     source = Column(String, nullable=False)                       # 'gha' | 'local'
-    started_at = Column(DateTime, default=_utcnow, nullable=False)
-    completed_at = Column(DateTime)
+    started_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    completed_at = Column(DateTime(timezone=True))
     status = Column(String, nullable=False, default="running")    # running | success | failed
     error_message = Column(Text)                                  # populated when status='failed'
     new_document_ids = Column(Text, default="[]")                 # JSON list of int Document.id
@@ -739,7 +739,7 @@ class DocumentSkip(Base):
 
     document_id = Column(Integer, ForeignKey("documents.id"), primary_key=True)
     reason = Column(String, nullable=False)                       # e.g. 'refusal'
-    detected_at = Column(DateTime, default=_utcnow, nullable=False)
+    detected_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
     error_message = Column(Text)
 
 
@@ -770,7 +770,7 @@ class ExtractionDetail(Base):
     reason = Column(String, nullable=False)
     pages_total = Column(Integer)
     pages_ocred = Column(Integer)
-    detected_at = Column(DateTime, default=_utcnow, nullable=False)
+    detected_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
     error_message = Column(Text)
 
 
@@ -794,8 +794,8 @@ class PrunedDocument(Base):
     url = Column(String, nullable=False, unique=True)
     plan_id = Column(String)                                  # context, nullable
     doc_type = Column(String)                                 # context, nullable
-    meeting_date = Column(DateTime)                           # context, nullable
-    pruned_at = Column(DateTime, default=_utcnow, nullable=False)
+    meeting_date = Column(DateTime(timezone=True))                           # context, nullable
+    pruned_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
     reason = Column(String, nullable=False)                   # short tag, e.g. 'pre-2026-agenda-prune'
 
     __table_args__ = (
@@ -822,7 +822,7 @@ class IpsDocument(Base):
     filename = Column(String)
     local_path = Column(String)
     file_size_bytes = Column(Integer)
-    fetched_at = Column(DateTime, default=_utcnow, nullable=False)
+    fetched_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
     extracted_text = Column(GzippedText)                     # for downstream scoring
     extraction_status = Column(String, default="pending")    # pending | done | failed
     page_count = Column(Integer)
@@ -854,7 +854,7 @@ class IpsRefreshLog(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     plan_id = Column(String, ForeignKey("plans.id"), nullable=False)
-    run_at = Column(DateTime, nullable=False)
+    run_at = Column(DateTime(timezone=True), nullable=False)
     status = Column(String, nullable=False)
     url_tried = Column(String)
     discovery_source = Column(String)        # override | mine_existing | site_crawl
@@ -940,11 +940,11 @@ class PlanVideoSource(Base):
     verification_confidence = Column(String)             # 'high' | 'medium' | 'low'
     verification_notes = Column(Text)
     status = Column(String, nullable=False, default="active")  # 'active' | 'inactive' | 'broken'
-    last_checked_at = Column(DateTime)                   # last time we polled this source for new recordings
-    last_recording_seen_at = Column(DateTime)            # newest recording publish_at observed here
+    last_checked_at = Column(DateTime(timezone=True))                   # last time we polled this source for new recordings
+    last_recording_seen_at = Column(DateTime(timezone=True))            # newest recording publish_at observed here
     notes = Column(Text)
-    created_at = Column(DateTime, default=_utcnow, nullable=False)
-    updated_at = Column(DateTime, default=_utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
 
     plan = relationship("Plan")
     recordings = relationship("MeetingRecording", back_populates="video_source",
@@ -982,11 +982,11 @@ class MeetingRecording(Base):
     title = Column(String)
     description = Column(Text)
     thumbnail_url = Column(String)
-    published_at = Column(DateTime)                      # platform-reported publish time
-    meeting_date_inferred = Column(DateTime)             # parsed from title or filename
+    published_at = Column(DateTime(timezone=True))                      # platform-reported publish time
+    meeting_date_inferred = Column(DateTime(timezone=True))             # parsed from title or filename
     duration_seconds = Column(Integer)
     is_livestream = Column(Boolean, default=False)       # ongoing or scheduled live event
-    livestream_start = Column(DateTime)                  # scheduled start, when applicable
+    livestream_start = Column(DateTime(timezone=True))                  # scheduled start, when applicable
 
     # Downloader fields (Phase 2)
     download_status = Column(String, nullable=False, default="pending")
@@ -995,14 +995,14 @@ class MeetingRecording(Base):
     file_size_bytes = Column(Integer)
     content_hash = Column(String(64))                    # sha256 of downloaded file
     download_attempts = Column(Integer, default=0)
-    last_download_attempt_at = Column(DateTime)
+    last_download_attempt_at = Column(DateTime(timezone=True))
     download_error = Column(Text)
 
     # Alerting fields (Phase 3)
-    alert_sent_at = Column(DateTime)
+    alert_sent_at = Column(DateTime(timezone=True))
 
-    discovered_at = Column(DateTime, default=_utcnow, nullable=False)
-    updated_at = Column(DateTime, default=_utcnow, nullable=False)
+    discovered_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
 
     plan = relationship("Plan")
     video_source = relationship("PlanVideoSource", back_populates="recordings")
@@ -1033,7 +1033,7 @@ class VideoRefreshLog(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     plan_id = Column(String, ForeignKey("plans.id"), nullable=False)
     video_source_id = Column(Integer, ForeignKey("plan_video_sources.id"))
-    run_at = Column(DateTime, nullable=False)
+    run_at = Column(DateTime(timezone=True), nullable=False)
     status = Column(String, nullable=False)
     recordings_found = Column(Integer, default=0)        # total seen on this poll
     recordings_new = Column(Integer, default=0)          # new rows inserted
