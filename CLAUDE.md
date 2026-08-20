@@ -4,21 +4,27 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-Three layered systems sharing one SQLite database (`db/pension.db`, ~42 MB, tracked in git):
+Two layered systems sharing one SQLite database (`db/pension.db`, ~64 MB, tracked in git):
 
-1. **Meeting-document pipeline** (`pipeline.py`, `fetcher.py`, `extractor.py`, `summarizer.py`) — fetches board materials and CAFRs from ~148 U.S. public pension plans, extracts text, summarizes with Claude per-document. Hybrid: GHA cron handles 137 of 148 plans daily; local Windows Task Scheduler handles the 11 WAF-blocked plans (see `data/local_only_plans.json`).
-2. **Insights automation** (`insights/` package) — composes weekly / monthly / annual editorial briefings from the existing summaries, gated on a magic-link approval email to the founder. GHA cron-triggered (weekly Sundays 12:30 UTC, monthly 1st of month 18:00 UTC).
-3. **RFP alerts pipeline** (`rfp/`, `lib/`, `api/`, `scripts/`) — structured extraction of RFP records from already-fetched documents into `rfp_records` / `document_health` / `pipeline_runs`, served via FastAPI. RFP backfill runs weekly on GHA (the duplicate local Task Scheduler entry was retired 2026-07-07); FastAPI lives on Render.
+1. **Meeting-document pipeline** (`pipeline.py`, `fetcher.py`, `extractor.py`, `summarizer.py`) — fetches board materials and CAFRs from ~148 U.S. public pension plans, extracts text, summarizes with Claude per-document. Cloud-only: GHA cron handles 137 of 148 plans daily. The 14 WAF-blocked plans in `data/waf_blocked_plans.json` / `data/waf_blocked_cafr_plans.json` are skipped everywhere (no runner can reach them) — 8.5% of tracked AUM, though 4 of the 14 had no documents anyway.
+2. **Insights automation** (`insights/` package) — composes monthly / quarterly / annual editorial briefings from the existing summaries, plus a daily digest. All auto-publish and email a copy; nothing waits on approval. The weekly cadence still runs but is **silent** (no email, no notes file) because monthly composes from weekly publications — see the cadence-cascade note below.
 
-The Streamlit app (`app.py`) reads from the same DB and surfaces all three layers as tabs.
+The Streamlit app (`app.py`) reads from the same DB and surfaces both layers as tabs.
+
+A third layer, the RFP alerts pipeline (`rfp/`, `lib/`, `api/`), was removed on
+2026-08-16 together with the FastAPI service that served it. The `rfp_records`
+table and its 189 rows are deliberately retained, frozen: `twin_builder`
+and `scripts/build_manager_roster` still read them for the `rfp_state` facet and
+for consultant/custodian/actuary relationships. Nothing refreshes them, so the
+twins' freshness dates on those facets stop advancing. See
+`docs/superpowers/specs/2026-08-16-low-maintenance-app-design.md`.
 
 ## Common commands
 
 ```bash
-# Tests — all three layers' tests use the same conftest. Mock both LLM modes.
+# Tests — both layers share the same conftest. Mock both LLM modes.
 LLM_MODE=mock pytest tests/ -q
 LLM_MODE=mock pytest tests/test_weekly_e2e_mock.py -q          # one insights file
-LLM_MODE=mock pytest tests/unit/test_relevance.py -q           # one RFP file
 LLM_MODE=mock pytest tests/ -k token                            # by name pattern
 
 # DB schema management — no Alembic; init_db() is idempotent
@@ -43,24 +49,18 @@ INSIGHTS_MODE=mock python -m insights.scheduler daily          # dry-run; writes
 INSIGHTS_MODE=live python -m insights.scheduler daily          # real send via Resend
 python -m insights.scheduler daily --force                     # re-send today's digest
 
-# RFP pipeline (against fixtures in mock mode; against pension.db in live)
-LLM_MODE=mock python -m scripts.run_rfp_extraction
-LLM_MODE=mock python -m scripts.run_eval
-
-# Streamlit and FastAPI services
+# Streamlit app
 streamlit run app.py
-uvicorn api.main:app --reload --port 8000
 ```
 
 ## Architecture you have to internalize before editing
 
 ### The DB IS the deploy mechanism for data
-`db/pension.db` is committed. Pushing to `master` is how new data lands on Render. The Streamlit web service and FastAPI service on Render mount the persistent disk at `/data` but read from the deployed `db/pension.db` until something writes back. Three things now write back to master:
+`db/pension.db` is committed. Pushing to `master` is how new data lands on Render. The Streamlit web service on Render mounts the persistent disk at `/data` but read from the deployed `db/pension.db` until something writes back. Two things now write back to master:
 1. **GHA daily-pipeline** (~11:00 UTC) — fetches/extracts/summarizes 137 plans, commits the DB.
-2. **Local Windows Task Scheduler daily** — same pipeline scoped to the 11 WAF-blocked plans via `--local-only`, commits the DB.
-3. **GHA weekly-insights** (Sundays 12:30 UTC) and **GHA monthly-insights** (1st of month 18:00 UTC) — compose digests, send approval email, commit the DB + `notes/` (+ `cafr_summaries/` for monthly).
+3. **GHA weekly-insights** (Sundays 12:30 UTC, silent) and **GHA monthly-insights** (1st of month 18:00 UTC) — compose digests, auto-publish, commit the DB + `notes/` (+ `cafr_summaries/` for monthly).
 
-Local Task Scheduler still owns the WAF-blocked subset of monthly CAFR refresh (5 plans via `--local-only`) — a `git push`-back operation on the same master branch. Each writer runs at a distinct time; conflicts haven't been observed but a `git pull --rebase` would be the next defensive step if they appear.
+Local Task Scheduler now owns exactly one job: the weekly meeting-recordings catalogue (`scripts/run_recordings.bat`). It is a deliberate, best-effort exception — a side dataset that no cloud job depends on, so if this machine is off for a month nothing else degrades.
 
 GitHub's hard 100 MB single-file limit is the ceiling on this model. The DB started bumping into it once `documents.extracted_text` accumulated, which forced the gzip wrapper (next section). When the DB approaches ~80 MB again, plan a real fix (Git LFS, or moving the DB out of git onto Render's persistent disk via a separate sync) rather than another column-level workaround.
 
@@ -70,62 +70,104 @@ The full extracted PDF text is the bulk of the DB by 10× over everything else. 
 - Aggregate queries like `LENGTH(extracted_text)` measure compressed bytes, not text length.
 - `scripts/migrate_compress_extracted_text.py` is the one-shot migration; idempotent on the gzip magic header. Re-running it is safe.
 
-### Three layered packages, one DB, idempotent schema
-`database.py` defines all 15 tables for all three subsystems in one module. There is no migration framework. `init_db()` calls `Base.metadata.create_all(engine)` — adding a new model class and re-running `init_db()` on an existing DB just creates the missing tables. **Never write SQL ALTER TABLE migrations**; just add the SQLAlchemy class and call `init_db()`. Existing-row backfill is a one-off script.
+### Layered packages, one DB, idempotent schema
+`database.py` defines all 15 tables in one module. There is no migration framework. `init_db()` calls `Base.metadata.create_all(engine)` — adding a new model class and re-running `init_db()` on an existing DB just creates the missing tables. **Never write SQL ALTER TABLE migrations**; just add the SQLAlchemy class and call `init_db()`. Existing-row backfill is a one-off script.
 
 ### Two independent mock flags
-`INSIGHTS_MODE=mock` (insights package) and `LLM_MODE=mock` (RFP pipeline) are unrelated. Tests' `conftest.py` sets both as autouse fixtures; production sets neither. When debugging an unexpected real-API call, check both env vars.
+`INSIGHTS_MODE=mock` (insights package) and `LLM_MODE=mock` (document/CAFR extraction) are unrelated. Tests' `conftest.py` sets both as autouse fixtures; production sets neither. When debugging an unexpected real-API call, check both env vars.
 
 ### Test DB isolation does NOT reload the database module
-`tests/conftest.py` rebinds `database.engine` and `database.SessionLocal` per-test using `monkeypatch.setattr`. Reloading the module would orphan the ORM classes and break SQLAlchemy's mapper registry. If you write a new test that needs DB isolation, follow this pattern — use the existing `_isolated_environment` (insights-style) or `tmp_db` (RFP-style) fixture rather than instantiating your own engine.
+`tests/conftest.py` rebinds `database.engine` and `database.SessionLocal` per-test using `monkeypatch.setattr`. Reloading the module would orphan the ORM classes and break SQLAlchemy's mapper registry. If you write a new test that needs DB isolation, follow this pattern — use the existing `_isolated_environment` (insights-style) or `tmp_db` fixture rather than instantiating your own engine.
 
 ### IPS pipeline is content-hash versioned (not FY-keyed like CAFRs)
 `refresh_ips.py` runs locally only (Windows Task Scheduler, monthly). Unlike CAFRs which are FY-tagged, IPS is versioned by content hash: `IpsDocument` has `UNIQUE(plan_id, content_hash)`, so a plan accumulates a row each time the board publishes a new IPS, while same-content re-fetches dedupe silently. Discovery is fully automated — no manual URL curation in `known_plans.json` required: `fetch_ips.discover_ips_urls()` mines existing extracted documents for embedded IPS URLs, then site-crawls seed paths under `plan.website`. Each candidate is gated by a Haiku 4.5 verification call (`verify_is_ips()`) so adjacent policy docs (proxy voting, securities lending) don't pollute the table. `IPS_MODE=mock` short-circuits the LLM call for tests; production hits Anthropic at ~$1-2/cycle total.
 
-### Approval flow is Streamlit-query-param-based
-Magic-link emails contain `?approve=<token>` and `?reject=<token>`. The Streamlit app's `main()` checks `st.query_params` before rendering tabs and dispatches to `page_document_detail`, `page_cafr_plan_detail`, or the approval consumer. Tokens are SHA-256-hashed in `approval_tokens`; raw values exist only in the email body. To add a new deep-link route, follow the same pattern in `app.py`'s `main()`.
+### Cadences auto-publish, and they cascade
+Since 2026-08-16 every cadence uses `cycle_common.finalize_and_send`:
+compose → render PDF → (optionally write `notes/`) → email → `published`.
+There is no approval gate, no magic link, no `publish-approved` workflow and
+no reminders job. `finalize_for_approval`, `insights/reminders.py`,
+`scripts/publish_pending.py` and `approval.issue_tokens`/`consume_token` are
+all gone. The `approval_tokens` table remains in the schema, unused, as an
+audit trail of past approvals.
+
+Two flags on `finalize_and_send` carry the differences:
+- `notify=False` — compose silently. **Only weekly uses this.** Weekly
+  briefings go to nobody, but the weekly `Publication` row is what
+  `monthly._gather_approved_weeklies` reads, and monthly raises outright
+  when it finds none. So the weekly cron must keep running.
+- `archive=True` — write the canonical `notes/` file that the app serves.
+  Monthly/quarterly/annual set it; daily and weekly don't.
+
+**The cascade is the thing to remember**: daily is standalone, weekly feeds
+monthly, and monthly feeds both quarterly and annual. Deleting a cadence
+breaks the one above it a period later, not immediately.
 
 ### Archive / Drafts / Admin password gate
 The Archive, Drafts, and Admin tabs are hidden from the tab strip entirely until the user enters the password set in the `ADMIN_PASSWORD` env var. The login form is a sidebar expander rendered by `_render_admin_login_sidebar()`; the predicate `_admin_unlocked()` drives whether the three gated tabs are appended to `main()`'s `tab_specs` list. Single shared password, session-state-sticky for the browser tab. Leave the env var unset for local dev (fail-open — tabs always present, no login UI). Set on Render to keep internal tooling, pre-editorial drafts, and the back-catalogue archive off the public site.
 
 ### Idempotency keys for cycles
 - `Publication` is unique on `(cadence, period_start)`. `find_or_create_publication()` returns the existing row or creates a new one with `status="generating"`.
-- `finalize_for_approval()` raises if status isn't `"generating"`. So once a publication is `awaiting_approval`, the cycle won't resend its email.
+- `finalize_and_send()` raises if status isn't `"generating"`, so a re-run won't resend.
 - To force a re-send, expire the existing publication first (or use `--force` on the scheduler CLI). Setting it back to `"generating"` directly works but bypasses the audit trail.
-- The same idempotency pattern applies to `WeeklyRun` (unique on `period_start`) and the RFP `rfp_id` (deterministic from `sha256(plan_id + doc_id + chunk_id + record_index)`).
+- The same idempotency pattern applies to `WeeklyRun` (unique on `period_start`).
 
-### Daily Pension Digest auto-send + conditional approval
-Unlike weekly/monthly/annual (always approval-gated), the `daily` cadence
-auto-sends on quiet/normal days and only routes through `finalize_for_approval`
-when triggers fire (volume / keyword / reappearing-plan). The auto-send path
-uses `cycle_common.finalize_and_send` which is a sibling of `finalize_for_approval`
-that skips token creation and goes straight to `published`. Lookback state lives
-in the `daily_runs` table (anchored on `MAX(sent_at)`); the GitHub Actions cron
-at `.github/workflows/daily-digest.yml` runs at 13:00 UTC daily and commits
-`db/pension.db` back after each successful send. Three env vars tune the trigger
-rules: `DAILY_APPROVAL_DOC_THRESHOLD` (default 10), `DAILY_APPROVAL_KEYWORDS`
-(default `"RFP,manager,search,investment policy"`), `DAILY_REAPPEAR_DAYS`
-(default 30).
+### Daily Pension Digest
+The `daily` cadence auto-sends every day. Lookback state lives in the
+`daily_runs` table (anchored on `MAX(sent_at)`); the GitHub Actions cron at
+`.github/workflows/daily-digest.yml` runs at 13:00 UTC daily and commits
+`db/pension.db` back after each successful send.
+
+Triggers (volume / keyword / reappearing-plan) used to route a busy day
+through an approval email. Since 2026-08-16 they only *annotate* the digest
+and are recorded in `daily_runs.triggers`; `daily_runs.approval_gated` is
+now always False and kept solely so historical rows stay readable. Three env
+vars still tune the rules: `DAILY_APPROVAL_DOC_THRESHOLD` (default 10),
+`DAILY_APPROVAL_KEYWORDS` (default `"RFP,manager,search,investment policy"`),
+`DAILY_REAPPEAR_DAYS` (default 30).
+
+Note there used to be a *second* daily digest — `scripts/send_daily_digest.py`,
+invoked from `daily-pipeline.yml` — which sent a separate email with regex
+RFP alerts. It was removed with the RFP subsystem; `daily-digest.yml` is the
+only digest now.
 
 ### Where each cadence runs
-Render hosts only two web services now: Streamlit (`pension-plan-intelligence`) and FastAPI (`pension-rfp-api`), both mounting the persistent disk `pension-db` at `/data`. All cron-style work moved off Render — partly to GHA, partly to local Windows Task Scheduler:
+Render hosts one web service: Streamlit (`pension-plan-intelligence`), mounting the persistent disk `pension-db` at `/data`. All cron-style work moved off Render — partly to GHA, partly to local Windows Task Scheduler:
 
 | Cadence | Trigger | Where | Workflow / .bat |
 |---|---|---|---|
 | Daily document pipeline (137 plans) | cron 11:00 UTC | GHA | `.github/workflows/daily-pipeline.yml` |
-| Daily document pipeline (11 WAF-blocked plans) | Task Scheduler | local Windows | `scripts/run_daily.bat` |
-| Weekly RFP backfill (`--limit 100`) | cron Sundays 12:00 UTC | GHA | `.github/workflows/weekly-rfp.yml` |
-| Weekly Insights composition + email | cron Sundays 12:30 UTC | GHA | `.github/workflows/weekly-insights.yml` |
-| Weekly Consultant RFP brief (7-day + 30-day rollup) | cron Sundays 13:00 UTC | GHA | `.github/workflows/weekly-rfp-brief.yml` |
+| Weekly Insights composition (silent — feeds monthly) | cron Sundays 12:30 UTC | GHA | `.github/workflows/weekly-insights.yml` |
 | Monthly CAFR refresh + structured extraction (~92 plans) | cron 1st of month 15:00 UTC | GHA | `.github/workflows/monthly-cafr-refresh.yml` |
-| Monthly CAFR refresh + structured extraction (5 WAF-blocked plans) | Task Scheduler | local Windows | `scripts/run_monthly.bat` |
-| Monthly IPS refresh (all 148 plans, auto-discover + verify via Haiku 4.5) | Task Scheduler | local Windows | `scripts/run_ips.bat` |
+| Monthly IPS refresh (auto-discover + verify via Haiku 4.5) | cron 1st of month 16:00 UTC | GHA | `.github/workflows/monthly-ips.yml` |
 | Weekly meeting-recordings catalogue (discover sources → poll via yt-dlp → email digest; no video downloads) | Task Scheduler Sat 08:00 local | local Windows | `scripts/run_recordings.bat --no-downloads` |
-| Monthly insights composition + email | cron 1st of month 18:00 UTC | GHA | `.github/workflows/monthly-insights.yml` |
-| Quarterly insights composition + email | cron 1st of Jan/Apr/Jul/Oct 19:00 UTC | GHA | `.github/workflows/quarterly-insights.yml` |
-| Annual insights composition + email | cron Jan 5 19:00 UTC | GHA | `.github/workflows/annual-insights.yml` |
+| Monthly insights composition + auto-publish | cron 1st of month 18:00 UTC | GHA | `.github/workflows/monthly-insights.yml` |
+| Quarterly insights composition + auto-publish | cron 1st of Jan/Apr/Jul/Oct 19:00 UTC | GHA | `.github/workflows/quarterly-insights.yml` |
+| Annual insights composition + auto-publish | cron Jan 5 19:00 UTC | GHA | `.github/workflows/annual-insights.yml` |
 
 GHA secrets that must exist for the cron entries to work: `ANTHROPIC_API_KEY`, `RESEND_API_KEY`, `APPROVAL_EMAIL_RECIPIENT`, `APPROVAL_EMAIL_FROM`. Local cron uses the same names from `.env`. Schedules are UTC; ET drifts one hour between EDT and EST. The 1st-of-month sequence is deliberate: GHA CAFR refresh @ 15:00 UTC → local CAFR refresh runs early ET → GHA monthly-insights @ 18:00 UTC pulls a DB that already has both runs' new CAFRs.
+
+### Commit/push steps must never be gated on success alone
+Every workflow that writes the DB back guards its push/commit steps — and the
+derived-data steps ahead of them — with `if: ${{ !cancelled() && ... }}`, not
+with a bare `dry_run` check (which still implies `success()`). The reason is
+that by the time those steps run, irreversible work has already happened and
+lives only on the runner:
+
+- the pipeline and CAFR refresh have downloaded PDFs that are **never committed**, and written rows as they go;
+- the insights cadences have already **auto-published and emailed** the briefing, and only the DB records that it went out — skip the commit and a briefing readers have already received is not recorded as published (and the weekly row monthly depends on is lost);
+- the daily digest has already sent, and its `daily_runs` row is what stops tomorrow's digest repeating today's documents.
+
+The extractors exit `1` when *any single item* fails (one Claude error out of
+~138 documents is enough), so without the guard one data quirk discards the
+whole run. Use `!cancelled()` rather than `continue-on-error` so the job still
+goes red and the failure stays visible — only the discarding is removed. This
+mirrors `pipeline.py`'s own principle that "a data quirk must not block the
+day's DB push". `scripts/run_recordings.bat`, the one remaining local job,
+follows the same rule by notifying on failure without `exit /b 1`.
+
+Deliberate exception: `daily-pipeline.yml`'s "Send daily digest email" stays
+on `success()`, to avoid emailing a digest for a failed run.
 
 ## Conventions worth knowing
 
@@ -137,4 +179,4 @@ GHA secrets that must exist for the cron entries to work: `ANTHROPIC_API_KEY`, `
 
 ## CI
 
-`.github/workflows/test.yml` runs `pytest tests/ -q` on every push/PR with `LLM_MODE=mock`. `.github/workflows/nightly_eval.yml` runs `scripts/run_eval.py` daily and opens a PR if `fixtures/eval_baseline.json` drifted (auto-merged or reviewed manually).
+`.github/workflows/test.yml` runs `pytest tests/ -q` on every push/PR with `LLM_MODE=mock`.

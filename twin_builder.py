@@ -23,6 +23,8 @@ from pathlib import Path
 from rich.console import Console
 
 from database import (
+    as_utc,
+    utcnow,
     CafrActuarial, CafrAllocation, CafrExtract, CafrPerformance, Document,
     IpsAllocation, IpsDocument, IpsExtract, Plan, PlanManagerRoster, RFPRecord,
     Summary, TwinBuildRun, TwinSnapshot, get_session, get_twin_snapshot, init_db,
@@ -33,6 +35,27 @@ console = Console(legacy_windows=False)
 TWIN_SCHEMA_VERSION = "twin_v1"
 KEEP_RECENT = 8
 GOVERNANCE_RFP_TYPES = ("Consultant", "Custodian", "Actuary", "Audit", "Legal")
+
+# Relationship `basis` values derived from rfp_records. That table has been
+# frozen since 2026-08-16 — the extraction code was deleted and nothing
+# refreshes the 189 rows — so these relationships never advance their
+# freshness date. A stale consultant or actuary reads as a current one, which
+# a freshness label does not adequately signal, so they are withheld from
+# display while remaining in the snapshot for scripts/build_manager_roster.
+# Re-showing them is one change here once something refreshes the source.
+# See docs/superpowers/specs/2026-08-19-portal-readiness-design.md §5.
+RFP_DERIVED_BASES = ("rfp_awarded", "rfp_incumbent")
+
+
+def visible_relationships(relationships):
+    """Governance relationships fit to display.
+
+    Drops the frozen RFP-derived entries and keeps the live ones (IPS-declared
+    and actuary-from-CAFR), which is why this filters rather than hiding the
+    whole governance_people facet — that facet is a mixture of both.
+    """
+    return [rel for rel in relationships
+            if rel.get("basis") not in RFP_DERIVED_BASES]
 MANAGER_MAPPINGS_PATH = Path(__file__).parent / "data" / "manager_mappings.json"
 ASSET_CLASS_MAPPINGS_PATH = Path(__file__).parent / "data" / "asset_class_mappings.json"
 
@@ -48,6 +71,16 @@ FUNDING_METRIC_FIELDS = (
     "adc_millions", "adc_pct_contributed", "members_active", "members_retired",
     "actuary_firm", "valuation_date",
 )
+
+# How many populated funding metrics count as a fully-captured facet.
+# The mere existence of a CafrActuarial row is NOT evidence the CAFR was
+# parsed: extract_cafr_actuarial's prompt tells the model to return nulls for
+# an unparseable section, and save_actuarial writes the row either way — so an
+# all-null row used to score 1.0. Scoring on populated-metric count fixes that.
+# Saturating below len(FUNDING_METRIC_FIELDS) is deliberate: no real CAFR
+# reports all 19 fields (the observed range across the plans that have a row
+# is 13-17), so a full-set denominator would peg every plan under 1.0 forever.
+FUNDING_METRICS_FOR_FULL_SCORE = 10
 
 
 def _canonical_hash(facets: dict) -> str:
@@ -394,7 +427,24 @@ def build_actuarial_facets(session, plan):
 
 
 def build_roster_and_timeline(session, plan, mappings):
-    """manager_roster + activity_timeline in one pass over the plan's summaries."""
+    """manager_roster + activity_timeline in one pass over the plan's summaries.
+
+    The roster comes from the reconciled ``plan_manager_roster`` table when it
+    has rows for this plan — `scripts.build_manager_roster` runs immediately
+    before this builder in the daily pipeline, so that is the normal case. The
+    summary-derived roster below is only a fallback for a plan whose roster has
+    never been built; it used to be computed unconditionally and then thrown
+    away, which repeated the whole manager grouping and status heuristic 148
+    times per build for nothing.
+
+    The timeline is always derived here — it has no reconciled table.
+    """
+    roster_rows = (
+        session.query(PlanManagerRoster)
+        .filter(PlanManagerRoster.plan_id == plan.id)
+        .order_by(PlanManagerRoster.canonical_name, PlanManagerRoster.role)
+        .all()
+    )
     rows = (
         session.query(Summary, Document)
         .join(Document, Summary.document_id == Document.id)
@@ -419,6 +469,9 @@ def build_roster_and_timeline(session, plan, mappings):
                 "description": act.get("description"), "vote": None,
                 "doc_id": doc.id, "url": doc.url,
             })
+
+            if roster_rows:
+                continue  # roster comes from the table; skip the derivation
 
             manager_raw = act.get("manager")
             if not manager_raw or not str(manager_raw).strip() \
@@ -454,7 +507,7 @@ def build_roster_and_timeline(session, plan, mappings):
                 "doc_id": doc.id, "url": doc.url,
             })
 
-    now = datetime.utcnow()
+    now = utcnow()
     entries = []
     for canonical, entry in managers.items():
         # Sort by date only: `action_type` (the second tuple element) can be
@@ -469,7 +522,8 @@ def build_roster_and_timeline(session, plan, mappings):
         if dated and dated[-1][1] == "fire":
             status = "terminated"
         elif entry["last_seen"]:
-            last_seen_dt = datetime.fromisoformat(entry["last_seen"])
+            # Stored as an ISO string, so it parses naive; `now` is aware.
+            last_seen_dt = as_utc(datetime.fromisoformat(entry["last_seen"]))
             if last_seen_dt >= now - timedelta(days=730):
                 status = "current"
         entries.append({
@@ -493,12 +547,6 @@ def build_roster_and_timeline(session, plan, mappings):
     dated_items.sort(key=lambda i: i["date"], reverse=True)
     timeline_items = dated_items + undated_items
 
-    roster_rows = (
-        session.query(PlanManagerRoster)
-        .filter(PlanManagerRoster.plan_id == plan.id)
-        .order_by(PlanManagerRoster.canonical_name, PlanManagerRoster.role)
-        .all()
-    )
     if roster_rows:
         entries = []
         for r in roster_rows:
@@ -506,6 +554,15 @@ def build_roster_and_timeline(session, plan, mappings):
             doc_ids = evidence.get("doc_ids") or evidence.get("rfp_doc_ids") or []
             action_types = evidence.get("action_types")
             action_types = action_types if isinstance(action_types, dict) else {}
+            # build_manager_roster persists the true mention count in the
+            # evidence blob. Don't fall back to sum(action_types.values()):
+            # that drops every action whose `action` field is null and is 0
+            # for RFP-derived rows (consultant/custodian/actuary), which
+            # rendered as "Mentions: 0" on the twin page. Rows written before
+            # mention_count was persisted take the best available floor.
+            mention_count = evidence.get("mention_count")
+            if not isinstance(mention_count, int) or isinstance(mention_count, bool):
+                mention_count = max(sum(action_types.values()), len(doc_ids))
             entries.append({
                 "name_canonical": r.canonical_name,
                 "role": r.role,
@@ -516,7 +573,7 @@ def build_roster_and_timeline(session, plan, mappings):
                 "last_seen": r.last_seen,
                 "confidence": r.confidence,
                 "doc_ids": doc_ids,
-                "mention_count": sum(action_types.values()),
+                "mention_count": mention_count,
                 "action_types": action_types,
             })
         entries.sort(key=lambda e: (
@@ -584,6 +641,8 @@ def build_rfp_facets(session, plan):
 def _completeness(facets: dict) -> dict:
     pol = facets["policy"].get("investment_policy_text")
     timeline = facets["activity_timeline"]
+    funding_metrics = facets["funding_actuarial"].get("metrics") or {}
+    funding_populated = sum(1 for v in funding_metrics.values() if v is not None)
     return {
         "identity": 1.0,
         "policy": 1.0 if (pol and pol.get("v")) else 0.0,
@@ -594,7 +653,10 @@ def _completeness(facets: dict) -> dict:
         "rfp_state": round(min(1.0, len(facets["rfp_state"]["records"]) / 5), 2),
         "governance_people": round(
             min(1.0, len(facets["governance_people"]["relationships"]) * 0.2), 2),
-        "funding_actuarial": 1.0 if facets["funding_actuarial"].get("status") == "captured" else 0.0,
+        # 0.0 both when there's no CafrActuarial row at all and when the row
+        # exists but every metric came back null (see the constant's comment).
+        "funding_actuarial": round(
+            min(1.0, funding_populated / FUNDING_METRICS_FOR_FULL_SCORE), 2),
     }
 
 
@@ -639,9 +701,19 @@ def _freshness(facets: dict) -> dict:
     }
 
 
-def build_twin(session, plan) -> dict:
-    mappings = _load_manager_mappings()
-    asset_mappings = load_asset_class_mappings()
+def build_twin(session, plan, mappings=None, asset_mappings=None) -> dict:
+    """Build one plan's twin. Pass the mapping dicts when building many.
+
+    Both files are re-read and re-parsed per call when not supplied, and
+    data/asset_class_mappings.json is ~6,000 lines — run_builder loads them
+    once and threads them through rather than paying that 148 times. They are
+    kept as parameters rather than module-level caches so callers that point
+    MANAGER_MAPPINGS_PATH / ASSET_CLASS_MAPPINGS_PATH at a fixture still get
+    a fresh read.
+    """
+    mappings = _load_manager_mappings() if mappings is None else mappings
+    asset_mappings = (load_asset_class_mappings() if asset_mappings is None
+                      else asset_mappings)
 
     identity = build_identity(plan)
     policy, allocation, performance = build_cafr_facets(session, plan, asset_mappings)
@@ -684,7 +756,7 @@ def build_twin(session, plan) -> dict:
     return {
         "schema_version": TWIN_SCHEMA_VERSION,
         "plan_id": plan.id,
-        "built_at": datetime.utcnow().isoformat(),
+        "built_at": utcnow().isoformat(),
         "facets": facets,
         "completeness": completeness,
         "freshness": freshness,
@@ -699,6 +771,9 @@ def run_builder(plan_ids=None) -> None:
     errors = []
     written = 0
     plans = []
+    # Loaded once for the whole run, not once per plan — see build_twin.
+    mappings = _load_manager_mappings()
+    asset_mappings = load_asset_class_mappings()
     try:
         q = session.query(Plan).order_by(Plan.id)
         if plan_ids:
@@ -707,7 +782,8 @@ def run_builder(plan_ids=None) -> None:
         run.plans_total = len(plans)
         for plan in plans:
             try:
-                if save_snapshot(session, plan.id, build_twin(session, plan)):
+                twin = build_twin(session, plan, mappings, asset_mappings)
+                if save_snapshot(session, plan.id, twin):
                     written += 1
                     console.print(f"  [green]snapshot[/green] {plan.id}")
             except Exception as exc:  # noqa: BLE001
@@ -723,7 +799,7 @@ def run_builder(plan_ids=None) -> None:
             run.snapshots_written = written
             run.errors = json.dumps(errors)
             run.status = "succeeded" if not errors else "failed"
-            run.completed_at = datetime.utcnow()
+            run.completed_at = utcnow()
             session.commit()
             console.print(f"[bold]{written}/{len(plans)} snapshots written[/bold]")
         except Exception as exc:  # noqa: BLE001
@@ -734,7 +810,7 @@ def run_builder(plan_ids=None) -> None:
                 run.snapshots_written = written
                 run.errors = json.dumps(errors)
                 run.status = "succeeded" if not errors else "failed"
-                run.completed_at = datetime.utcnow()
+                run.completed_at = utcnow()
                 session.commit()
             except Exception as exc2:  # noqa: BLE001
                 print(f"twin_builder: failed to finalize run {run.run_id}: {exc2}",

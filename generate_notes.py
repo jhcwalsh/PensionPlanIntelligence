@@ -18,7 +18,7 @@ import json
 import os
 import re
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -26,6 +26,7 @@ from rich.console import Console
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from database import (
+    utcnow,
     Document, Plan, Summary, get_new_meetings, get_session, init_db,
 )
 
@@ -162,7 +163,7 @@ def gather_highlights_data(session, days: int = 7) -> dict:
     # Compute metadata
     dates = [m["meeting_date"] for m in meetings if m["meeting_date"]]
     if dates:
-        today = datetime.utcnow()
+        today = utcnow()
         latest = min(max(dates), today)
         date_range = (latest - timedelta(days=days), latest)
     else:
@@ -185,8 +186,8 @@ def _count_new_documents(session, days: int = 7) -> int:
     """Count documents downloaded in the past ``days``, matching the
     Activity tab's filter (excludes CAFRs / performance, future-cap on
     meeting_date — see ``database.get_new_meetings``)."""
-    cutoff = datetime.utcnow() - timedelta(days=days)
-    future_cap = datetime.utcnow() + timedelta(days=60)
+    cutoff = utcnow() - timedelta(days=days)
+    future_cap = utcnow() + timedelta(days=60)
     return (
         session.query(Document)
         .filter(Document.downloaded_at >= cutoff)
@@ -231,7 +232,7 @@ def inject_highlights_preamble(markdown: str, doc_count: int, days: int) -> str:
 
 def gather_trends_data(session) -> dict:
     """Collect all 2026 meeting data for the Insights note."""
-    days_since_jan1 = (datetime.utcnow() - datetime(2026, 1, 1)).days + 1
+    days_since_jan1 = (utcnow() - datetime(2026, 1, 1, tzinfo=timezone.utc)).days + 1
     meetings = get_new_meetings(session, days=days_since_jan1)
 
     if not meetings:
@@ -271,7 +272,7 @@ def gather_recent_insights_data(session, days: int = 30) -> dict:
     than documents downloaded recently. Meant for the rolling-window
     Insights variant.
     """
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = utcnow() - timedelta(days=days)
     recent_docs = (
         session.query(Document)
         .filter(Document.meeting_date >= cutoff)
@@ -441,7 +442,7 @@ def format_weekly_date_range(date_range, days: int) -> str:
     title produced by the prompt and the title verified post-generation
     cannot drift.
     """
-    today = datetime.utcnow()
+    today = utcnow()
     if date_range:
         start_dt, end_dt = date_range[0], date_range[1]
     else:
@@ -458,7 +459,7 @@ def format_weekly_date_range(date_range, days: int) -> str:
 
 def build_highlights_prompt(data: dict, days: int) -> str:
     """Build the Claude prompt for 7-day highlights generation."""
-    today_str = datetime.utcnow().strftime("%B %d, %Y")
+    today_str = utcnow().strftime("%B %d, %Y")
     date_range_title = format_weekly_date_range(data["date_range"], days)
 
     aum_table = _format_aum_table(data.get("plans") or [])
@@ -592,7 +593,7 @@ MEETING DATA:
 
 def build_insights_prompt(data: dict) -> str:
     """Build the Claude prompt for the Insights note."""
-    today_str = datetime.utcnow().strftime("%B %d, %Y")
+    today_str = utcnow().strftime("%B %d, %Y")
     aum_trillions = data["total_aum"] / 1000
     aum_table = _format_aum_table(data.get("plans") or [])
     meetings_text = format_meetings_for_prompt(data["meetings"])
@@ -698,7 +699,7 @@ MEETING DATA:
 
 def build_recent_insights_prompt(data: dict) -> str:
     """Build the Claude prompt for the rolling-window (e.g. 30-day) Insights note."""
-    today_str = datetime.utcnow().strftime("%B %d, %Y")
+    today_str = utcnow().strftime("%B %d, %Y")
     aum_trillions = data["total_aum"] / 1000
     aum_table = _format_aum_table(data.get("plans") or [])
     meetings_text = format_meetings_for_prompt(data["meetings"])
@@ -980,7 +981,7 @@ def main():
                     f"{len(data['meetings'])} meetings)...")
                 content = generate_note(prompt, MAX_TOKENS_HIGHLIGHTS, model=MODEL_SONNET)
                 content = inject_highlights_preamble(content, data["new_doc_count"], args.days)
-                today = datetime.utcnow().strftime("%Y-%m-%d")
+                today = utcnow().strftime("%Y-%m-%d")
                 write_note(content, f"7day_highlights_{today}.md")
 
         # Step 3: Generate YTD CIO insights

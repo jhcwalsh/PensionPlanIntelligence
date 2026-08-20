@@ -21,7 +21,7 @@ import requests
 from bs4 import BeautifulSoup
 from rich.console import Console
 
-from database import Document, Plan, get_session, init_db, upsert_plan, document_exists, document_pruned
+from database import utcnow, Document, Plan, get_session, init_db, upsert_plan, document_exists, document_pruned
 
 console = Console(legacy_windows=False)
 
@@ -555,7 +555,7 @@ def run_fetcher(plan_ids: list[str] = None, max_docs_per_plan: int = 50):
                     continue
 
                 local_path, size = download_document(url, plan_dir, doc_info["filename"])
-                now = datetime.utcnow()
+                now = utcnow()
 
                 doc = Document(
                     plan_id=plan_data["id"],

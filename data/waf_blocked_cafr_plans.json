@@ -1,0 +1,26 @@
+{
+  "_doc": "Plans whose CAFR PDFs sit behind a WAF (Cloudflare/Akamai/etc.) that blocks datacentre IPs. These are SKIPPED EVERYWHERE. Until 2026-08-16 they ran from a local Windows Task Scheduler task; that dependency was removed so the app has no machine of James's in its path. Coverage is therefore 137 of 148 plans for materials. Naming a blocked plan explicitly on the CLI still processes it, which is how you would run one by hand from a residential IP. To restore full coverage, route fetches through a proxy \u2014 see the coverage section of docs/superpowers/specs/2026-08-16-low-maintenance-app-design.md.",
+  "plans": [
+    {
+      "id": "asrs",
+      "reason": "Cloudflare 'Just a moment' challenge"
+    },
+    {
+      "id": "strs_ohio",
+      "reason": "Cloudflare 'Just a moment' challenge"
+    },
+    {
+      "id": "pbpr_pa",
+      "reason": "Generic HTTP 403 access-denied"
+    },
+    {
+      "id": "fwerf_tx",
+      "reason": "Generic HTTP 403 access-denied"
+    },
+    {
+      "id": "acrs_pa",
+      "reason": "Generic HTTP 403 access-denied"
+    }
+  ],
+  "_how_it_works": "Loaded by pipeline.py / refresh_cafrs.py, which subtract these ids from the default plan set on every run, local or hosted. Explicit positional plan_ids on the CLI bypass the filter."
+}

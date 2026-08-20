@@ -10,7 +10,7 @@ that flip the env var inside a single process.
 from __future__ import annotations
 
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -110,7 +110,6 @@ _CADENCE_DISPLAY: dict[str, tuple[str, str, str]] = {
     "monthly":    ("Monthly", "CIO Insights",         "monthly_cio_insights"),
     "quarterly":  ("Quarterly", "CIO Insights",       "quarterly_cio_insights"),
     "annual":     ("Annual",  "CIO Insights",         "annual_cio_insights"),
-    "rfp_weekly": ("Weekly",  "Consultant RFP Brief", "weekly_consultant_rfps"),
     "daily":      ("Daily",   "Pension Digest",       "daily_digest"),
 }
 
@@ -125,19 +124,19 @@ def cadence_display(cadence: str) -> tuple[str, str, str]:
 
 def expires_at_default(now: datetime | None = None) -> datetime:
     """Default token expiry — ``APPROVAL_TOKEN_TTL_DAYS`` from now."""
-    return (now or datetime.utcnow()) + timedelta(days=APPROVAL_TOKEN_TTL_DAYS)
+    return (now or datetime.now(timezone.utc)) + timedelta(days=APPROVAL_TOKEN_TTL_DAYS)
 
 
 def reminder_threshold(now: datetime | None = None) -> datetime:
     """Cutoff for the 72h reminder — pubs older than this need nudging."""
-    return (now or datetime.utcnow()) - timedelta(hours=APPROVAL_REMINDER_HOURS)
+    return (now or datetime.now(timezone.utc)) - timedelta(hours=APPROVAL_REMINDER_HOURS)
 
 
 def expiry_threshold(now: datetime | None = None) -> datetime:
     """Cutoff for stale-draft expiry — pubs older than this auto-expire."""
-    return (now or datetime.utcnow()) - timedelta(days=APPROVAL_TOKEN_TTL_DAYS)
+    return (now or datetime.now(timezone.utc)) - timedelta(days=APPROVAL_TOKEN_TTL_DAYS)
 
 
 def subscribe_confirm_expiry(now: datetime | None = None) -> datetime:
     """Expiry for a fresh confirmation token."""
-    return (now or datetime.utcnow()) + timedelta(days=SUBSCRIBE_CONFIRM_TTL_DAYS)
+    return (now or datetime.now(timezone.utc)) + timedelta(days=SUBSCRIBE_CONFIRM_TTL_DAYS)

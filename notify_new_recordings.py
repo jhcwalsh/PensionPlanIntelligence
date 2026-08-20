@@ -31,6 +31,7 @@ import requests
 from dotenv import load_dotenv
 
 from database import MeetingRecording, Plan, SessionLocal, init_db
+from database import utcnow as _utcnow
 
 
 REPO_ROOT = Path(__file__).resolve().parent
@@ -38,10 +39,6 @@ load_dotenv(REPO_ROOT / ".env")
 
 # Cap recordings per email so a one-time backfill doesn't produce a wall.
 DEFAULT_DIGEST_CAP = 50
-
-
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def _human_duration(seconds: int | None) -> str:

@@ -2,7 +2,7 @@ name: Monthly CAFR refresh (GHA edition)
 
 # Pulls each plan's most-recently-closed-FY ACFR into the DB. Idempotent:
 # already_have rows are no-ops, so re-runs are cheap. The 5 WAF-blocked
-# CAFR sources stay on local Task Scheduler (data/local_only_cafr_plans.json);
+# CAFR sources are skipped entirely (data/waf_blocked_cafr_plans.json);
 # the rest run from GHA.
 #
 # Runs the 1st of every month at 15:00 UTC (~11 AM EDT / 10 AM EST).
@@ -79,21 +79,31 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python extract_cafr_investments.py
 
+      # Every step from here down carries `if: ${{ !cancelled() }}`. These
+      # extractors exit 1 when ANY single document fails (one Claude error
+      # surviving tenacity's 3 retries out of ~138 docs is enough), and the
+      # PDFs they read live only on this runner — they are never committed.
+      # Without the guard, one bad document skips the commit step and throws
+      # away the whole month's refresh. The job still goes red so the failure
+      # stays visible; only the "discard everything" behaviour is removed.
       - name: Extract CAFR actuarial data
+        if: ${{ !cancelled() }}
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python extract_cafr_actuarial.py
 
       - name: Refresh asset-class mappings
+        if: ${{ !cancelled() }}
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python -m scripts.normalize_asset_classes
 
       - name: Build twin snapshots
+        if: ${{ !cancelled() }}
         run: python twin_builder.py
 
       - name: Push DB to R2
-        if: ${{ github.event.inputs.dry_run != 'true' }}
+        if: ${{ !cancelled() && github.event.inputs.dry_run != 'true' }}
         env:
           R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -102,7 +112,7 @@ jobs:
         run: python -m scripts.db_sync push --by "${{ github.workflow }}"
 
       - name: Commit DB changes
-        if: ${{ github.event.inputs.dry_run != 'true' }}
+        if: ${{ !cancelled() && github.event.inputs.dry_run != 'true' }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

@@ -31,6 +31,7 @@ from pathlib import Path
 from rich.console import Console
 
 from database import (
+    utcnow,
     IpsDocument,
     IpsRefreshLog,
     Plan,
@@ -212,7 +213,7 @@ def run_refresh(plan_ids: list[str] | None = None,
         wanted = set(plan_ids)
         plans = [p for p in plans if p["id"] in wanted]
 
-    run_at = datetime.utcnow()
+    run_at = utcnow()
     counts: dict[str, int] = {}
 
     session = get_session()

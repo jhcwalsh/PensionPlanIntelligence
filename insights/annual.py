@@ -96,9 +96,10 @@ def run_annual_cycle(year: Optional[int] = None,
             period_start, period_end,
         )
 
-        cycle_common.finalize_for_approval(
+        cycle_common.finalize_and_send(
             session, publication, draft,
             title_for_pdf=f"Insights: {year} Year in Review",
+            archive=True,
         )
         return cycle_common.detach_for_caller(session, publication)
 

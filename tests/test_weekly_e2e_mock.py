@@ -1,8 +1,14 @@
-"""End-to-end mock-mode weekly cycle: schedule, click approve, assert published."""
+"""End-to-end mock-mode weekly cycle.
+
+Since 2026-08-16 the weekly cadence composes *silently*: no approval email,
+no informational email, and no ``notes/`` file. It still runs, because the
+weekly Publication row is what ``monthly._gather_approved_weeklies`` reads —
+monthly raises outright if no weeklies exist for its period.
+"""
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -22,23 +28,22 @@ def seeded_plans():
         s.close()
 
 
-def test_weekly_cycle_produces_awaiting_approval_publication(seeded_plans, monkeypatch):
+def test_weekly_cycle_publishes_without_approval(seeded_plans):
     pub = weekly.run_weekly_cycle(
         period_start=date(2026, 4, 19), skip_scrape=False
     )
     assert pub.cadence == "weekly"
     assert pub.period_start == date(2026, 4, 19)
     assert pub.period_end == date(2026, 4, 25)
-    assert pub.status == "awaiting_approval"
+    assert pub.status == "published"
     assert pub.draft_markdown
     assert pub.pdf_path
     assert Path(pub.pdf_path).exists()
 
-    # Two approval tokens were issued.
+    # No approval tokens are minted any more.
     s = get_session()
     try:
-        tokens = s.query(ApprovalToken).filter_by(publication_id=pub.id).all()
-        assert {t.action for t in tokens} == {"approve", "reject"}
+        assert s.query(ApprovalToken).filter_by(publication_id=pub.id).count() == 0
     finally:
         s.close()
 
@@ -55,54 +60,32 @@ def test_weekly_cycle_is_idempotent_for_same_period(seeded_plans):
         s.close()
 
 
-def test_weekly_cycle_writes_mock_email(seeded_plans):
-    """An approval email should hit the mock outbox in the test tmp dir."""
+def test_weekly_cycle_sends_no_email(seeded_plans):
+    """The whole point of the weekly cadence now is to feed monthly quietly."""
     weekly.run_weekly_cycle(period_start=date(2026, 4, 19))
-
-    emails = approval.list_mock_emails()
-    assert len(emails) == 1
-    metadata = __import__("json").loads(emails[0].read_text(encoding="utf-8"))
-    assert "Action required" in metadata["subject"]
-    assert metadata["has_attachment"] is True
-    assert metadata["pdf_filename"].startswith("weekly_cio_insights_")
+    assert approval.list_mock_emails() == []
 
 
-def test_full_approve_flow_transitions_to_published(seeded_plans, tmp_path, monkeypatch):
-    """Schedule → grab token from outbox → consume_token → publish runs."""
-    # We have to read the issued raw token from the DB before clicking.
-    # In production the founder gets it via email; in the test the
-    # tokens are minted by issue_tokens — to retrieve the plaintext we
-    # have to intercept it. Approach: monkeypatch generate_raw_token to
-    # capture what's minted.
-    minted: list[str] = []
-    real_generate = approval.generate_raw_token
-
-    def _capture():
-        t = real_generate()
-        minted.append(t)
-        return t
-
-    monkeypatch.setattr(approval, "generate_raw_token", _capture)
-
-    pub = weekly.run_weekly_cycle(period_start=date(2026, 4, 19))
-
-    # Two tokens (approve, reject) — the first is approve.
-    approve_raw = minted[0]
-    reject_raw = minted[1]
-    assert approve_raw != reject_raw
-
-    # Stub publish.publish so the test doesn't shell out to git.
+def test_weekly_cycle_writes_no_note(seeded_plans, monkeypatch):
+    """archive=False — the Weekly Insights tab is a frozen back catalogue."""
     import insights.publish as _publish
-    monkeypatch.setattr(_publish, "publish", lambda p: Path("/tmp/fake.md"))
 
-    consumed = approval.consume_token(approve_raw, expected_action="approve")
-    assert consumed.status == "approved"
-    assert consumed.approved_at is not None
+    wrote: list = []
+    monkeypatch.setattr(_publish, "write_note",
+                        lambda p: wrote.append(p) or Path("unused.md"))
+    weekly.run_weekly_cycle(period_start=date(2026, 4, 19))
+    assert wrote == []
 
-    # Reject token can't be reused for approve.
-    with pytest.raises(approval.TokenError):
-        approval.consume_token(reject_raw, expected_action="approve")
 
-    # A second click on the approve token is also rejected (single-use).
-    with pytest.raises(approval.TokenError, match="already used"):
-        approval.consume_token(approve_raw, expected_action="approve")
+def test_weekly_still_feeds_monthly(seeded_plans):
+    """Regression guard for the reason weekly survives at all: monthly reads
+    published weeklies and raises when it finds none."""
+    from insights.monthly import _gather_approved_weeklies
+
+    weekly.run_weekly_cycle(period_start=date(2026, 4, 19))
+    s = get_session()
+    try:
+        found = _gather_approved_weeklies(s, date(2026, 4, 1), date(2026, 4, 30))
+        assert [p.period_start for p in found] == [date(2026, 4, 19)]
+    finally:
+        s.close()

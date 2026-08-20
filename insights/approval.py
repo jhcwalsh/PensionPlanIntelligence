@@ -25,7 +25,7 @@ from typing import Optional
 
 import requests
 
-from database import ApprovalToken, Publication, get_session
+from database import utcnow, ApprovalToken, Publication, get_session
 from insights import config
 
 logger = logging.getLogger(__name__)
@@ -34,17 +34,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Token primitives
 # ---------------------------------------------------------------------------
-
-@dataclass
-class IssuedToken:
-    """The plaintext token to embed in URLs (returned once, never stored)."""
-    raw: str
-    action: str
-
-    @property
-    def hash(self) -> str:
-        return hash_token(self.raw)
-
 
 def generate_raw_token() -> str:
     """32-byte URL-safe random token (~43 chars)."""
@@ -64,99 +53,6 @@ def hash_token(raw: str) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-def issue_tokens(session, publication: Publication) -> tuple[IssuedToken, IssuedToken]:
-    """Create approve + reject token rows for ``publication``.
-
-    Returns the plaintext tokens — caller is responsible for embedding
-    them in the outgoing email and never persisting them again.
-    """
-    expires = config.expires_at_default()
-
-    approve_raw = generate_raw_token()
-    reject_raw = generate_raw_token()
-
-    session.add_all([
-        ApprovalToken(
-            publication_id=publication.id,
-            token_hash=hash_token(approve_raw),
-            action="approve",
-            expires_at=expires,
-        ),
-        ApprovalToken(
-            publication_id=publication.id,
-            token_hash=hash_token(reject_raw),
-            action="reject",
-            expires_at=expires,
-        ),
-    ])
-    session.flush()
-    return (
-        IssuedToken(raw=approve_raw, action="approve"),
-        IssuedToken(raw=reject_raw, action="reject"),
-    )
-
-
-# ---------------------------------------------------------------------------
-# Token consumption (called from the Streamlit query-param handler)
-# ---------------------------------------------------------------------------
-
-class TokenError(Exception):
-    """Raised for any non-success path in ``consume_token``."""
-
-
-def consume_token(raw_token: str, expected_action: str) -> Publication:
-    """Mark a token consumed and apply its action to the publication.
-
-    Atomic: the token row, the publication row, and the action timestamp
-    are written in a single transaction. Re-clicking the same link is a
-    no-op error rather than a double-action.
-
-    Raises ``TokenError`` for not-found / expired / consumed / wrong-action.
-    Returns the affected ``Publication`` on success.
-    """
-    session = get_session()
-    try:
-        token = (
-            session.query(ApprovalToken)
-            .filter_by(token_hash=hash_token(raw_token))
-            .one_or_none()
-        )
-        if token is None:
-            raise TokenError("Token not found")
-        if token.action != expected_action:
-            raise TokenError(f"Token is for '{token.action}', not '{expected_action}'")
-        if token.consumed_at is not None:
-            raise TokenError("Token already used")
-        if token.expires_at < datetime.utcnow():
-            raise TokenError("Token expired")
-
-        pub = session.get(Publication, token.publication_id)
-        if pub is None:
-            raise TokenError("Publication missing")
-        if pub.status not in ("awaiting_approval",):
-            raise TokenError(f"Publication is in status '{pub.status}', cannot {expected_action}")
-
-        now = datetime.utcnow()
-        token.consumed_at = now
-        if expected_action == "approve":
-            pub.status = "approved"
-            pub.approved_at = now
-        else:
-            pub.status = "rejected"
-            pub.rejected_at = now
-
-        session.commit()
-        session.refresh(pub)
-        session.expunge(pub)
-        return pub
-    finally:
-        session.close()
-
-
-# ---------------------------------------------------------------------------
-# Email content
-# ---------------------------------------------------------------------------
-
 @dataclass
 class ApprovalEmail:
     subject: str
@@ -165,127 +61,6 @@ class ApprovalEmail:
     pdf_attachment: Optional[bytes]
     pdf_filename: Optional[str]
 
-
-def _approval_url(token: IssuedToken) -> str:
-    return f"{config.APPROVAL_BASE_URL}/?{token.action}={token.raw}"
-
-
-def render_approval_email(publication: Publication,
-                          approve: IssuedToken, reject: IssuedToken,
-                          pdf_bytes: Optional[bytes],
-                          *, is_reminder: bool = False,
-                          is_expiry: bool = False) -> ApprovalEmail:
-    """Render the email content (subject + html + text + attachment).
-
-    ``is_reminder`` switches the subject line to a more urgent variant
-    (sent at 72h unapproved). ``is_expiry`` switches it to the "draft
-    has expired" notice (sent at 7 days).
-    """
-    # Per-cadence product name (e.g. "Weekly CIO Insights",
-    # "Weekly Consultant RFP Brief") rather than the bare cadence key, so the
-    # subject reads naturally for non-"Insights" products like the RFP brief.
-    prefix, product, _slug = config.cadence_display(publication.cadence)
-    product_label = f"{prefix} {product}"
-    period = f"{publication.period_start.isoformat()} – {publication.period_end.isoformat()}"
-
-    if is_expiry:
-        subject = f"[Expired] {product_label} ({period})"
-    elif is_reminder:
-        subject = f"[Reminder — please review] {product_label} ({period})"
-    else:
-        subject = f"[Action required] {product_label} ready to publish ({period})"
-
-    approve_url = _approval_url(approve)
-    reject_url = _approval_url(reject)
-
-    headline = (publication.draft_markdown or "")[:1500]
-    if len(publication.draft_markdown or "") > 1500:
-        headline += "\n\n[... full draft attached as PDF ...]"
-
-    if is_expiry:
-        body_intro = (
-            "<p>This draft has expired without action and will not be "
-            "published. Re-run the cycle to generate a fresh draft.</p>"
-        )
-        text_intro = (
-            "This draft has expired without action and will not be published.\n"
-            "Re-run the cycle to generate a fresh draft.\n\n"
-        )
-        action_buttons_html = ""
-        action_buttons_text = ""
-    else:
-        body_intro = (
-            "<p>The latest Insights draft is ready for your review. "
-            "Click <strong>Approve and publish</strong> to push it live, "
-            "or <strong>Reject</strong> to discard it.</p>"
-        )
-        text_intro = (
-            "The latest Insights draft is ready for your review.\n"
-            "Click Approve to push it live, or Reject to discard.\n\n"
-        )
-        action_buttons_html = f"""\
-<p style="margin: 20px 0;">
-  <a href="{approve_url}"
-     style="display:inline-block;padding:12px 24px;background:#0066cc;color:#fff;
-            text-decoration:none;border-radius:4px;margin-right:10px;">
-     Approve and publish
-  </a>
-  <a href="{reject_url}"
-     style="display:inline-block;padding:12px 24px;background:#cc0033;color:#fff;
-            text-decoration:none;border-radius:4px;">
-     Reject
-  </a>
-</p>
-<p style="font-size:0.85em;color:#666;">
-  Plain-text fallback links:<br>
-  Approve: <a href="{approve_url}">{approve_url}</a><br>
-  Reject: <a href="{reject_url}">{reject_url}</a>
-</p>"""
-        action_buttons_text = (
-            f"Approve and publish: {approve_url}\n"
-            f"Reject: {reject_url}\n\n"
-        )
-
-    html = f"""\
-<!DOCTYPE html>
-<html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;
-                  max-width:720px;margin:auto;padding:24px;color:#222;">
-<h2 style="color:#003366;">{subject}</h2>
-{body_intro}
-{action_buttons_html}
-<hr style="border:none;border-top:1px solid #ccc;margin:24px 0;">
-<h3 style="color:#003366;">Draft preview</h3>
-<pre style="white-space:pre-wrap;font-family:Georgia,serif;font-size:14px;line-height:1.5;
-            background:#f8f9fa;padding:16px;border-left:4px solid #0066cc;border-radius:4px;">
-{headline}
-</pre>
-<p style="font-size:0.85em;color:#666;">Full draft attached as PDF.</p>
-</body></html>"""
-
-    text = (
-        f"{subject}\n"
-        f"{'=' * len(subject)}\n\n"
-        f"{text_intro}"
-        f"{action_buttons_text}"
-        f"--- Draft preview ---\n\n"
-        f"{headline}\n\n"
-        f"Full draft attached as PDF."
-    )
-
-    pdf_filename = f"{_slug}_{publication.period_start.isoformat()}.pdf"
-
-    return ApprovalEmail(
-        subject=subject,
-        html=html,
-        text=text,
-        pdf_attachment=pdf_bytes,
-        pdf_filename=pdf_filename,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Email delivery (Resend in live mode, file in mock mode)
-# ---------------------------------------------------------------------------
 
 def send_email(email: ApprovalEmail,
                to: Optional[str | list[str]] = None) -> str:
@@ -351,7 +126,7 @@ def send_email(email: ApprovalEmail,
 
 def _write_mock_email(email: ApprovalEmail, recipients: list[str]) -> str:
     config.SENT_EMAILS_DIR.mkdir(parents=True, exist_ok=True)
-    ts = datetime.utcnow().strftime("%Y%m%dT%H%M%S%f")
+    ts = utcnow().strftime("%Y%m%dT%H%M%S%f")
     base = config.SENT_EMAILS_DIR / f"{ts}"
 
     metadata = {

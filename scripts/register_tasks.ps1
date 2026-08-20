@@ -1,123 +1,37 @@
-# Register all four scheduled tasks in Windows Task Scheduler.
-# Run once, from an elevated PowerShell prompt:
+# Register the one remaining scheduled task in Windows Task Scheduler.
 #
 #   powershell -ExecutionPolicy Bypass -File scripts\register_tasks.ps1
 #
-# Edits any existing PensionPipeline-* tasks rather than duplicating.
-# Tasks run as the current user (so the venv + git creds are available).
-# "Run task as soon as possible after a missed start" is enabled so a
-# laptop closed at trigger time still catches up when it wakes.
+# As of 2026-08-16 everything except the meeting-recordings catalogue runs on
+# GitHub Actions, so no machine of James's is in the path of the app working.
+# The recordings job is a deliberate exception: it is a side dataset, and if
+# this machine is off for a month nothing else degrades.
+#
+# Edits any existing PensionPipeline-* task rather than duplicating. Runs as
+# the current user (so the venv + git creds are available). "Run task as soon
+# as possible after a missed start" is enabled so a laptop closed at trigger
+# time still catches up when it wakes.
 
 $ErrorActionPreference = "Stop"
 $Repo = "C:\Users\james\PycharmProjects\PensionPlanIntelligence"
 $User = "$env:USERDOMAIN\$env:USERNAME"
 
-# Clean up any task names from previous registrations (so renames take
-# effect cleanly — Register-ScheduledTask -Force only overwrites by name).
-# Also unregisters tasks that have moved to GitHub Actions and no longer
-# need a local Task Scheduler entry.
+# Unregister tasks that have moved to GitHub Actions. Leaving these in place
+# would keep running deleted .bat files and pushing to a branch that no longer
+# expects local writers.
 foreach ($legacy in @(
     "PensionPipeline-Annual",
-    "PensionPipeline-Weekly",       # → .github/workflows/weekly-rfp.yml (2026-05-04)
-    "PensionPipeline-Quarterly"     # → .github/workflows/quarterly-insights.yml (2026-05-04)
+    "PensionPipeline-Weekly",       # -> weekly-rfp.yml (2026-05-04)
+    "PensionPipeline-Quarterly",    # -> quarterly-insights.yml (2026-05-04)
+    "PensionPipeline-Daily",        # -> daily-pipeline.yml (2026-08-16)
+    "PensionPipeline-Monthly",      # -> monthly-cafr-refresh.yml (2026-08-16)
+    "PensionPipeline-IPS"           # -> monthly-ips.yml (2026-08-16)
 )) {
     if (Get-ScheduledTask -TaskName $legacy -ErrorAction SilentlyContinue) {
         Unregister-ScheduledTask -TaskName $legacy -Confirm:$false
-        Write-Host "Removed legacy task $legacy"
+        Write-Host "Removed task $legacy (now runs on GitHub Actions)"
     }
 }
-
-function Register-PipelineTask {
-    param(
-        [string]$Name,
-        [string]$BatFile,
-        [Microsoft.Management.Infrastructure.CimInstance]$Trigger
-    )
-
-    $Action = New-ScheduledTaskAction `
-        -Execute "$Repo\scripts\$BatFile" `
-        -WorkingDirectory $Repo
-
-    $Settings = New-ScheduledTaskSettingsSet `
-        -StartWhenAvailable `
-        -DontStopIfGoingOnBatteries `
-        -AllowStartIfOnBatteries `
-        -RunOnlyIfNetworkAvailable `
-        -ExecutionTimeLimit (New-TimeSpan -Hours 6)
-
-    $Principal = New-ScheduledTaskPrincipal `
-        -UserId $User `
-        -LogonType Interactive `
-        -RunLevel Limited
-
-    Register-ScheduledTask `
-        -TaskName "PensionPipeline-$Name" `
-        -Action $Action `
-        -Trigger $Trigger `
-        -Settings $Settings `
-        -Principal $Principal `
-        -Force
-
-    Write-Host "Registered PensionPipeline-$Name"
-}
-
-# Daily — every day at 06:00 local time.
-# (Daily handles the 11 WAF-blocked plans; the other 137 run on
-# .github/workflows/daily-pipeline.yml at 11:00 UTC.)
-Register-PipelineTask `
-    -Name "Daily" `
-    -BatFile "run_daily.bat" `
-    -Trigger (New-ScheduledTaskTrigger -Daily -At 6:00am)
-
-# Monthly — 1st of every month at 08:00.
-# (Task Scheduler's "Monthly" trigger needs cmdlet via PowerShell 6+; on
-# Windows PowerShell 5.1 we use the COM API workaround below.)
-$MonthlyService = New-Object -ComObject "Schedule.Service"
-$MonthlyService.Connect()
-$MonthlyFolder = $MonthlyService.GetFolder("\")
-$MonthlyDef = $MonthlyService.NewTask(0)
-$MonthlyDef.RegistrationInfo.Description = "PensionPipeline monthly cron-equivalent"
-$MonthlyDef.Settings.StartWhenAvailable = $true
-$MonthlyDef.Settings.DisallowStartIfOnBatteries = $false
-$MonthlyDef.Settings.StopIfGoingOnBatteries = $false
-$MonthlyDef.Settings.RunOnlyIfNetworkAvailable = $true
-$MonthlyDef.Settings.ExecutionTimeLimit = "PT6H"
-$MonthlyTrigger = $MonthlyDef.Triggers.Create(4)  # 4 = monthly
-$MonthlyTrigger.StartBoundary = (Get-Date -Hour 8 -Minute 0 -Second 0).ToString("s")
-$MonthlyTrigger.DaysOfMonth = 1
-$MonthlyTrigger.MonthsOfYear = 4095  # all 12 months bitmask
-$MonthlyAction = $MonthlyDef.Actions.Create(0)
-$MonthlyAction.Path = "$Repo\scripts\run_monthly.bat"
-$MonthlyAction.WorkingDirectory = $Repo
-$MonthlyFolder.RegisterTaskDefinition(
-    "PensionPipeline-Monthly", $MonthlyDef, 6, $User, $null, 3
-) | Out-Null
-Write-Host "Registered PensionPipeline-Monthly"
-
-# IPS — 1st of every month at 10:00 (2 hours after monthly CAFR refresh,
-# so it runs against a DB that already has any new CAFRs the same day).
-# Uses the same COM-API workaround as the monthly task above.
-$IpsService = New-Object -ComObject "Schedule.Service"
-$IpsService.Connect()
-$IpsFolder = $IpsService.GetFolder("\")
-$IpsDef = $IpsService.NewTask(0)
-$IpsDef.RegistrationInfo.Description = "PensionPipeline monthly IPS refresh (residential IP, all 148 plans)"
-$IpsDef.Settings.StartWhenAvailable = $true
-$IpsDef.Settings.DisallowStartIfOnBatteries = $false
-$IpsDef.Settings.StopIfGoingOnBatteries = $false
-$IpsDef.Settings.RunOnlyIfNetworkAvailable = $true
-$IpsDef.Settings.ExecutionTimeLimit = "PT6H"
-$IpsTrigger = $IpsDef.Triggers.Create(4)  # 4 = monthly
-$IpsTrigger.StartBoundary = (Get-Date -Hour 10 -Minute 0 -Second 0).ToString("s")
-$IpsTrigger.DaysOfMonth = 1
-$IpsTrigger.MonthsOfYear = 4095
-$IpsAction = $IpsDef.Actions.Create(0)
-$IpsAction.Path = "$Repo\scripts\run_ips.bat"
-$IpsAction.WorkingDirectory = $Repo
-$IpsFolder.RegisterTaskDefinition(
-    "PensionPipeline-IPS", $IpsDef, 6, $User, $null, 3
-) | Out-Null
-Write-Host "Registered PensionPipeline-IPS"
 
 # Recordings — Saturdays 08:00 local. Catalogue-only (--no-downloads):
 # discovers video sources, polls them for new meeting recordings, emails
@@ -153,8 +67,8 @@ Write-Host "Registered PensionPipeline-Recordings"
 # tasks on next re-run.
 
 Write-Host ""
-Write-Host "Tasks registered. Verify with:"
+Write-Host "Task registered. Verify with:"
 Write-Host "    Get-ScheduledTask -TaskName 'PensionPipeline-*'"
 Write-Host ""
 Write-Host "Run one manually to test (won't wait for the trigger):"
-Write-Host "    Start-ScheduledTask -TaskName 'PensionPipeline-Daily'"
+Write-Host "    Start-ScheduledTask -TaskName 'PensionPipeline-Recordings'"

@@ -4,46 +4,31 @@ Streamlit UI — search and browse pension plan meeting documents and summaries.
 Run with: streamlit run app.py
 """
 
-import html as _html
-import io
 import json
 import os
 import re
 import sys
-import textwrap
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import streamlit as st
 from dotenv import load_dotenv
 
+import queries
 from database import (
-    ApprovalToken,
-    CafrAllocation,
-    CafrExtract,
-    CafrPerformance,
-    CafrRefreshLog,
+    utcnow,
     Document,
-    DocumentHealth,
-    DocumentSkip,
-    ExtractionDetail,
-    FetchRun,
-    MeetingRecording,
-    PipelineRun,
     Plan,
-    PlanVideoSource,
-    Publication,
-    RFPRecord,
     Summary,
     aggregate_managers,
     count_search_summaries,
     get_new_meetings,
     get_session,
-    get_twin_index,
     get_twin_snapshot,
     init_db,
     search_summaries,
 )
+from twin_builder import visible_relationships
 from video_storage import RECORDINGS_DIR, recording_path
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
@@ -153,40 +138,15 @@ def get_db_session():
 
 
 def load_plans():
-    session = get_db_session()
-    return session.query(Plan).order_by(Plan.name).all()
+    return queries.plans(get_db_session())
 
 
 def load_recent_summaries(plan_id=None, limit=20):
-    """Most recent summarized documents, sorted by meeting_date desc.
-
-    Filters out CAFRs / performance reports and caps meeting_date at
-    today + 60 days so the By-document view of Activity matches the
-    other two views — see ``database.get_new_meetings`` for the same
-    filter rationale.
-    """
-    session = get_db_session()
-    future_cap = datetime.utcnow() + timedelta(days=60)
-    q = (
-        session.query(Document, Summary)
-        .join(Summary, Document.id == Summary.document_id)
-        .filter(Document.doc_type.notin_(["cafr", "performance"]))
-        .filter((Document.meeting_date.is_(None)) |
-                (Document.meeting_date <= future_cap))
-    )
-    if plan_id and plan_id != "All":
-        q = q.filter(Document.plan_id == plan_id)
-    return q.order_by(Document.meeting_date.desc()).limit(limit).all()
+    return queries.recent_summaries(get_db_session(), plan_id, limit)
 
 
 def get_stats():
-    session = get_db_session()
-    plans = session.query(Plan).count()
-    docs = session.query(Document).count()
-    summarized = session.query(Summary).count()
-    downloaded = session.query(Document).filter(
-        Document.extraction_status == "done").count()
-    return plans, docs, downloaded, summarized
+    return queries.corpus_stats(get_db_session())
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -517,35 +477,8 @@ def _render_activity_by_document(plan_id, plan_label, sort: str = "Most recent")
 
 @st.cache_data(ttl=300, show_spinner=False)
 def _plans_index_rows() -> list[dict]:
-    """Plans-tab index rows: every plan, joined to its latest twin metadata.
-
-    One light query for the twin metadata (get_twin_index — no facets
-    gunzip) plus one for the plan list; cached so Streamlit reruns don't
-    refetch on every interaction.
-    """
-    session = get_db_session()
-    twin_meta = {r["plan_id"]: r for r in get_twin_index(session)}
-    rows = []
-    for plan in session.query(Plan).order_by(Plan.name).all():
-        meta = twin_meta.get(plan.id)
-        if meta:
-            comp = meta["completeness"]
-            completeness = f"{(sum(comp.values()) / len(comp)):.0%}" if comp else "—"
-            twin_built = meta["built_at"].strftime("%Y-%m-%d") if meta["built_at"] else "—"
-        else:
-            completeness = "—"
-            twin_built = "—"
-        rows.append({
-            "Plan": plan.abbreviation or plan.id,
-            "Name": plan.name,
-            "State": plan.state or "—",
-            "AUM ($B)": plan.aum_billions,
-            "Twin built": twin_built,
-            "Completeness": completeness,
-            "Twin": f"?plan={plan.id}",
-        })
-    return rows
-
+    """Plans-tab index rows. Cached so Streamlit reruns don't refetch."""
+    return queries.plans_index_rows(get_db_session())
 
 def page_plans():
     """Digital-twin index — one row per tracked plan, linking to its twin page."""
@@ -1040,167 +973,15 @@ def _render_note_page(md_path: Path, title: str, generated_date: str, pdf_filena
     )
 
 
-def _find_latest_consultant_rfps() -> tuple[Path, str, str] | None:
-    """Find the latest Weekly Consultant RFP brief.
-
-    Picks the newest ``weekly_consultant_rfps_<YYYY-MM-DD>.md`` by
-    filename (lexical sort = chronological since the date is embedded).
-    """
-    candidates = sorted(
-        NOTES_DIR.glob("weekly_consultant_rfps_*.md"),
-        reverse=True,
-    )
-    if not candidates:
-        return None
-    path = candidates[0]
-    content = path.read_text(encoding="utf-8")
-    gen_match = re.search(r"\*Generated:\s*(.+?)\*", content)
-    generated_date = gen_match.group(1).strip() if gen_match else "Unknown"
-    m = re.match(r"weekly_consultant_rfps_(\d{4}-\d{2}-\d{2})", path.name)
-    if m:
-        week_end = datetime.strptime(m.group(1), "%Y-%m-%d").strftime("%b %d, %Y")
-        title = f"Weekly Consultant RFP Brief: Week ending {week_end}"
-    else:
-        title = "Weekly Consultant RFP Brief"
-    return (path, title, generated_date)
-
-
-from lib.rfp_alerts import find_alerts as _find_rfp_alerts_raw
-from lib.rfp_alerts import polish_alerts as _polish_alerts_raw
-
-
-@st.cache_data(ttl=3600, show_spinner=False)
-def _polish_alerts_cached(payload: tuple, today_iso: str,
-                           cutoff_iso: str) -> tuple[list[dict], str]:
-    """Streamlit-cached wrapper. ``payload`` is a hashable tuple per alert
-    so cache keys correctly across reruns.
-    """
-    raw_alerts = [{
-        "doc_id": p[0], "plan_id": p[1],
-        "plan_abbrev": p[1], "plan_name": p[2],
-        "filename": p[3], "keyword": p[4],
-        "polish_context": p[5], "meeting_date_str": p[6],
-    } for p in payload]
-    return _polish_alerts_raw(raw_alerts, today_iso, cutoff_iso)
-
-
-def _render_rfp_alerts():
-    st.title("RFP Alerts")
-    st.caption(
-        "RFP and consultant references found in materials downloaded "
-        "by the daily pipeline. Each candidate is polished by Haiku "
-        "into a one-sentence summary and dropped if Haiku judges it "
-        "incidental (CAFR boilerplate, agenda placeholders, etc.). "
-        "Widen the window to scan a longer trailing period."
-    )
-    _render_ai_disclaimer()
-
-    days = st.slider("Look-back window (days)", 1, 30, 1, step=1,
-                     key="rfp_alerts_days")
-    hours = days * 24
-
-    session = get_db_session()
-    raw_alerts = _find_rfp_alerts_raw(session, hours=hours)
-
-    if not raw_alerts:
-        st.info(f"No RFP or consultant references found in materials from the last {days} day(s).")
-        return
-
-    # Build a hashable, stable per-doc tuple so st.cache_data keys correctly.
-    today = datetime.utcnow().date()
-    cutoff = today - timedelta(days=30)
-    today_iso = today.isoformat()
-    cutoff_iso = cutoff.isoformat()
-    payload = tuple(
-        (a["doc_id"], a["plan_abbrev"], a["plan_name"], a["filename"],
-         a["keyword"], a["polish_context"],
-         a["meeting_date"].date().isoformat() if a.get("meeting_date") else "")
-        for a in raw_alerts
-    )
-    with st.spinner(f"Polishing {len(payload)} candidate(s) via Haiku…"):
-        polished, headline = _polish_alerts_cached(payload, today_iso, cutoff_iso)
-
-    # Re-attach the per-doc fields the polish layer doesn't carry through.
-    raw_by_id = {a["doc_id"]: a for a in raw_alerts}
-    enriched = []
-    for p in polished:
-        meta = raw_by_id.get(p["doc_id"], {})
-        enriched.append({**p,
-                         "doc_type": meta.get("doc_type", ""),
-                         "downloaded_at": meta.get("downloaded_at")})
-
-    dropped = len(raw_alerts) - len(enriched)
-    by_plan: dict[tuple, list[dict]] = {}
-    for a in enriched:
-        key = (a["plan_abbrev"], a["plan_name"])
-        by_plan.setdefault(key, []).append(a)
-
-    if not enriched:
-        st.info(
-            f"{len(raw_alerts)} regex candidate(s) all filtered out by Haiku as "
-            f"incidental mentions in the last {days} day(s)."
-        )
-        return
-
-    if headline:
-        st.markdown(
-            f'<div style="padding:12px 16px;background:#f0f4f8;border-left:4px solid #003366;'
-            f'margin:0 0 14px;border-radius:4px;">'
-            f'<b>Headline:</b> {_html.escape(headline)}'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-
-    summary_bits = [
-        f"**{len(enriched)} alert(s)** across **{len(by_plan)} plan(s)**"
-    ]
-    if dropped:
-        summary_bits.append(f"({dropped} regex candidate(s) filtered as incidental)")
-    st.markdown(" ".join(summary_bits))
-
-    for (abbrev, plan_name), plan_alerts in sorted(by_plan.items(), key=lambda kv: kv[0]):
-        label = f"{abbrev} ({plan_name})" if abbrev != plan_name else plan_name
-        with st.expander(f"**{label}** — {len(plan_alerts)} doc(s)", expanded=True):
-            for a in plan_alerts:
-                when = a["downloaded_at"].strftime("%Y-%m-%d %H:%M") if a.get("downloaded_at") else "—"
-                st.markdown(
-                    f"[{a['filename']}](?doc={a['doc_id']}) "
-                    f"<span style='color:#888;font-size:0.9em;'>· {a.get('doc_type', '')} · {when}</span>",
-                    unsafe_allow_html=True,
-                )
-                st.markdown(f"> {a['snippet']}")
-                st.markdown("")
-
-
 def page_insights():
-    (tab_week, tab_insights_monthly, tab_rfps_weekly,
-     tab_rfp_alerts, tab_insights_year) = st.tabs([
-        "Weekly Insights",
+    # Weekly composition was retired on 2026-08-16; the tab stays because the
+    # back catalogue of weekly briefings is still worth reading. It shows only
+    # existing notes/ files and never gains new ones.
+    (tab_week, tab_insights_monthly, tab_insights_year) = st.tabs([
+        "Weekly Insights (archive)",
         "Monthly Insights",
-        "RFP Weekly",
-        "RFP Alerts",
         "Year to date Insights",
     ])
-
-    with tab_rfps_weekly:
-        st.title("RFP Weekly")
-        result = _find_latest_consultant_rfps()
-        if result:
-            path, title, gen_date = result
-            _render_note_page(
-                md_path=path,
-                title=title,
-                generated_date=gen_date,
-                pdf_filename=path.stem + ".pdf",
-            )
-        else:
-            st.info(
-                "No consultant RFP brief found yet. "
-                "Run `python -m scripts.compose_rfp_weekly` to generate."
-            )
-
-    with tab_rfp_alerts:
-        _render_rfp_alerts()
 
     with tab_insights_monthly:
         st.title("Monthly Insights")
@@ -1303,19 +1084,9 @@ def page_investment_actions(plan_id, plan_label):
         key="invest_actions_days",
         help="Filters by document meeting date.",
     )
-    cutoff = datetime.utcnow().date() - timedelta(days=days_back)
+    cutoff = utcnow().date() - timedelta(days=days_back)
 
-    session = get_db_session()
-    q = (
-        session.query(Document, Summary)
-        .join(Summary, Document.id == Summary.document_id)
-        .filter(Summary.investment_actions != "[]")
-        .filter(Summary.investment_actions.isnot(None))
-        .filter(Document.meeting_date >= cutoff)
-    )
-    if plan_id:
-        q = q.filter(Document.plan_id == plan_id)
-    results = q.order_by(Document.meeting_date.desc()).all()
+    results = queries.investment_action_docs(get_db_session(), plan_id, cutoff)
 
     if not results:
         st.info(f"No investment actions in the last {days_back} days.")
@@ -1608,14 +1379,7 @@ def page_managers():
                 variants_str = " · ".join(f"`{v}`" for v in r["variants"])
                 st.markdown(f"**Raw variants ({len(r['variants'])}):** {variants_str}")
 
-            session = get_db_session()
-            docs = (
-                session.query(Document)
-                .filter(Document.id.in_(r["doc_ids"]))
-                .order_by(Document.meeting_date.desc())
-                .limit(20)
-                .all()
-            )
+            docs = queries.documents_by_ids(get_db_session(), r["doc_ids"])
             st.markdown(f"**Recent documents ({min(len(docs), 20)} of {len(r['doc_ids'])}):**")
             for d in docs:
                 date_str = d.meeting_date.strftime("%Y-%m-%d") if d.meeting_date else "—"
@@ -1637,13 +1401,10 @@ def page_document_detail(doc_id: int):
     """Display a single document's summary when accessed via ?doc=ID."""
     session = get_session()
     try:
-        doc = session.query(Document).get(doc_id)
+        doc, plan, summary = queries.document_with_context(session, doc_id)
         if not doc:
             st.error(f"Document #{doc_id} not found.")
             return
-
-        plan = session.query(Plan).get(doc.plan_id) if doc.plan_id else None
-        summary = session.query(Summary).filter_by(document_id=doc.id).first()
 
         plan_name = (plan.abbreviation or plan.name) if plan else doc.plan_id
         date_str = doc.meeting_date.strftime("%B %d, %Y") if doc.meeting_date else "Unknown"
@@ -1731,12 +1492,7 @@ def _render_recent_runs():
 
     session = get_session()
     try:
-        runs = (
-            session.query(FetchRun)
-            .order_by(desc(FetchRun.started_at))
-            .limit(RECENT_RUNS_LIMIT)
-            .all()
-        )
+        runs = queries.recent_fetch_runs(session, RECENT_RUNS_LIMIT)
         if not runs:
             st.info("No pipeline runs recorded yet. The next GHA cron or "
                     "local Task Scheduler invocation will populate this.")
@@ -1777,13 +1533,7 @@ def _render_recent_runs():
                     continue
 
                 # Group filenames under their plan name
-                rows = (
-                    session.query(Plan.name, Document.filename, Document.downloaded_at)
-                    .join(Document, Document.plan_id == Plan.id)
-                    .filter(Document.id.in_(doc_ids))
-                    .order_by(Document.downloaded_at)
-                    .all()
-                )
+                rows = queries.documents_for_run(session, doc_ids)
                 grouped = defaultdict(list)
                 for plan_name, filename, downloaded_at in rows:
                     grouped[plan_name].append((filename, downloaded_at))
@@ -1813,22 +1563,8 @@ def _render_failed_docs():
     session = get_session()
     try:
         # Two queries, then merge by plan
-        ext_rows = (
-            session.query(Plan.id, Plan.name, Document.id, Document.filename,
-                          ExtractionDetail.reason)
-            .join(Document, Document.plan_id == Plan.id)
-            .outerjoin(ExtractionDetail,
-                       ExtractionDetail.document_id == Document.id)
-            .filter(Document.extraction_status == "failed")
-            .all()
-        )
-        skip_rows = (
-            session.query(Plan.id, Plan.name, Document.id, Document.filename,
-                          DocumentSkip.reason, DocumentSkip.error_message)
-            .join(Document, Document.plan_id == Plan.id)
-            .join(DocumentSkip, DocumentSkip.document_id == Document.id)
-            .all()
-        )
+        ext_rows = queries.failed_extraction_rows(session)
+        skip_rows = queries.skipped_document_rows(session)
 
         if not ext_rows and not skip_rows:
             st.success(
@@ -1904,7 +1640,6 @@ def _render_failed_docs():
 def _render_cafr_coverage():
     """Render the 'CAFR Coverage' Admin sub-tab: how many plans have a
     recent ACFR/CAFR in the DB, broken down by latest fiscal year."""
-    from sqlalchemy import func
 
     st.caption(
         "Latest CAFR/ACFR fiscal year held per plan. 'FY2024+' is the "
@@ -1914,35 +1649,11 @@ def _render_cafr_coverage():
 
     session = get_session()
     try:
-        # Latest CAFR FY per plan (one row per plan that has any CAFR)
-        latest_rows = (
-            session.query(
-                Document.plan_id,
-                func.max(Document.fiscal_year).label("latest_fy"),
-            )
-            .filter(Document.doc_type == "cafr")
-            .filter(Document.fiscal_year.isnot(None))
-            .group_by(Document.plan_id)
-            .all()
-        )
-        latest_by_plan = {pid: fy for pid, fy in latest_rows}
-
-        # All plans (so we can count "none")
-        plans = session.query(Plan).order_by(Plan.id).all()
+        summary = queries.cafr_coverage_summary(session)
+        latest_by_plan = summary["latest_by_plan"]
+        plans = summary["plans"]
         total_plans = len(plans)
-
-        # CAFR documents by fiscal year (across all plans, not just latest)
-        by_fy_rows = (
-            session.query(
-                Document.fiscal_year,
-                func.count(Document.id).label("n"),
-            )
-            .filter(Document.doc_type == "cafr")
-            .filter(Document.fiscal_year.isnot(None))
-            .group_by(Document.fiscal_year)
-            .order_by(Document.fiscal_year.desc())
-            .all()
-        )
+        by_fy_rows = summary["by_fiscal_year"]
     finally:
         session.close()
 
@@ -2053,14 +1764,8 @@ def _render_cafr_refreshes():
     session = get_session()
     try:
         # Distinct run timestamps, newest first
-        recent_run_ats = [
-            row[0] for row in
-            session.query(CafrRefreshLog.run_at)
-            .distinct()
-            .order_by(desc(CafrRefreshLog.run_at))
-            .limit(CAFR_REFRESH_LIMIT)
-            .all()
-        ]
+        recent_run_ats = queries.recent_cafr_refresh_runs(
+            session, CAFR_REFRESH_LIMIT)
         if not recent_run_ats:
             st.info(
                 "No CAFR refresh runs recorded yet. The next monthly cron "
@@ -2069,22 +1774,8 @@ def _render_cafr_refreshes():
             return
 
         # Pull every row for those run_ats in one query
-        rows = (
-            session.query(
-                CafrRefreshLog.run_at,
-                CafrRefreshLog.plan_id,
-                CafrRefreshLog.expected_year,
-                CafrRefreshLog.status,
-                CafrRefreshLog.url_tried,
-                CafrRefreshLog.notes,
-            )
-            .filter(CafrRefreshLog.run_at.in_(recent_run_ats))
-            .order_by(desc(CafrRefreshLog.run_at), CafrRefreshLog.plan_id)
-            .all()
-        )
-        # Plan abbreviations for display
-        plans = {p.id: (p.abbreviation or p.id, p.name or p.id)
-                 for p in session.query(Plan).all()}
+        rows = queries.cafr_refresh_rows(session, recent_run_ats)
+        plans = queries.plan_labels(session)
     finally:
         session.close()
 
@@ -2165,259 +1856,21 @@ def _render_cafr_refreshes():
 
 
 def _admin_plan_coverage_df():
-    """Build the per-plan coverage table used by the Admin page.
-
-    Returns a pandas DataFrame with one row per tracked plan, summarising
-    how many documents have been downloaded, extracted and summarised,
-    plus the timestamp of the most recent download.
-    """
+    """Per-plan coverage table for the Admin page, as a DataFrame."""
     import pandas as pd
-    from sqlalchemy import case, distinct, func
-
-    session = get_db_session()
-    rows = (
-        session.query(
-            Plan.name.label("plan"),
-            Plan.abbreviation.label("abbrev"),
-            Plan.state.label("state"),
-            func.count(distinct(Document.id)).label("downloaded"),
-            func.sum(
-                case((Document.extraction_status == "done", 1), else_=0)
-            ).label("extracted"),
-            func.count(distinct(Summary.id)).label("summarized"),
-            func.max(Document.downloaded_at).label("last_download"),
-        )
-        .outerjoin(Document, Document.plan_id == Plan.id)
-        .outerjoin(Summary, Summary.document_id == Document.id)
-        .group_by(Plan.id)
-        .order_by(Plan.name)
-        .all()
-    )
-
-    df = pd.DataFrame(
-        [
-            {
-                "Plan": r.plan,
-                "Abbrev": r.abbrev or "",
-                "State": r.state or "",
-                "Downloaded": int(r.downloaded or 0),
-                "Extracted": int(r.extracted or 0),
-                "Summarized": int(r.summarized or 0),
-                "Last download": (
-                    r.last_download.strftime("%Y-%m-%d %H:%M")
-                    if r.last_download else "—"
-                ),
-            }
-            for r in rows
-        ]
-    )
-    return df
+    return pd.DataFrame(queries.plan_coverage_rows(get_db_session()))
 
 
 @st.cache_data(ttl=300)
 def _cafr_coverage_df():
-    """Per-plan CAFR + extraction coverage table.
-
-    For each tracked plan, picks the most recent CAFR document (by
-    fiscal_year, then downloaded_at) and joins to its CafrExtract row if
-    one exists, plus counts of allocation and performance rows.
-
-    Cached for 5 minutes — the underlying tables are write-rare (CAFR
-    refresh is monthly; extraction is one-shot per plan).
-    """
+    """Per-plan CAFR + extraction coverage, as a DataFrame."""
     import pandas as pd
-    from sqlalchemy import func
-
-    session = get_db_session()
-
-    cafr_rows = (
-        session.query(Document)
-        .filter(Document.doc_type == "cafr")
-        .order_by(Document.plan_id)
-        .all()
-    )
-    # Reduce to the most recent CAFR per plan (highest fiscal_year, then
-    # most recent downloaded_at). Done in Python to avoid SQL nullslast
-    # portability concerns.
-    latest_cafr: dict[str, Document] = {}
-    cafr_count: dict[str, int] = {}
-    for d in cafr_rows:
-        cafr_count[d.plan_id] = cafr_count.get(d.plan_id, 0) + 1
-        prev = latest_cafr.get(d.plan_id)
-        if prev is None:
-            latest_cafr[d.plan_id] = d
-            continue
-        prev_key = (prev.fiscal_year or 0, prev.downloaded_at or datetime.min)
-        d_key = (d.fiscal_year or 0, d.downloaded_at or datetime.min)
-        if d_key > prev_key:
-            latest_cafr[d.plan_id] = d
-
-    extracts: dict[int, CafrExtract] = {
-        e.document_id: e for e in session.query(CafrExtract).all()
-    }
-    alloc_counts = dict(
-        session.query(
-            CafrAllocation.cafr_extract_id,
-            func.count(CafrAllocation.id),
-        ).group_by(CafrAllocation.cafr_extract_id).all()
-    )
-    perf_counts = dict(
-        session.query(
-            CafrPerformance.cafr_extract_id,
-            func.count(CafrPerformance.id),
-        ).group_by(CafrPerformance.cafr_extract_id).all()
-    )
-
-    # Plan metadata from JSON: cafr_format=aggregator marks a CAFR that
-    # covers a system-of-systems (e.g. NYC Retirement, MN SBI). The
-    # structured extractor intentionally skips these because the
-    # asset-allocation tables don't map to a single plan. Bucket them
-    # separately so they don't sit forever as "Pending extract".
-    # Read JSON directly (not via fetcher.load_plans) so this module
-    # doesn't drag in the pipeline-side bs4 / Playwright deps that
-    # aren't installed on the Render web service.
-    _plans_meta_path = Path(__file__).parent / "data" / "known_plans.json"
-    with open(_plans_meta_path, encoding="utf-8") as _f:
-        _plans_meta = json.load(_f)
-    aggregator_ids: set[str] = {
-        meta["id"] for meta in _plans_meta
-        if (meta.get("cafr_format") or "").lower() == "aggregator"
-    }
-
-    plans = session.query(Plan).order_by(Plan.name).all()
-    rows = []
-    for p in plans:
-        doc = latest_cafr.get(p.id)
-        if doc is None:
-            status = "Missing CAFR"
-            cafr_fy = ""
-            downloaded = ""
-            url = ""
-            extracted = "No"
-            extract_fy = ""
-            alloc = 0
-            perf = 0
-        else:
-            cafr_fy = str(doc.fiscal_year) if doc.fiscal_year else ""
-            downloaded = doc.downloaded_at.strftime("%Y-%m-%d") if doc.downloaded_at else ""
-            url = doc.url or ""
-            ext = extracts.get(doc.id)
-            if p.id in aggregator_ids:
-                status = "Aggregator (skipped)"
-                extracted = "N/A"
-                extract_fy = ""
-                alloc = 0
-                perf = 0
-            elif ext is None:
-                status = "Pending extract"
-                extracted = "No"
-                extract_fy = ""
-                alloc = 0
-                perf = 0
-            else:
-                status = "Extracted"
-                extracted = "Yes"
-                extract_fy = str(ext.fiscal_year) if ext.fiscal_year else ""
-                alloc = int(alloc_counts.get(ext.id, 0))
-                perf = int(perf_counts.get(ext.id, 0))
-
-        rows.append({
-            "plan_id": p.id,
-            "Plan": p.abbreviation or p.name,
-            "Name": p.name,
-            "State": p.state or "",
-            "FYE": p.fiscal_year_end or "",
-            "Status": status,
-            "CAFR FY": cafr_fy,
-            "Source": url or None,
-            "Extract FY": extract_fy,
-            "# Asset classes": alloc,
-            "# Perf rows": perf,
-            "Downloaded": downloaded,
-        })
-
-    return pd.DataFrame(rows)
-
+    return pd.DataFrame(queries.cafr_coverage_rows(get_db_session()))
 
 @st.cache_data(ttl=300)
 def _cafr_plan_detail_data(plan_id: str) -> dict:
-    """Fetch the latest CAFR extract for a plan, with allocations + performance."""
-    session = get_db_session()
-    plan = session.query(Plan).filter_by(id=plan_id).first()
-    if plan is None:
-        return {}
-
-    extract = (
-        session.query(CafrExtract)
-        .filter(CafrExtract.plan_id == plan_id)
-        .order_by(CafrExtract.fiscal_year.desc(), CafrExtract.id.desc())
-        .first()
-    )
-    if extract is None:
-        return {"plan": {
-            "name": plan.name,
-            "abbreviation": plan.abbreviation,
-            "state": plan.state,
-        }}
-
-    allocations = (
-        session.query(CafrAllocation)
-        .filter(CafrAllocation.cafr_extract_id == extract.id)
-        .order_by(CafrAllocation.id)
-        .all()
-    )
-    performance = (
-        session.query(CafrPerformance)
-        .filter(CafrPerformance.cafr_extract_id == extract.id)
-        .order_by(CafrPerformance.scope, CafrPerformance.period)
-        .all()
-    )
-    document = session.query(Document).filter_by(id=extract.document_id).first()
-
-    return {
-        "plan": {
-            "name": plan.name,
-            "abbreviation": plan.abbreviation,
-            "state": plan.state,
-        },
-        "extract": {
-            "id": extract.id,
-            "fiscal_year": extract.fiscal_year,
-            "extracted_at": extract.extracted_at,
-            "model_used": extract.model_used,
-            "pages_used": extract.pages_used,
-            "investment_policy_text": extract.investment_policy_text,
-            "notes": extract.notes,
-        },
-        "document": {
-            "id": document.id if document else None,
-            "url": document.url if document else None,
-            "filename": document.filename if document else None,
-        } if document else None,
-        "allocations": [
-            {
-                "Asset class": a.asset_class,
-                "Target %": a.target_pct,
-                "Actual %": a.actual_pct,
-                "Range low %": a.target_range_low,
-                "Range high %": a.target_range_high,
-                "Notes": a.notes or "",
-            }
-            for a in allocations
-        ],
-        "performance": [
-            {
-                "Scope": p.scope,
-                "Period": p.period,
-                "Return %": p.return_pct,
-                "Benchmark %": p.benchmark_return_pct,
-                "Benchmark": p.benchmark_name or "",
-                "Notes": p.notes or "",
-            }
-            for p in performance
-        ],
-    }
-
+    """Latest CAFR extract for a plan, with allocations and performance."""
+    return queries.cafr_plan_detail(get_db_session(), plan_id)
 
 def _twin_page_data(plan_id: str) -> dict:
     """Load the latest twin snapshot for the twin detail page."""
@@ -2712,19 +2165,16 @@ def page_plan_twin(plan_id: str) -> None:
                 line += f" ([doc](?doc={item['doc_id']}))"
             st.markdown(line)
 
-    with st.expander("RFP / search state", expanded=False):
-        recs = f["rfp_state"]["records"]
-        if recs:
-            st.dataframe(pd.DataFrame(recs), use_container_width=True, hide_index=True)
-        else:
-            st.info("No RFP records for this plan.")
+    # The "RFP / search state" expander was removed on 2026-08-19: rfp_records
+    # is frozen, so every record shown was stale with no way to tell. The rows
+    # remain in the snapshot and the table.
 
     with st.expander("Governance & relationships", expanded=False):
-        rels = f["governance_people"]["relationships"]
+        rels = visible_relationships(f["governance_people"]["relationships"])
         if rels:
             st.dataframe(pd.DataFrame(rels), use_container_width=True, hide_index=True)
         else:
-            st.info("No relationships derived yet.")
+            st.info("No current relationships derived yet.")
 
     with st.expander("Funding & actuarial", expanded=True):
         fund = f["funding_actuarial"]
@@ -2826,83 +2276,22 @@ ASSET_ALLOCATION_VIEWS = (
 @st.cache_data(ttl=300)
 def _allocation_fy_range() -> tuple[int, int] | None:
     """Min/max fiscal_year across CAFR extracts. Returns ``None`` if empty."""
-    from sqlalchemy import func
-
-    session = get_db_session()
-    row = (
-        session.query(
-            func.min(CafrExtract.fiscal_year),
-            func.max(CafrExtract.fiscal_year),
-        )
-        .filter(CafrExtract.fiscal_year.isnot(None))
-        .one_or_none()
-    )
-    if not row or row[0] is None or row[1] is None:
-        return None
-    return int(row[0]), int(row[1])
-
+    return queries.cafr_extract_fy_range(get_db_session())
 
 @st.cache_data(ttl=300)
 def _allocation_df(match_patterns: tuple, exclude_patterns: tuple,
                    exact_label: str, min_fy: int | None = None):
     """Plans with both target and actual weights for a given asset class.
 
-    Pulls the latest CAFR extract per plan (whose fiscal_year is at least
-    ``min_fy`` if provided), filters allocation rows whose asset_class
-    matches any of ``match_patterns`` (case-insensitive LIKE) and matches
-    none of ``exclude_patterns``, and keeps only rows where both target_pct
-    and actual_pct are populated. When a plan has multiple matching rows,
-    the one whose asset_class equals ``exact_label`` is preferred;
-    otherwise the first row is kept.
+    The SQL lives in ``queries.allocation_rows``. What stays here is the
+    presentation-side reduction: when a plan has several matching rows, prefer
+    the one whose asset_class equals ``exact_label``, else keep the first.
     """
     import pandas as pd
-    from sqlalchemy import func, or_
 
-    session = get_db_session()
-
-    # The "latest extract per plan" subquery has to apply the same
-    # min_fy filter; otherwise a plan whose newest CAFR is older than
-    # min_fy would simply drop out (correct), but a plan whose newest
-    # CAFR is newer than min_fy would still be picked even when the
-    # user only wanted older data — apply consistently.
-    latest_extract_q = (
-        session.query(func.max(CafrExtract.id))
-        .filter(CafrExtract.plan_id == Plan.id)
-    )
-    if min_fy is not None:
-        latest_extract_q = latest_extract_q.filter(
-            CafrExtract.fiscal_year >= min_fy
-        )
-    latest_extract_id = latest_extract_q.correlate(Plan).scalar_subquery()
-
-    asset_class_lower = func.lower(CafrAllocation.asset_class)
-    match_clause = or_(*[asset_class_lower.like(p) for p in match_patterns])
-
-    query = (
-        session.query(
-            Plan.id,
-            Plan.name,
-            Plan.abbreviation,
-            Plan.state,
-            CafrExtract.fiscal_year,
-            CafrAllocation.asset_class,
-            CafrAllocation.target_pct,
-            CafrAllocation.actual_pct,
-        )
-        .join(CafrExtract, CafrExtract.id == latest_extract_id)
-        .join(CafrAllocation, CafrAllocation.cafr_extract_id == CafrExtract.id)
-        .filter(match_clause)
-        .filter(CafrAllocation.target_pct.isnot(None))
-        .filter(CafrAllocation.actual_pct.isnot(None))
-    )
-    for pat in exclude_patterns:
-        query = query.filter(~asset_class_lower.like(pat))
-    rows = query.all()
-
-    df = pd.DataFrame(rows, columns=[
-        "plan_id", "plan_name", "abbreviation", "state",
-        "fiscal_year", "asset_class", "target_pct", "actual_pct",
-    ])
+    rows = queries.allocation_rows(get_db_session(), match_patterns,
+                                   exclude_patterns, min_fy)
+    df = pd.DataFrame(rows, columns=list(queries.ALLOCATION_COLUMNS))
     if df.empty:
         return df
 
@@ -2910,14 +2299,12 @@ def _allocation_df(match_patterns: tuple, exclude_patterns: tuple,
         df["abbreviation"].astype(bool), df["plan_id"]
     )
     df["_priority"] = df["asset_class"].str.lower().eq(exact_label).astype(int)
-    df = (
+    return (
         df.sort_values(["plan_id", "_priority"], ascending=[True, False])
           .drop_duplicates(subset=["plan_id"], keep="first")
           .drop(columns="_priority")
           .reset_index(drop=True)
     )
-    return df
-
 
 def _render_allocation_view(df, asset_label: str) -> None:
     """Render the scatter chart + table for one asset-class view."""
@@ -3140,177 +2527,6 @@ def page_cafr():
     )
 
 
-@st.cache_data(ttl=300)
-def _rfp_records_df():
-    """Build a flat DataFrame from RFPRecord rows + their JSON payloads."""
-    import pandas as pd
-
-    session = get_db_session()
-    rows = (
-        session.query(RFPRecord, Document, Plan)
-        .join(Document, RFPRecord.document_id == Document.id)
-        .outerjoin(Plan, RFPRecord.plan_id == Plan.id)
-        .order_by(RFPRecord.extracted_at.desc())
-        .all()
-    )
-    out = []
-    for r, doc, plan in rows:
-        try:
-            payload = json.loads(r.record)
-        except Exception:
-            payload = {}
-        src = payload.get("source_document") or {}
-        shortlist = payload.get("shortlisted_managers") or []
-        plan_name = (plan.name if plan else "") or r.plan_id
-        plan_abbr = (plan.abbreviation if plan else "") or r.plan_id
-        out.append({
-            "plan_id": r.plan_id,
-            "Plan": plan_name,
-            "Abbrev": plan_abbr,
-            "Type": payload.get("rfp_type", ""),
-            "Title": payload.get("title", ""),
-            "Status": payload.get("status", ""),
-            "Asset class": payload.get("asset_class") or "",
-            "Mandate $M": payload.get("mandate_size_usd_millions"),
-            "Released": payload.get("release_date") or "",
-            "Due": payload.get("response_due_date") or "",
-            "Awarded": payload.get("award_date") or "",
-            "Incumbent": payload.get("incumbent_manager") or "",
-            "Shortlist": ", ".join(shortlist) if shortlist else "",
-            "Awarded mgr": payload.get("awarded_manager") or "",
-            "Confidence": r.extraction_confidence,
-            "Needs review": "Yes" if r.needs_review else "",
-            "Source": src.get("url") or doc.url or "",
-            "Source page": src.get("page_number"),
-            "Doc": f"?doc={r.document_id}",
-            "Extracted": r.extracted_at.strftime("%Y-%m-%d") if r.extracted_at else "",
-            "rfp_id": r.rfp_id,
-        })
-    return pd.DataFrame(out)
-
-
-@st.cache_data(ttl=300)
-def _rfp_health_summary():
-    """Aggregate counts from document_health + pipeline_runs for the header."""
-    session = get_db_session()
-    from sqlalchemy import func
-    verdict_counts = dict(
-        session.query(DocumentHealth.stage1_verdict,
-                      func.count(DocumentHealth.document_id))
-        .group_by(DocumentHealth.stage1_verdict).all()
-    )
-    last_run = (
-        session.query(PipelineRun)
-        .order_by(PipelineRun.started_at.desc())
-        .first()
-    )
-    last_run_started_at = last_run.started_at if last_run else None
-    return {
-        "verdicts": verdict_counts,
-        "last_run_started_at": last_run_started_at,
-    }
-
-
-def page_rfp(plan_id, plan_label):
-    """RFP records tab: extracted RFP/Manager/Consultant searches."""
-    st.title("RFPs and Manager Searches")
-    st.caption(
-        "Structured RFP records extracted from board materials by the "
-        "rfp/orchestrator pipeline. Each row links back to the source "
-        "document and page where the RFP was found."
-    )
-
-    df = _rfp_records_df()
-    health = _rfp_health_summary()
-
-    if plan_id and not df.empty:
-        df = df[df["plan_id"] == plan_id]
-
-    total = len(df)
-    needs_review = int((df["Needs review"] == "Yes").sum()) if total else 0
-    distinct_plans = df["plan_id"].nunique() if total else 0
-    last_run_started_at = health.get("last_run_started_at")
-    last_run_str = (
-        last_run_started_at.strftime("%Y-%m-%d %H:%M")
-        if last_run_started_at else "—"
-    )
-
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("RFP records", total)
-    c2.metric("Plans with RFPs", distinct_plans)
-    c3.metric("Needs review", needs_review)
-    c4.metric("Last extraction", last_run_str)
-
-    verdicts = health.get("verdicts") or {}
-    if verdicts:
-        st.caption(
-            "Document diagnostic verdicts across the corpus: "
-            + " · ".join(f"**{k}** {v}" for k, v in sorted(verdicts.items()))
-        )
-
-    if df.empty:
-        st.info(
-            "No RFP records yet. Run a backfill: "
-            "`python -m scripts.run_rfp_extraction --limit 100`."
-        )
-        return
-
-    # Filters
-    col_a, col_b, col_c = st.columns(3)
-    with col_a:
-        type_filter = st.multiselect(
-            "Type",
-            sorted([t for t in df["Type"].dropna().unique() if t]),
-            default=[],
-            key="rfp_type_filter",
-        )
-    with col_b:
-        status_filter = st.multiselect(
-            "Status",
-            sorted([s for s in df["Status"].dropna().unique() if s]),
-            default=[],
-            key="rfp_status_filter",
-        )
-    with col_c:
-        review_only = st.checkbox(
-            "Show only 'needs review'",
-            value=False, key="rfp_needs_review_only",
-        )
-
-    view = df.copy()
-    if type_filter:
-        view = view[view["Type"].isin(type_filter)]
-    if status_filter:
-        view = view[view["Status"].isin(status_filter)]
-    if review_only:
-        view = view[view["Needs review"] == "Yes"]
-
-    st.dataframe(
-        view.drop(columns=["rfp_id", "plan_id"]),
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "Mandate $M": st.column_config.NumberColumn(format="%.1f"),
-            "Confidence": st.column_config.NumberColumn(format="%.2f"),
-            "Source": st.column_config.LinkColumn(
-                "Source", display_text="open PDF",
-                help="Direct link to the source document.",
-            ),
-            "Doc": st.column_config.LinkColumn(
-                "Doc", display_text="view summary",
-                help="Open this document's summary in the app.",
-            ),
-        },
-    )
-
-    st.download_button(
-        "Download CSV",
-        view.to_csv(index=False),
-        "rfp_records.csv",
-        "text/csv",
-    )
-
-
 def page_meeting_recordings(plan_id, plan_label):
     """Smart catalogue of plan video sources and meeting recordings.
 
@@ -3332,20 +2548,9 @@ def page_meeting_recordings(plan_id, plan_label):
 
     session = get_db_session()
 
-    src_q = session.query(PlanVideoSource)
-    rec_q = session.query(MeetingRecording)
-    if plan_id:
-        src_q = src_q.filter(PlanVideoSource.plan_id == plan_id)
-        rec_q = rec_q.filter(MeetingRecording.plan_id == plan_id)
-
-    sources = src_q.order_by(PlanVideoSource.plan_id, PlanVideoSource.platform).all()
-    recordings = rec_q.order_by(
-        MeetingRecording.published_at.desc().nullslast(),
-        MeetingRecording.discovered_at.desc(),
-    ).all()
-
-    # Build a {plan_id: Plan} lookup once
-    all_plans = {p.id: p for p in session.query(Plan).all()}
+    sources = queries.video_sources(session, plan_id)
+    recordings = queries.meeting_recordings(session, plan_id)
+    all_plans = queries.plans_by_id(session)
 
     # ---- summary metrics
     total_plans = len(all_plans) if not plan_id else 1
@@ -3895,132 +3100,6 @@ def page_subscriber_preferences(raw_token: str) -> None:
             st.rerun()
 
 
-def page_approval_action(raw_token: str, action: str):
-    """Handle ?approve=<token> / ?reject=<token>.
-
-    Looks up the token, applies the action atomically, and renders a
-    confirmation page.
-
-    Approve handling differs by cadence:
-    - daily: transitions to "published" directly, mirroring the calm-day
-      ``finalize_and_send`` auto-send path. Daily content isn't archived
-      to notes/ and so doesn't need the git-push step.
-    - weekly / monthly / annual: stops at "approved". The notes-file write
-      and git push happen via the ``publish-approved`` GHA workflow —
-      Render's Streamlit container has no ``origin`` remote configured
-      and so can't push from here.
-
-    Subscriber fan-out runs for every approved cadence — emails are
-    independent of git push.
-    """
-    from insights import approval as _approval
-
-    if action not in ("approve", "reject"):
-        st.error(f"Invalid action: {action}")
-        return
-
-    try:
-        publication = _approval.consume_token(raw_token, expected_action=action)
-    except _approval.TokenError as exc:
-        st.title("Token error")
-        st.error(str(exc))
-        st.caption(
-            "If you believe this is a mistake, the publication may already "
-            "have been actioned. Check the Drafts tab."
-        )
-        if st.button("Go to dashboard"):
-            st.query_params.clear()
-            st.rerun()
-        return
-
-    if action == "approve":
-        if publication.cadence == "daily":
-            from insights import cycle_common as _cc
-            session = get_session()
-            try:
-                pub = session.get(Publication, publication.id)
-                _cc.transition_status(pub, "published")
-                pub.published_at = datetime.utcnow()
-                session.commit()
-                # Refresh + expunge so attrs stay loaded after the session
-                # closes — otherwise fan_out_digest's access to .cadence
-                # triggers a refresh on a closed session and raises
-                # DetachedInstanceError. Mirrors insights.approval.consume_token.
-                session.refresh(pub)
-                session.expunge(pub)
-                publication = pub
-            finally:
-                session.close()
-
-        try:
-            from insights import subscribers as _subs
-            result = _subs.fan_out_digest(publication)
-            if result.get("failed"):
-                st.warning(
-                    f"Digest sent to {result['sent']} subscriber(s); "
-                    f"{result['failed']} send(s) failed — check Resend logs."
-                )
-        except Exception as exc:
-            import logging as _logging
-            _logging.getLogger(__name__).warning(
-                "Publication %s approved but subscriber fan-out failed: %s",
-                publication.id, exc,
-            )
-            st.warning(
-                f"Approval recorded, but subscriber fan-out failed: {exc}. "
-                f"Check Resend logs."
-            )
-
-    st.title(f"{action.title()}d")
-    st.success(
-        f"Publication #{publication.id} ({publication.cadence}, "
-        f"{publication.period_start.isoformat()}) is now "
-        f"**{publication.status}**."
-    )
-    if action == "approve":
-        if publication.cadence == "daily":
-            st.caption(
-                "Subscribers have been notified. Daily digests are delivered "
-                "by email — they are not archived to notes/."
-            )
-        else:
-            workflow_url = (
-                "https://github.com/jhcwalsh/PensionPlanIntelligence/"
-                "actions/workflows/publish-approved.yml"
-            )
-            from insights import github_dispatch as _gh
-
-            if _gh.is_configured():
-                try:
-                    _gh.dispatch_publish_approved(publication.id)
-                    st.caption(
-                        f"Publish workflow triggered for publication "
-                        f"**{publication.id}**. The notes file will be "
-                        f"written and pushed to master in 2–5 minutes — "
-                        f"watch [Actions]({workflow_url})."
-                    )
-                except _gh.DispatchError as exc:
-                    import logging as _logging
-                    _logging.getLogger(__name__).warning(
-                        "Auto-dispatch of publish-approved failed: %s", exc,
-                    )
-                    st.caption(
-                        f"Auto-dispatch failed ({exc}). Trigger the "
-                        f"[publish-approved GHA workflow]({workflow_url}) "
-                        f"manually with publication id **{publication.id}**."
-                    )
-            else:
-                st.caption(
-                    f"Next step: trigger the [publish-approved GHA workflow]"
-                    f"({workflow_url}) with publication id **{publication.id}** "
-                    f"to write the notes file and push to master. Render "
-                    f"auto-deploys once the push lands."
-                )
-    if st.button("Back to dashboard"):
-        st.query_params.clear()
-        st.rerun()
-
-
 def page_drafts():
     """List publications awaiting founder approval."""
     st.title("Drafts awaiting approval")
@@ -4030,13 +3109,7 @@ def page_drafts():
         "the canonical way to act on these — this view is for visibility."
     )
 
-    session = get_db_session()
-    rows = (
-        session.query(Publication)
-        .filter(Publication.status == "awaiting_approval")
-        .order_by(Publication.composed_at.desc())
-        .all()
-    )
+    rows = queries.drafts_awaiting_approval(get_db_session())
 
     if not rows:
         st.info("No drafts awaiting approval right now.")
@@ -4080,13 +3153,8 @@ def page_archive():
         "audit trail."
     )
 
-    session = get_db_session()
-    rows = (
-        session.query(Publication)
-        .filter(Publication.status.in_(("approved", "published")))
-        .order_by(Publication.period_start.desc())
-        .all()
-    )
+    rows = queries.publications_by_status(
+        get_db_session(), ("approved", "published"))
     if not rows:
         st.info("No approved publications yet.")
         return
@@ -4117,17 +3185,6 @@ def main():
     _install_db_auto_push()
 
     plan_id, plan_label = render_sidebar()
-
-    # Approval routing — handled before tabs so the magic-link click
-    # lands on the action page rather than the dashboard.
-    approve_param = st.query_params.get("approve")
-    reject_param = st.query_params.get("reject")
-    if approve_param:
-        page_approval_action(approve_param, "approve")
-        return
-    if reject_param:
-        page_approval_action(reject_param, "reject")
-        return
 
     # Handle deep-link to a specific document
     doc_param = st.query_params.get("doc")
@@ -4176,7 +3233,6 @@ def main():
         ("Search",              lambda: page_search(plan_id, plan_label)),
         ("Investment Actions",  lambda: page_investment_actions(plan_id, plan_label)),
         ("Managers",            lambda: page_managers()),
-        ("RFPs",                lambda: page_rfp(plan_id, plan_label)),
         ("CAFR",                lambda: page_cafr()),
         ("Asset Allocation",    lambda: page_asset_allocation()),
         ("Meeting Recordings",  lambda: page_meeting_recordings(plan_id, plan_label)),

@@ -34,7 +34,7 @@ import requests
 from bs4 import BeautifulSoup
 from rich.console import Console
 
-from database import Document, document_exists, get_session, init_db
+from database import utcnow, Document, document_exists, get_session, init_db
 from fetcher import (
     DOWNLOADS_DIR,
     HEADERS,
@@ -95,7 +95,7 @@ YEAR_RE = re.compile(r"(20[0-3]\d|19\d{2})")
 def year_from_url(url: str) -> int | None:
     """Pick the latest plausible fiscal year out of a URL path."""
     years = [int(y) for y in YEAR_RE.findall(url)]
-    years = [y for y in years if 1990 <= y <= datetime.utcnow().year + 1]
+    years = [y for y in years if 1990 <= y <= utcnow().year + 1]
     return max(years) if years else None
 
 
@@ -183,7 +183,7 @@ def strategy_override(plan: dict) -> list[str]:
     template = plan.get("cafr_url_template")
     if template and "{year}" in template:
         from datetime import datetime
-        this_year = datetime.utcnow().year
+        this_year = utcnow().year
         for yr in (this_year, this_year - 1):
             add(template.format(year=yr))
 
@@ -452,7 +452,7 @@ def run_cafr_fetcher(plan_ids: list[str] = None,
                     doc_type="cafr",
                     local_path=str(local_path),
                     file_size_bytes=size,
-                    downloaded_at=datetime.utcnow(),
+                    downloaded_at=utcnow(),
                     extraction_status="pending",
                     meeting_date=meeting_date,
                 ))

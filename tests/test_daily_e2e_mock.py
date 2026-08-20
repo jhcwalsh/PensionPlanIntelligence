@@ -85,7 +85,9 @@ def test_e2e_normal_day_auto_sends_with_per_plan_sections(seeded_plans):
         s.close()
 
 
-def test_e2e_triggered_day_goes_to_approval(seeded_plans):
+def test_e2e_triggered_day_still_auto_publishes(seeded_plans):
+    """Triggers used to route the digest through an approval email. Since
+    2026-08-16 they only annotate it — a busy day publishes like any other."""
     # 11 docs > threshold 10 → volume trigger.
     for i in range(11):
         _add_doc("calpers", f"Doc {i}.pdf",
@@ -93,24 +95,26 @@ def test_e2e_triggered_day_goes_to_approval(seeded_plans):
                  meeting_date=datetime(2026, 5, 12))
 
     pub = daily.run_daily_cycle(now=datetime(2026, 5, 16, 13, 0))
-    assert pub.status == "awaiting_approval"
+    assert pub.status == "published"
 
     s = get_session()
     try:
-        tokens = s.query(ApprovalToken).filter_by(publication_id=pub.id).all()
-        assert {t.action for t in tokens} == {"approve", "reject"}
+        assert s.query(ApprovalToken).filter_by(publication_id=pub.id).count() == 0
 
         run = s.query(DailyRun).one()
         assert run.docs_count == 11
+        # The trigger is still recorded, it just no longer gates anything.
         assert any(t.startswith("volume:") for t in run.triggers)
-        assert run.approval_gated is True
+        assert run.approval_gated is False
     finally:
         s.close()
 
     emails = approval.list_mock_emails()
     metadata = json.loads(emails[0].with_suffix(".json").read_text(encoding="utf-8"))
-    # Approval-gated days use the "[Action required]" subject prefix.
-    assert "Action required" in metadata["subject"]
+    # Content-style subject on every day now — there is no "[Action required]"
+    # variant left to send, because nothing waits on a click.
+    assert "Action required" not in metadata["subject"]
+    assert "Daily Pension Digest" in metadata["subject"]
 
 
 def test_e2e_idempotent_same_day_no_double_send(seeded_plans):

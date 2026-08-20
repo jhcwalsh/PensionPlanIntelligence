@@ -15,6 +15,7 @@ from datetime import date, datetime, timedelta
 from typing import Optional
 
 from database import (
+    utcnow,
     Document, Plan, Publication, WeeklyRun, WeeklyRunPlan, get_session,
 )
 from insights import compose, config, cycle_common, notify
@@ -81,7 +82,7 @@ def _run_scrape_and_extract(session, run: WeeklyRun) -> None:
         # Mark every plan succeeded immediately so the cycle can move on.
         for rp in pending:
             rp.status = "succeeded"
-            rp.completed_at = datetime.utcnow()
+            rp.completed_at = utcnow()
         run.plans_completed = run.plans_total or len(pending)
         session.commit()
         return
@@ -92,7 +93,7 @@ def _run_scrape_and_extract(session, run: WeeklyRun) -> None:
 
     for rp in pending:
         rp.status = "fetching"
-        rp.started_at = datetime.utcnow()
+        rp.started_at = utcnow()
         session.commit()
         try:
             run_fetcher(plan_ids=[rp.plan_id], max_docs_per_plan=50)
@@ -105,7 +106,7 @@ def _run_scrape_and_extract(session, run: WeeklyRun) -> None:
             rp.status = "failed"
             rp.error_message = f"{type(exc).__name__}: {exc}"
         finally:
-            rp.completed_at = datetime.utcnow()
+            rp.completed_at = utcnow()
             session.commit()
 
     run.plans_completed = (
@@ -190,19 +191,22 @@ def run_weekly_cycle(period_start: Optional[date] = None,
                 publication.id, publication.status
             )
             run.status = "succeeded"
-            run.completed_at = datetime.utcnow()
+            run.completed_at = utcnow()
             session.commit()
             return cycle_common.detach_for_caller(session, publication)
 
         # Compose draft and finalize.
         draft = compose.compose_weekly(session, period_start, period_end)
-        cycle_common.finalize_for_approval(
+        # Silent: weekly briefings are no longer sent or archived. The
+        # publication row still matters — monthly composes from it.
+        cycle_common.finalize_and_send(
             session, publication, draft,
             title_for_pdf=f"7-Day Highlights: {period_start.isoformat()} – {period_end.isoformat()}",
+            notify=False, archive=False,
         )
 
         run.status = "succeeded"
-        run.completed_at = datetime.utcnow()
+        run.completed_at = utcnow()
         session.commit()
         return cycle_common.detach_for_caller(session, publication)
 
@@ -218,7 +222,7 @@ def run_weekly_cycle(period_start: Optional[date] = None,
             if run is not None:
                 run.status = "failed"
                 run.error_message = f"{type(exc).__name__}: {exc}"
-                run.completed_at = datetime.utcnow()
+                run.completed_at = utcnow()
             if publication is not None and publication.status in ("generating",):
                 cycle_common.transition_status(publication, "failed")
                 publication.error_message = f"{type(exc).__name__}: {exc}"

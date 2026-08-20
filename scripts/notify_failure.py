@@ -17,7 +17,7 @@ from __future__ import annotations
 import os
 import socket
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
@@ -59,7 +59,7 @@ def main(argv: list[str]) -> int:
         print("[notify_failure] Email not configured — skipping alert.")
         return 0
 
-    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     host = socket.gethostname()
     log_tail = _tail(log_path)
 

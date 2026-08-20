@@ -32,7 +32,7 @@ import logging
 import sys
 from datetime import date, datetime
 
-from database import Publication, get_session
+from database import utcnow, Publication, get_session
 from insights import approval, weekly, monthly
 
 
@@ -60,7 +60,7 @@ def _auto_approve(publication_id: int, label: str) -> None:
                 f"'{pub.status}' — refusing to auto-approve"
             )
         pub.status = "approved"
-        pub.approved_at = datetime.utcnow()
+        pub.approved_at = utcnow()
         session.commit()
         print(f"  {label} pub {publication_id}: approved")
     finally:

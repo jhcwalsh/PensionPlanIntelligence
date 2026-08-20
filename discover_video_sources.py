@@ -34,6 +34,7 @@ from typing import Iterable
 from urllib.parse import urlparse
 
 from database import (
+    utcnow,
     Document,
     MeetingRecording,
     Plan,
@@ -484,7 +485,7 @@ def upsert_source(session, plan_id: str, found: dict, *,
         live_streamed = True if found.get("live_hint") else None
         recording_policy = "always" if found.get("archive_hint") else None
 
-    now = datetime.utcnow()
+    now = utcnow()
     if existing is None:
         row = PlanVideoSource(
             plan_id=plan_id,
@@ -533,7 +534,7 @@ def upsert_recording(session, plan_id: str, found: dict) -> tuple[bool, MeetingR
         .filter_by(platform=found["platform"], video_id=found["video_id"])
         .first()
     )
-    now = datetime.utcnow()
+    now = utcnow()
     if existing is None:
         row = MeetingRecording(
             plan_id=plan_id,

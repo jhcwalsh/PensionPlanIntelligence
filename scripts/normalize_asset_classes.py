@@ -20,6 +20,10 @@ Usage:
     python -m scripts.normalize_asset_classes              # process all unmapped labels
     python -m scripts.normalize_asset_classes --batch 60   # batch size (default 60)
     python -m scripts.normalize_asset_classes --dry-run    # print what would happen, no LLM calls
+
+``LLM_MODE=mock`` classifies every label as ``unmapped``/``low`` without calling
+Claude. Such a run redirects its writes to ``tmp/asset_class_mappings.mock.json``
+and leaves the committed mapping file untouched — see ``_save_path``.
 """
 
 from __future__ import annotations
@@ -32,6 +36,14 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MAPPINGS_PATH = REPO_ROOT / "data" / "asset_class_mappings.json"
+
+# Frozen copy of the committed config path. Tests monkeypatch ``MAPPINGS_PATH``,
+# so the mock-mode write guard below compares against this constant instead —
+# it can't be disarmed by pointing ``MAPPINGS_PATH`` somewhere else.
+_COMMITTED_MAPPINGS_PATH = MAPPINGS_PATH
+
+# Where a mock-mode run writes instead. ``tmp/`` is gitignored.
+MOCK_MAPPINGS_PATH = REPO_ROOT / "tmp" / "asset_class_mappings.mock.json"
 
 _PROMPT_INSTRUCTIONS = """\
 You are normalizing asset-class labels extracted from pension fund investment
@@ -88,12 +100,35 @@ def _load_existing() -> dict:
     return {}
 
 
-def _save(mapping: dict) -> None:
-    MAPPINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    MAPPINGS_PATH.write_text(
+def _is_mock() -> bool:
+    return os.environ.get("LLM_MODE") == "mock"
+
+
+def _save_path() -> Path:
+    """Resolve where ``_save`` may write.
+
+    A mock-mode run must never touch the committed mappings file.
+    ``_classify_batch`` returns a blanket ``unmapped``/``low`` sentinel for every
+    label in mock mode, and this script's idempotency (``main`` only processes
+    labels *absent* from the mapping) means such an entry is never reprocessed —
+    the poison would be permanent, and the monthly GHA job commits the file.
+    Mock runs therefore write to a gitignored scratch path: the full pipeline
+    still executes end to end and its output stays inspectable, it just cannot
+    corrupt config.
+    """
+    if _is_mock() and MAPPINGS_PATH.resolve() == _COMMITTED_MAPPINGS_PATH.resolve():
+        return MOCK_MAPPINGS_PATH
+    return MAPPINGS_PATH
+
+
+def _save(mapping: dict) -> Path:
+    target = _save_path()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
         json.dumps(mapping, indent=2, sort_keys=True, ensure_ascii=False),
         encoding="utf-8",  # Windows defaults to cp1252, poisoning utf-8 readers
     )
+    return target
 
 
 def _classify_batch(client, batch: list[str]) -> dict:
@@ -229,8 +264,13 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  - {n!r}")
         return 0
 
-    from summarizer import _get_client
-    client = _get_client()
+    if _is_mock():
+        # No client is constructed: _classify_batch short-circuits before using it.
+        client = None
+        print(f"LLM_MODE=mock — classifying nothing for real; writing to {_save_path()}")
+    else:
+        from summarizer import _get_client
+        client = _get_client()
 
     new_entries = 0
     failed_batches = 0
@@ -257,6 +297,8 @@ def main(argv: list[str] | None = None) -> int:
     print()
     print(f"Done. Added {new_entries} mappings; {failed_batches} batches failed.")
     print(f"Total mapped: {len(existing):,} of {len(all_raw):,}")
+    if _is_mock():
+        print(f"Mock run — {MAPPINGS_PATH.name} was NOT modified; wrote {_save_path()}")
     session.close()
     return 0 if failed_batches == 0 else 1
 

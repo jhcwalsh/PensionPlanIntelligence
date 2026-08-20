@@ -1,8 +1,8 @@
 name: Quarterly insights (GHA edition)
 
-# Composes a quarter-in-review CIO Insight digest and sends the
-# approve/reject magic-link email. Pure composition — uses approved
-# monthly publications already in the DB. No Playwright, no scrape.
+# Composes a quarter-in-review CIO Insight digest, auto-publishes it to
+# notes/, and emails a copy. No approval step. Pure composition — uses
+# published monthly publications already in the DB. No Playwright.
 #
 # Runs the 1st of Jan/Apr/Jul/Oct at 19:00 UTC (~3 PM EDT / 2 PM EST).
 # Staggered 1 hour after monthly-insights (which fires the same days
@@ -74,7 +74,7 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
         run: python -m scripts.db_sync pull
 
-      - name: Compose quarterly insights + send approval email
+      - name: Compose quarterly insights + auto-publish
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
@@ -88,8 +88,11 @@ jobs:
             python -m insights.scheduler quarterly
           fi
 
+      # `!cancelled()`: the compose step auto-publishes and emails before the
+      # workflow commits, so skipping the commit on failure would leave a
+      # briefing that was sent to readers but never recorded as published.
       - name: Push DB to R2
-        if: ${{ github.event.inputs.dry_run != 'true' }}
+        if: ${{ !cancelled() && github.event.inputs.dry_run != 'true' }}
         env:
           R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -98,7 +101,7 @@ jobs:
         run: python -m scripts.db_sync push --by "${{ github.workflow }}"
 
       - name: Commit DB + notes changes
-        if: ${{ github.event.inputs.dry_run != 'true' }}
+        if: ${{ !cancelled() && github.event.inputs.dry_run != 'true' }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

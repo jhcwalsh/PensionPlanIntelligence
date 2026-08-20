@@ -50,7 +50,7 @@ def test_annual_composes_from_partial_year():
     assert pub.cadence == "annual"
     assert pub.period_start == date(2026, 1, 1)
     assert pub.period_end == date(2026, 12, 31)
-    assert pub.status == "awaiting_approval"
+    assert pub.status == "published"   # auto-publish since 2026-08-16
     assert set(pub.source_publication_ids) == set(monthly_ids)
     assert pub.draft_markdown
 

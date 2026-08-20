@@ -1,0 +1,50 @@
+{
+  "_doc": "Plans whose board materials sit behind a WAF (Cloudflare/Akamai/etc.) that blocks datacentre IPs. These are SKIPPED EVERYWHERE. Until 2026-08-16 they ran from a local Windows Task Scheduler task; that dependency was removed so the app has no machine of James's in its path. Coverage is therefore 137 of 148 plans for materials. Naming a blocked plan explicitly on the CLI still processes it, which is how you would run one by hand from a residential IP. To restore full coverage, route fetches through a proxy \u2014 see the coverage section of docs/superpowers/specs/2026-08-16-low-maintenance-app-design.md.",
+  "plans": [
+    {
+      "id": "asrs",
+      "reason": "Cloudflare 'Just a moment' challenge"
+    },
+    {
+      "id": "corp_az",
+      "reason": "Cloudflare 'Just a moment' challenge"
+    },
+    {
+      "id": "frs",
+      "reason": "Generic HTTP 403 access-denied"
+    },
+    {
+      "id": "kpers_ks",
+      "reason": "Cloudflare 'Just a moment' challenge"
+    },
+    {
+      "id": "lasers_la",
+      "reason": "Cloudflare 'Just a moment' challenge"
+    },
+    {
+      "id": "mcera",
+      "reason": "Cloudflare 'Attention Required' challenge"
+    },
+    {
+      "id": "nmpera",
+      "reason": "Cloudflare 'Just a moment' challenge"
+    },
+    {
+      "id": "nv_pers",
+      "reason": "Cloudflare 'Just a moment' challenge"
+    },
+    {
+      "id": "pgcers_md",
+      "reason": "Generic HTTP 403 access-denied"
+    },
+    {
+      "id": "scers_suffolk",
+      "reason": "Cloudflare 'Just a moment' challenge"
+    },
+    {
+      "id": "strs_ohio",
+      "reason": "Cloudflare 'Just a moment' challenge"
+    }
+  ],
+  "_how_it_works": "Loaded by pipeline.py / refresh_cafrs.py, which subtract these ids from the default plan set on every run, local or hosted. Explicit positional plan_ids on the CLI bypass the filter."
+}

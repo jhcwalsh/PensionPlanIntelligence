@@ -3,6 +3,7 @@ SQLite database schema and helper functions using SQLAlchemy.
 """
 
 import gzip
+import logging
 import os
 import re
 import uuid
@@ -13,6 +14,7 @@ from sqlalchemy import (
     Column, Integer, String, Text, Float, DateTime, Boolean, Date, JSON,
     LargeBinary, ForeignKey, create_engine, text, UniqueConstraint, Index
 )
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import DeclarativeBase, Session, relationship, sessionmaker
 from sqlalchemy.types import TypeDecorator
 
@@ -63,9 +65,39 @@ class Base(DeclarativeBase):
     pass
 
 
-def _utcnow() -> datetime:
-    """Return current UTC time with timezone awareness."""
+def utcnow() -> datetime:
+    """Current UTC time, timezone-aware.
+
+    The single source of truth for "now" across the codebase. Never use
+    utcnow(): it is naive (so it cannot survive a Postgres
+    TIMESTAMPTZ round-trip) and deprecated since Python 3.12.
+    """
     return datetime.now(timezone.utc)
+
+
+# Retained so the 17 existing column defaults keep working unchanged.
+_utcnow = utcnow
+
+
+def as_utc(value: Optional[datetime]) -> Optional[datetime]:
+    """Normalise a datetime read from the database to aware UTC.
+
+    Reads come back aware on Postgres (TIMESTAMPTZ) but naive on SQLite, which
+    ignores the timezone flag entirely. Every stored value is UTC on both (see
+    the 2026-08-19 audit: no writer has ever used local time), so a missing
+    tzinfo can simply be attached rather than computed.
+
+    Needed wherever a stored value meets utcnow() *in Python* — comparison or
+    arithmetic — because mixing naive and aware raises TypeError. Values bound
+    into SQL do not need it: SQLAlchemy strips the offset when binding to
+    SQLite.
+
+    This is not a transitional shim. Step 4 of the migration dual-runs
+    Postgres beside SQLite, so both shapes are live at the same time.
+    """
+    if value is None:
+        return None
+    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
 
 
 # ---------------------------------------------------------------------------
@@ -93,7 +125,7 @@ class Meeting(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     plan_id = Column(String, ForeignKey("plans.id"), nullable=False)
-    meeting_date = Column(DateTime)
+    meeting_date = Column(DateTime(timezone=True))
     meeting_type = Column(String)       # board, investment, audit, etc.
     title = Column(String)
     source_url = Column(String)
@@ -117,11 +149,11 @@ class Document(Base):
     doc_type = Column(String)           # agenda, board_pack, minutes, performance
     local_path = Column(String)         # path to downloaded file
     file_size_bytes = Column(Integer)
-    downloaded_at = Column(DateTime)
+    downloaded_at = Column(DateTime(timezone=True))
     extracted_text = Column(GzippedText)
     extraction_status = Column(String, default="pending")   # pending, done, failed
     page_count = Column(Integer)
-    meeting_date = Column(DateTime)     # parsed from document or filename
+    meeting_date = Column(DateTime(timezone=True))     # parsed from document or filename
     fiscal_year = Column(Integer)       # CAFR/ACFR fiscal year (e.g. 2024); null for non-CAFR docs
 
     plan = relationship("Plan", back_populates="documents")
@@ -142,7 +174,7 @@ class CafrRefreshLog(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     plan_id = Column(String, ForeignKey("plans.id"), nullable=False)
-    run_at = Column(DateTime, nullable=False)
+    run_at = Column(DateTime(timezone=True), nullable=False)
     expected_year = Column(Integer)            # the FY we were checking for
     status = Column(String, nullable=False)
     # status values: "saved" | "already_have" | "not_yet_published" | "url_failed"
@@ -165,7 +197,7 @@ class CafrExtract(Base):
     document_id = Column(Integer, ForeignKey("documents.id"), nullable=False, unique=True)
     fiscal_year = Column(Integer)
     investment_policy_text = Column(Text)
-    extracted_at = Column(DateTime)
+    extracted_at = Column(DateTime(timezone=True))
     model_used = Column(String)
     pages_used = Column(String)        # e.g. "45-78" — which PDF pages fed the extraction
     text_hash = Column(String)         # MD5 of the section text — skip re-extraction
@@ -236,7 +268,7 @@ class IpsExtract(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     plan_id = Column(String, ForeignKey("plans.id"), nullable=False)
     ips_document_id = Column(Integer, ForeignKey("ips_documents.id"), nullable=False, unique=True)
-    extracted_at = Column(DateTime, default=_utcnow, nullable=False)
+    extracted_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
     model_used = Column(String)
     prompt_version = Column(String)
     text_hash = Column(String)                       # md5 of the IPS text
@@ -311,7 +343,7 @@ class CafrActuarial(Base):
     members_active = Column(Integer)
     members_retired = Column(Integer)
     actuary_firm = Column(String)
-    extracted_at = Column(DateTime, default=_utcnow, nullable=False)
+    extracted_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
     model_used = Column(String)
     prompt_version = Column(String)
     text_hash = Column(String)                       # md5 of the source text
@@ -346,7 +378,7 @@ class PlanManagerRoster(Base):
     last_seen = Column(String(10))                   # YYYY-MM-DD
     evidence = Column(Text)                          # JSON: array of {source, date, context}
     confidence = Column(Float)
-    derived_at = Column(DateTime, default=_utcnow, nullable=False)
+    derived_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
 
     plan = relationship("Plan")
 
@@ -378,14 +410,14 @@ class Publication(Base):
 
     draft_markdown = Column(Text)               # populated after compose
     pdf_path = Column(String)                   # populated after render
-    composed_at = Column(DateTime)
-    approved_at = Column(DateTime)
-    rejected_at = Column(DateTime)
-    published_at = Column(DateTime)
-    expires_at = Column(DateTime)               # 7 days after composed_at
+    composed_at = Column(DateTime(timezone=True))
+    approved_at = Column(DateTime(timezone=True))
+    rejected_at = Column(DateTime(timezone=True))
+    published_at = Column(DateTime(timezone=True))
+    expires_at = Column(DateTime(timezone=True))               # 7 days after composed_at
     error_message = Column(Text)                # if status='failed'
-    reminder_sent_at = Column(DateTime)         # 72-hour nudge
-    subscribers_notified_at = Column(DateTime)  # set once subscriber fan-out has run
+    reminder_sent_at = Column(DateTime(timezone=True))         # 72-hour nudge
+    subscribers_notified_at = Column(DateTime(timezone=True))  # set once subscriber fan-out has run
 
     # For monthly/annual: the publication ids of the lower-cadence inputs
     source_publication_ids = Column(JSON)       # list[int] or null
@@ -412,9 +444,9 @@ class ApprovalToken(Base):
     publication_id = Column(Integer, ForeignKey("publications.id"), nullable=False)
     token_hash = Column(String, nullable=False, unique=True)  # sha256 of raw token
     action = Column(String, nullable=False)     # 'approve' | 'reject'
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    expires_at = Column(DateTime, nullable=False)
-    consumed_at = Column(DateTime)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    consumed_at = Column(DateTime(timezone=True))
 
     publication = relationship("Publication", back_populates="tokens")
 
@@ -434,7 +466,7 @@ class DailyRun(Base):
     __tablename__ = "daily_runs"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    sent_at = Column(DateTime, nullable=False)
+    sent_at = Column(DateTime(timezone=True), nullable=False)
     publication_id = Column(Integer, ForeignKey("publications.id"), nullable=False)
     docs_count = Column(Integer, nullable=False)
     triggers = Column(JSON, nullable=False, default=list)
@@ -465,10 +497,10 @@ class Subscriber(Base):
     quarterly = Column(Boolean, default=False, nullable=False)
     status = Column(String, nullable=False, default="pending")
     # status values: pending, confirmed, disabled, unsubscribed
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    confirmed_at = Column(DateTime)
-    unsubscribed_at = Column(DateTime)
-    last_email_sent_at = Column(DateTime)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    confirmed_at = Column(DateTime(timezone=True))
+    unsubscribed_at = Column(DateTime(timezone=True))
+    last_email_sent_at = Column(DateTime(timezone=True))
     signup_ip = Column(String)
 
     tokens = relationship("SubscriberToken", back_populates="subscriber",
@@ -495,9 +527,9 @@ class SubscriberToken(Base):
     subscriber_id = Column(Integer, ForeignKey("subscribers.id"), nullable=False)
     token_hash = Column(String, nullable=False, unique=True)
     action = Column(String, nullable=False)     # 'confirm' | 'unsubscribe' | 'update_preferences'
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    expires_at = Column(DateTime, nullable=False)
-    consumed_at = Column(DateTime)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    consumed_at = Column(DateTime(timezone=True))
 
     subscriber = relationship("Subscriber", back_populates="tokens")
 
@@ -513,8 +545,8 @@ class WeeklyRun(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     period_start = Column(Date, nullable=False)
     period_end = Column(Date, nullable=False)
-    started_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    completed_at = Column(DateTime)
+    started_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    completed_at = Column(DateTime(timezone=True))
     status = Column(String, nullable=False, default="running")
     # status: running, succeeded, failed, partial
 
@@ -543,8 +575,8 @@ class WeeklyRunPlan(Base):
     status = Column(String, nullable=False, default="pending")
     # status: pending, fetching, extracting, succeeded, failed, skipped
     error_message = Column(Text)
-    started_at = Column(DateTime)
-    completed_at = Column(DateTime)
+    started_at = Column(DateTime(timezone=True))
+    completed_at = Column(DateTime(timezone=True))
     documents_fetched = Column(Integer, default=0)
 
     run = relationship("WeeklyRun", back_populates="plan_runs")
@@ -565,7 +597,7 @@ class Summary(Base):
     investment_actions = Column(Text)   # JSON list: manager hires/fires, allocation changes
     decisions = Column(Text)            # JSON list of formal decisions/votes
     performance_data = Column(Text)     # JSON: returns by asset class if present
-    generated_at = Column(DateTime)
+    generated_at = Column(DateTime(timezone=True))
     model_used = Column(String)
     text_hash = Column(String)          # MD5 of extracted_text — skip re-summarizing duplicates
 
@@ -610,7 +642,7 @@ class DocumentHealth(Base):
     task_relevant_pages = Column(Integer, default=0)
     structure_score = Column(Float)
     rationale = Column(Text)                          # JSON list of strings
-    evaluated_at = Column(DateTime, default=_utcnow, nullable=False)
+    evaluated_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
 
 
 class RFPRecord(Base):
@@ -625,7 +657,7 @@ class RFPRecord(Base):
     extraction_confidence = Column(Float, nullable=False)
     needs_review = Column(Boolean, nullable=False, default=False)
     prompt_version = Column(String, nullable=False, default=RFP_PROMPT_VERSION)
-    extracted_at = Column(DateTime, default=_utcnow, nullable=False)
+    extracted_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
 
     __table_args__ = (
         Index("ix_rfp_plan", "plan_id"),
@@ -640,8 +672,8 @@ class PipelineRun(Base):
     __tablename__ = "pipeline_runs"
 
     run_id = Column(String(32), primary_key=True, default=_new_run_id)
-    started_at = Column(DateTime, default=_utcnow, nullable=False)
-    completed_at = Column(DateTime)
+    started_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    completed_at = Column(DateTime(timezone=True))
     documents_discovered = Column(Integer, default=0)
     documents_processed = Column(Integer, default=0)
     records_extracted = Column(Integer, default=0)
@@ -665,7 +697,7 @@ class TwinSnapshot(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     plan_id = Column(String, ForeignKey("plans.id"), nullable=False)
-    built_at = Column(DateTime, default=_utcnow, nullable=False)
+    built_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
     schema_version = Column(String, nullable=False)
     facets = Column(GzippedText)                      # full twin JSON (str)
     facets_hash = Column(String(64), nullable=False)
@@ -684,8 +716,8 @@ class TwinBuildRun(Base):
     __tablename__ = "twin_build_runs"
 
     run_id = Column(String(32), primary_key=True, default=_new_run_id)
-    started_at = Column(DateTime, default=_utcnow, nullable=False)
-    completed_at = Column(DateTime)
+    started_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    completed_at = Column(DateTime(timezone=True))
     plans_total = Column(Integer, default=0)
     snapshots_written = Column(Integer, default=0)
     errors = Column(Text, default="[]")               # JSON list of strings
@@ -696,7 +728,8 @@ class FetchRun(Base):
     """One row per pipeline.py invocation, capturing what was scraped.
 
     Source distinguishes GHA cron (the 137 GHA-eligible plans) from local
-    Task Scheduler (the 11 WAF-blocked plans in data/local_only_plans.json).
+    Task Scheduler. Local runs ended 2026-08-16; the WAF-blocked plans in
+    data/waf_blocked_plans.json are now skipped everywhere.
     new_document_ids is a JSON list of Document.id values inserted between
     started_at and completed_at.
     """
@@ -705,8 +738,8 @@ class FetchRun(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     source = Column(String, nullable=False)                       # 'gha' | 'local'
-    started_at = Column(DateTime, default=_utcnow, nullable=False)
-    completed_at = Column(DateTime)
+    started_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    completed_at = Column(DateTime(timezone=True))
     status = Column(String, nullable=False, default="running")    # running | success | failed
     error_message = Column(Text)                                  # populated when status='failed'
     new_document_ids = Column(Text, default="[]")                 # JSON list of int Document.id
@@ -729,7 +762,7 @@ class DocumentSkip(Base):
 
     document_id = Column(Integer, ForeignKey("documents.id"), primary_key=True)
     reason = Column(String, nullable=False)                       # e.g. 'refusal'
-    detected_at = Column(DateTime, default=_utcnow, nullable=False)
+    detected_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
     error_message = Column(Text)
 
 
@@ -760,7 +793,7 @@ class ExtractionDetail(Base):
     reason = Column(String, nullable=False)
     pages_total = Column(Integer)
     pages_ocred = Column(Integer)
-    detected_at = Column(DateTime, default=_utcnow, nullable=False)
+    detected_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
     error_message = Column(Text)
 
 
@@ -784,8 +817,8 @@ class PrunedDocument(Base):
     url = Column(String, nullable=False, unique=True)
     plan_id = Column(String)                                  # context, nullable
     doc_type = Column(String)                                 # context, nullable
-    meeting_date = Column(DateTime)                           # context, nullable
-    pruned_at = Column(DateTime, default=_utcnow, nullable=False)
+    meeting_date = Column(DateTime(timezone=True))                           # context, nullable
+    pruned_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
     reason = Column(String, nullable=False)                   # short tag, e.g. 'pre-2026-agenda-prune'
 
     __table_args__ = (
@@ -812,7 +845,7 @@ class IpsDocument(Base):
     filename = Column(String)
     local_path = Column(String)
     file_size_bytes = Column(Integer)
-    fetched_at = Column(DateTime, default=_utcnow, nullable=False)
+    fetched_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
     extracted_text = Column(GzippedText)                     # for downstream scoring
     extraction_status = Column(String, default="pending")    # pending | done | failed
     page_count = Column(Integer)
@@ -844,7 +877,7 @@ class IpsRefreshLog(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     plan_id = Column(String, ForeignKey("plans.id"), nullable=False)
-    run_at = Column(DateTime, nullable=False)
+    run_at = Column(DateTime(timezone=True), nullable=False)
     status = Column(String, nullable=False)
     url_tried = Column(String)
     discovery_source = Column(String)        # override | mine_existing | site_crawl
@@ -930,11 +963,11 @@ class PlanVideoSource(Base):
     verification_confidence = Column(String)             # 'high' | 'medium' | 'low'
     verification_notes = Column(Text)
     status = Column(String, nullable=False, default="active")  # 'active' | 'inactive' | 'broken'
-    last_checked_at = Column(DateTime)                   # last time we polled this source for new recordings
-    last_recording_seen_at = Column(DateTime)            # newest recording publish_at observed here
+    last_checked_at = Column(DateTime(timezone=True))                   # last time we polled this source for new recordings
+    last_recording_seen_at = Column(DateTime(timezone=True))            # newest recording publish_at observed here
     notes = Column(Text)
-    created_at = Column(DateTime, default=_utcnow, nullable=False)
-    updated_at = Column(DateTime, default=_utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
 
     plan = relationship("Plan")
     recordings = relationship("MeetingRecording", back_populates="video_source",
@@ -972,11 +1005,11 @@ class MeetingRecording(Base):
     title = Column(String)
     description = Column(Text)
     thumbnail_url = Column(String)
-    published_at = Column(DateTime)                      # platform-reported publish time
-    meeting_date_inferred = Column(DateTime)             # parsed from title or filename
+    published_at = Column(DateTime(timezone=True))                      # platform-reported publish time
+    meeting_date_inferred = Column(DateTime(timezone=True))             # parsed from title or filename
     duration_seconds = Column(Integer)
     is_livestream = Column(Boolean, default=False)       # ongoing or scheduled live event
-    livestream_start = Column(DateTime)                  # scheduled start, when applicable
+    livestream_start = Column(DateTime(timezone=True))                  # scheduled start, when applicable
 
     # Downloader fields (Phase 2)
     download_status = Column(String, nullable=False, default="pending")
@@ -985,14 +1018,14 @@ class MeetingRecording(Base):
     file_size_bytes = Column(Integer)
     content_hash = Column(String(64))                    # sha256 of downloaded file
     download_attempts = Column(Integer, default=0)
-    last_download_attempt_at = Column(DateTime)
+    last_download_attempt_at = Column(DateTime(timezone=True))
     download_error = Column(Text)
 
     # Alerting fields (Phase 3)
-    alert_sent_at = Column(DateTime)
+    alert_sent_at = Column(DateTime(timezone=True))
 
-    discovered_at = Column(DateTime, default=_utcnow, nullable=False)
-    updated_at = Column(DateTime, default=_utcnow, nullable=False)
+    discovered_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
 
     plan = relationship("Plan")
     video_source = relationship("PlanVideoSource", back_populates="recordings")
@@ -1023,7 +1056,7 @@ class VideoRefreshLog(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     plan_id = Column(String, ForeignKey("plans.id"), nullable=False)
     video_source_id = Column(Integer, ForeignKey("plan_video_sources.id"))
-    run_at = Column(DateTime, nullable=False)
+    run_at = Column(DateTime(timezone=True), nullable=False)
     status = Column(String, nullable=False)
     recordings_found = Column(Integer, default=0)        # total seen on this poll
     recordings_new = Column(Integer, default=0)          # new rows inserted
@@ -1086,16 +1119,43 @@ _FTS_TRIGGER_SQL = [
 ]
 
 
+logger = logging.getLogger(__name__)
+
+
+def _fts_dialect_supported(bind) -> bool:
+    """FTS5 is a SQLite feature. No other dialect has it, by any name.
+
+    Checked explicitly rather than discovered by catching an exception,
+    because the exception handlers here were written for "this SQLite build
+    lacks FTS5" and would swallow "this is not SQLite" identically — leaving
+    search silently degraded to substring matching on Postgres.
+    """
+    return bind.dialect.name == "sqlite"
+
+
 def _init_fts(engine_) -> bool:
     """Create the FTS5 virtual table, sync triggers, and backfill once.
 
-    Returns True when FTS5 is set up, False when the SQLite build lacks
-    the FTS5 module (callers fall back to ILIKE search).
+    Returns True when FTS5 is set up, False when it is unavailable — either
+    because the engine is not SQLite, or because this SQLite build lacks the
+    FTS5 module. Callers fall back to ILIKE search. Both cases are logged;
+    neither is silent.
     """
+    if not _fts_dialect_supported(engine_):
+        logger.warning(
+            "Full-text search index not created: FTS5 is SQLite-only and this "
+            "engine is '%s'. Search will fall back to unranked substring "
+            "matching until a dialect-native index exists.",
+            engine_.dialect.name)
+        return False
+
     with engine_.begin() as conn:
         try:
             conn.exec_driver_sql(_FTS_VIRTUAL_TABLE_SQL)
-        except Exception:
+        except OperationalError as exc:
+            logger.warning(
+                "This SQLite build lacks FTS5 (%s). Falling back to substring "
+                "search.", exc)
             return False
         for stmt in _FTS_TRIGGER_SQL:
             conn.exec_driver_sql(stmt)
@@ -1194,8 +1254,8 @@ def get_new_meetings(session: Session, days: int = 7) -> list[dict]:
         meetings (next ~2 months) stay visible; far-future parse errors
         (Dec 31 FY stamps, multi-year workplans) drop out.
     """
-    cutoff = datetime.utcnow() - timedelta(days=days)
-    future_cap = datetime.utcnow() + timedelta(days=60)
+    cutoff = utcnow() - timedelta(days=days)
+    future_cap = utcnow() + timedelta(days=60)
     recent_docs = (
         session.query(Document)
         .filter(Document.downloaded_at >= cutoff)
@@ -1287,7 +1347,7 @@ def search_summaries(session: Session, query: str, plan_id: str = None,
     if not query or not query.strip():
         return []
     match = _build_fts_match(query)
-    if match is not None:
+    if match is not None and _fts_dialect_supported(session.get_bind()):
         sql = (
             "SELECT s.id "
             "FROM summaries_fts f "
@@ -1302,7 +1362,10 @@ def search_summaries(session: Session, query: str, plan_id: str = None,
         sql += "ORDER BY bm25(summaries_fts), d.meeting_date DESC LIMIT :lim"
         try:
             rows = session.execute(text(sql), params).fetchall()
-        except Exception:
+        except OperationalError as exc:
+            # A SQLite build without FTS5. Any other failure is a real bug and
+            # must surface rather than masquerade as "no full-text index".
+            logger.warning("FTS5 query failed, using substring search: %s", exc)
             rows = None
         if rows is not None:
             ids = [r[0] for r in rows]
@@ -1336,7 +1399,7 @@ def count_search_summaries(session: Session, query: str,
     if not query or not query.strip():
         return 0
     match = _build_fts_match(query)
-    if match is not None:
+    if match is not None and _fts_dialect_supported(session.get_bind()):
         sql = (
             "SELECT COUNT(*) "
             "FROM summaries_fts f "
@@ -1350,7 +1413,8 @@ def count_search_summaries(session: Session, query: str,
             params["pid"] = plan_id
         try:
             return session.execute(text(sql), params).scalar() or 0
-        except Exception:
+        except OperationalError as exc:
+            logger.warning("FTS5 count failed, using substring search: %s", exc)
             pass
 
     return _ilike_search_query(session, query, plan_id).count()

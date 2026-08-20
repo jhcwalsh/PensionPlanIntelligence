@@ -26,6 +26,7 @@ from pathlib import Path
 from rich.console import Console
 
 from database import (
+    utcnow,
     CafrAllocation,
     CafrExtract,
     CafrPerformance,
@@ -188,7 +189,7 @@ def _summary_for_plan(session, plan: Plan) -> tuple[str, dict] | None:
         parts.append("")
 
     parts.append("---")
-    parts.append(f"_Generated {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}._")
+    parts.append(f"_Generated {utcnow().strftime('%Y-%m-%d %H:%M UTC')}._")
 
     md = "\n".join(parts)
     meta = {
@@ -209,7 +210,7 @@ def _build_index(per_plan_meta: dict[str, dict]) -> str:
     lines.append("")
     lines.append(
         f"_{len(per_plan_meta)} plan summaries · generated "
-        f"{datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}_"
+        f"{utcnow().strftime('%Y-%m-%d %H:%M UTC')}_"
     )
     lines.append("")
     lines.append(_md_table(

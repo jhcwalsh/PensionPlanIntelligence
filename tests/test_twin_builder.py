@@ -347,7 +347,10 @@ def test_v1_facets_from_new_tables(tmp_db):
     assert twin["freshness"]["funding_actuarial"] == "2025-06-30"
     roles = {(r["role"], r["name"]) for r in f["governance_people"]["relationships"]}
     assert ("Consultant", "Wilshire") in roles and ("Actuary", "Cavanaugh Macdonald") in roles
-    assert twin["completeness"]["funding_actuarial"] == 1.0
+    # 4 of the 19 FUNDING_METRIC_FIELDS are populated on the seeded row
+    # (funded_ratio_pct, discount_rate_pct, actuary_firm, valuation_date), so
+    # the facet is partially, not fully, captured.
+    assert twin["completeness"]["funding_actuarial"] == 0.4
     session.close()
 
 
@@ -496,4 +499,81 @@ def test_ips_sources_use_ips_doc_id_namespace(tmp_db):
     ips_rel = [r for r in f["governance_people"]["relationships"]
                if r.get("basis") == "ips"][0]
     assert ips_rel["ips_doc_id"] == ipsdoc.id and "doc_id" not in ips_rel
+    session.close()
+
+
+def _roster_row(**kw):
+    from database import PlanManagerRoster
+    defaults = dict(plan_id="roster_test", canonical_name="X", role="manager",
+                    status="current", evidence="{}", confidence=0.8)
+    defaults.update(kw)
+    return PlanManagerRoster(**defaults)
+
+
+def test_roster_mention_count_uses_persisted_value(tmp_db):
+    """Regression: the roster-table path reported "Mentions: 0" for real rows.
+
+    ``sum(action_types.values())`` drops every investment_action whose
+    ``action`` field is null, and is structurally 0 for RFP-derived rows
+    (consultant/custodian/actuary), whose evidence holds only rfp_doc_ids.
+    Measured on db/pension.db: 33 of 1532 plan_manager_roster rows scored 0
+    that way, 31 of them the entire consultant/custodian/actuary population.
+    build_manager_roster now persists evidence["mention_count"].
+    """
+    session = get_session()
+    plan = Plan(id="roster_test", name="Roster Test", abbreviation="RT", state="CA")
+    session.add(plan)
+    session.add_all([
+        # Summary-derived: 5 mentions, only 2 of which carried an action type.
+        _roster_row(canonical_name="BlackRock", role="manager",
+                    evidence=json.dumps({"doc_ids": [1, 2], "action_types": {"hire": 2},
+                                         "mention_count": 5})),
+        # RFP-derived governance row: no action_types at all.
+        _roster_row(canonical_name="Meketa Investment Group", role="consultant",
+                    evidence=json.dumps({"rfp_doc_ids": [7, 8], "mention_count": 2})),
+        # Legacy row written before mention_count was persisted.
+        _roster_row(canonical_name="Callan", role="custodian",
+                    evidence=json.dumps({"rfp_doc_ids": [9]})),
+    ])
+    session.commit()
+
+    entries = {e["name_canonical"]: e
+               for e in twin_builder.build_twin(session, plan)
+               ["facets"]["manager_roster"]["entries"]}
+    assert entries["BlackRock"]["mention_count"] == 5
+    assert entries["Meketa Investment Group"]["mention_count"] == 2
+    # Legacy fallback: never 0 when there is evidence to point at.
+    assert entries["Callan"]["mention_count"] == 1
+    session.close()
+
+
+def test_funding_completeness_scales_with_populated_metrics(tmp_db):
+    """A CafrActuarial row whose metrics are all null must not score 1.0.
+
+    extract_cafr_actuarial's prompt instructs the model to return nulls for an
+    unparseable section and save_actuarial persists the row regardless, so
+    "row exists" is not evidence of coverage.
+    """
+    from database import CafrActuarial
+    session = get_session()
+    plan = _seed(session)
+    cafr_doc_id = session.query(CafrExtract).one().document_id
+
+    empty = CafrActuarial(plan_id="testplan", document_id=cafr_doc_id, fiscal_year=2025)
+    session.add(empty); session.commit()
+    twin = twin_builder.build_twin(session, plan)
+    assert twin["facets"]["funding_actuarial"]["status"] == "captured"
+    assert twin["completeness"]["funding_actuarial"] == 0.0
+
+    # Ten populated metrics saturate the score.
+    for field, value in (("funded_ratio_pct", 75.0), ("market_funded_ratio_pct", 74.0),
+                         ("actuarial_value_assets_millions", 100.0),
+                         ("actuarial_accrued_liability_millions", 133.0),
+                         ("unfunded_aal_millions", 33.0), ("discount_rate_pct", 6.8),
+                         ("assumed_return_pct", 6.8), ("inflation_pct", 2.4),
+                         ("members_active", 1000), ("actuary_firm", "Segal")):
+        setattr(empty, field, value)
+    session.commit()
+    twin = twin_builder.build_twin(session, plan)
+    assert twin["completeness"]["funding_actuarial"] == 1.0
     session.close()

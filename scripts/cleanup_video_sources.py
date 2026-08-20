@@ -20,7 +20,7 @@ from __future__ import annotations
 import argparse
 from datetime import datetime
 
-from database import PlanVideoSource, SessionLocal, init_db
+from database import utcnow, PlanVideoSource, SessionLocal, init_db
 
 
 # Platforms whose auto-discovered hits are predominantly social-media
@@ -55,7 +55,7 @@ def run(dry_run: bool) -> None:
                             "social-media footer links are noise. "
                             "Flip status='active' manually if this plan archives meeting video here.")
             row.notes = (cleanup_note + ("\n\n" + existing_note if existing_note else ""))
-            row.updated_at = datetime.utcnow()
+            row.updated_at = utcnow()
 
         if dry_run:
             print("\n(dry run — no changes committed)")

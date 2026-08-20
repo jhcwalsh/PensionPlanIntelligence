@@ -17,13 +17,11 @@ Usage:
     python refresh_cafrs.py                    # all plans (GHA-skip applies)
     python refresh_cafrs.py calpers nystrs     # specific plans (overrides filters)
     python refresh_cafrs.py --year 2025        # force a target year
-    python refresh_cafrs.py --local-only       # only the WAF-blocked plans (Task Scheduler)
 
-When run from a hosted GitHub Actions runner ($GITHUB_ACTIONS=true on Azure
-runners), the plans listed in data/local_only_cafr_plans.json are skipped --
+The plans listed in data/waf_blocked_cafr_plans.json are skipped on every run --
 their CAFR sources are fronted by Cloudflare/Akamai bot mitigation that
 blocks cloud datacenter IPs. Those plans are picked up by the parallel
-local Windows Task Scheduler invocation that uses --local-only. Explicit
+cloud runner can reach them. Explicit
 plan_ids on the CLI bypass both filters.
 """
 
@@ -39,6 +37,7 @@ from rich.console import Console
 
 from cafr_year_check import fiscal_year_from_pdf
 from database import (
+    utcnow,
     CafrRefreshLog,
     Document,
     Plan,
@@ -57,30 +56,29 @@ from fetcher import download_document, load_plans
 console = Console(legacy_windows=False)
 
 
-LOCAL_ONLY_FILE = Path(__file__).parent / "data" / "local_only_cafr_plans.json"
+WAF_BLOCKED_FILE = Path(__file__).parent / "data" / "waf_blocked_cafr_plans.json"
 
 
-def _load_local_only_ids() -> list[str]:
-    with open(LOCAL_ONLY_FILE, encoding="utf-8") as f:
+def _load_waf_blocked_ids() -> list[str]:
+    with open(WAF_BLOCKED_FILE, encoding="utf-8") as f:
         return [p["id"] for p in json.load(f)["plans"]]
 
 
-def _resolve_plan_ids(explicit: list[str] | None, local_only: bool) -> list[str] | None:
+def _resolve_plan_ids(explicit: list[str] | None) -> list[str] | None:
     """Determine which plan IDs to actually process.
 
-    Precedence: explicit CLI args > --local-only > GITHUB_ACTIONS env var > all.
-    Returns None to mean "all plans" (run_refresh's default).
+    Explicit CLI args win and bypass the block list. Otherwise the plans whose
+    CAFR URL is WAF-blocked are subtracted on every run — since 2026-08-16
+    nothing runs locally, so attempting them would only fail. Note this list
+    differs from the materials one: pbpr_pa, fwerf_tx and acrs_pa block their
+    CAFR but not their board materials, so they keep their document flow.
     """
     if explicit:
         return explicit
-    if local_only:
-        return _load_local_only_ids()
-    if os.environ.get("GITHUB_ACTIONS") == "true":
-        skip = set(_load_local_only_ids())
-        registry = Path(__file__).parent / "data" / "known_plans.json"
-        with open(registry, encoding="utf-8") as f:
-            return [p["id"] for p in json.load(f) if p["id"] not in skip]
-    return None
+    skip = set(_load_waf_blocked_ids())
+    registry = Path(__file__).parent / "data" / "known_plans.json"
+    with open(registry, encoding="utf-8") as f:
+        return [p["id"] for p in json.load(f) if p["id"] not in skip]
 
 
 def expected_fiscal_year(today: datetime, fy_end_md: str) -> int:
@@ -326,7 +324,7 @@ def run_refresh(plan_ids: list[str] | None = None,
         wanted = set(plan_ids)
         plans = [p for p in plans if p["id"] in wanted]
 
-    run_at = datetime.utcnow()
+    run_at = utcnow()
     counts: dict[str, int] = {}
 
     session = get_session()
@@ -361,14 +359,8 @@ def main():
     parser.add_argument("--year", type=int,
                         help="Force a specific target fiscal year (default: "
                              "computed from each plan's fiscal_year_end).")
-    parser.add_argument("--local-only", action="store_true",
-                        help="Process only the plans listed in "
-                             "data/local_only_cafr_plans.json (use from "
-                             "Windows Task Scheduler — those plans' CAFR "
-                             "sources block cloud datacenter IPs).")
-    args = parser.parse_args()
 
-    plan_ids = _resolve_plan_ids(args.plan_ids or None, args.local_only)
+    plan_ids = _resolve_plan_ids(args.plan_ids or None)
     counts = run_refresh(plan_ids=plan_ids, force_year=args.year)
     sys.exit(0 if counts.get("error", 0) == 0 else 1)
 

@@ -7,7 +7,7 @@ if sys.platform == 'win32' and hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
 from curl_cffi import requests as cr
-from database import Document, get_session, init_db
+from database import utcnow, Document, get_session, init_db
 from extractor import run_extractor
 from summarizer import run_summarizer
 from rich.console import Console
@@ -48,7 +48,7 @@ def retry_failed(plan_id: str = "asrs"):
             if path and size > 0:
                 doc.local_path = str(path)
                 doc.file_size_bytes = size
-                doc.downloaded_at = datetime.utcnow()
+                doc.downloaded_at = utcnow()
                 doc.extraction_status = "pending"
                 redownloaded_ids.append(doc.id)
                 console.print(f"  [green]OK[/green] {doc.filename} ({size:,} bytes)")

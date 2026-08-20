@@ -6,3 +6,4 @@ reportlab
 requests
 yt-dlp
 boto3
+psycopg[binary]>=3.1  # Postgres driver: Neon migration + the tests/postgres CI job

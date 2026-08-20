@@ -37,6 +37,7 @@ from datetime import datetime, timezone
 from typing import Iterable
 
 from database import (
+    utcnow as _utcnow,
     MeetingRecording,
     Plan,
     PlanVideoSource,
@@ -130,10 +131,6 @@ def parse_meeting_date_from_title(title: str | None) -> datetime | None:
     return None
 
 
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
-
-
 def _list_videos(source_url: str, max_videos: int) -> list[dict]:
     """Use yt-dlp to list videos on a channel / playlist URL.
 
@@ -206,7 +203,7 @@ def _ts_to_dt(ts) -> datetime | None:
     if ts is None:
         return None
     try:
-        return datetime.fromtimestamp(int(ts), tz=timezone.utc).replace(tzinfo=None)
+        return datetime.fromtimestamp(int(ts), tz=timezone.utc)
     except (TypeError, ValueError, OSError):
         return None
 

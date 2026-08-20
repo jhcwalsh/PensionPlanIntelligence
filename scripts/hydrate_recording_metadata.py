@@ -36,7 +36,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import or_
 
-from database import MeetingRecording, SessionLocal, init_db
+from database import utcnow, MeetingRecording, SessionLocal, init_db
 from refresh_recordings import parse_meeting_date_from_title
 
 _GONE_MARKERS = ("private video", "video unavailable", "has been removed",
@@ -73,7 +73,7 @@ def _hydrate_one(ydl, row) -> str:
 
     ts = info.get("timestamp")
     if ts:
-        row.published_at = datetime.fromtimestamp(ts, tz=timezone.utc).replace(tzinfo=None)
+        row.published_at = datetime.fromtimestamp(ts, tz=timezone.utc)
     elif info.get("upload_date"):
         row.published_at = datetime.strptime(info["upload_date"], "%Y%m%d")
 
@@ -85,7 +85,7 @@ def _hydrate_one(ydl, row) -> str:
     if row.meeting_date_inferred is None:
         row.meeting_date_inferred = (parse_meeting_date_from_title(row.title)
                                      or row.published_at)
-    row.updated_at = datetime.utcnow()
+    row.updated_at = utcnow()
     return "hydrated"
 
 

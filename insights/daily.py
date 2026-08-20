@@ -1,13 +1,14 @@
 """Daily Pension Digest — selector, triggers, composer, orchestrator.
 
 Slots into the existing ``insights/`` package as a fifth cadence
-alongside weekly / rfp_weekly / monthly / annual. Runs from a GitHub
+alongside weekly / monthly / annual. Runs from a GitHub
 Actions cron, not Windows Task Scheduler — the lookback window
 (``daily_runs.sent_at``) makes the cycle resilient to skipped days.
 
-Unlike weekly/monthly, most days auto-send (no approval gate). The
-approval flow is invoked only when ``apply_triggers`` returns reasons
-(volume / keyword / reappearing-plan).
+Auto-sends every day. ``apply_triggers`` still computes reasons
+(volume / keyword / reappearing-plan), but since 2026-08-16 they only
+annotate the digest and land in ``daily_runs.triggers`` — they no longer
+gate it behind an approval email.
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ from typing import Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from database import DailyRun, Document, Plan, Publication, Summary, get_session
+from database import as_utc, utcnow, DailyRun, Document, Plan, Publication, Summary, get_session
 from insights import config, cycle_common
 
 logger = logging.getLogger(__name__)
@@ -91,6 +92,9 @@ def apply_triggers(
             reasons.append(f"keyword:{matched}")
             break  # one keyword reason is enough — avoid spam
 
+    # Callers may inject a naive `now_utc` (tests do, and so does anything
+    # parsing a timestamp). Normalise at the boundary rather than trusting it.
+    now_utc = as_utc(now_utc)
     reappear_cutoff = now_utc - timedelta(days=config.DAILY_REAPPEAR_DAYS)
     plan_ids = sorted({d.plan_id for d in docs})
     today_min = min(d.downloaded_at for d in docs)
@@ -103,7 +107,9 @@ def apply_triggers(
             .scalar()
         )
         # Brand-new plans (prior_max is None) do NOT trigger reappear.
-        if prior_max is not None and prior_max < reappear_cutoff:
+        # A SQL aggregate returns naive on SQLite, aware on Postgres;
+        # reappear_cutoff is always aware.
+        if prior_max is not None and as_utc(prior_max) < reappear_cutoff:
             reasons.append(f"reappear:{plan_id}")
 
     return reasons
@@ -362,14 +368,14 @@ def run_daily_cycle(
         2. select_new_docs since last_sent_at.
         3. apply_triggers → reasons.
         4. compose_daily(docs, reasons).
-        5. if reasons: finalize_for_approval; else: finalize_and_send.
+        5. finalize_and_send (auto-publish); triggers only annotate.
         6. record_daily_run.
 
     Returns the Publication for the CLI to print. ``--force`` expires any
     existing publication for today (including auto-sent ones) and starts
     over.
     """
-    now_utc = now if now is not None else datetime.utcnow()
+    now_utc = as_utc(now) if now is not None else utcnow()
     today = now_utc.date()
 
     session = get_session()
@@ -413,17 +419,16 @@ def run_daily_cycle(
         triggers = apply_triggers(docs, now_utc=now_utc, session=session)
         draft = compose_daily(docs, triggers=triggers, digest_date=now_utc, session=session)
 
-        approval_gated = bool(triggers)
         title_for_pdf = f"Daily Pension Digest — {today.isoformat()}"
 
-        if approval_gated:
-            cycle_common.finalize_for_approval(
-                session, publication, draft, title_for_pdf=title_for_pdf,
-            )
-        else:
-            cycle_common.finalize_and_send(
-                session, publication, draft, title_for_pdf=title_for_pdf,
-            )
+        # Every cadence auto-publishes since 2026-08-16. Triggers used to route
+        # the digest through an approval email; they now only annotate it, so a
+        # busy day is flagged in the content and in daily_runs rather than
+        # waiting on a click. `approval_gated` stays in daily_runs as a
+        # permanently-False audit column so historical rows remain readable.
+        cycle_common.finalize_and_send(
+            session, publication, draft, title_for_pdf=title_for_pdf,
+        )
 
         record_daily_run(
             session,
@@ -431,7 +436,7 @@ def run_daily_cycle(
             publication_id=publication.id,
             docs_count=len(docs),
             triggers=triggers,
-            approval_gated=approval_gated,
+            approval_gated=False,
         )
         session.commit()
         return cycle_common.detach_for_caller(session, publication)

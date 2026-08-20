@@ -30,7 +30,6 @@ import hashlib
 import json
 import os
 import sys
-from datetime import datetime
 
 import anthropic
 from dotenv import load_dotenv
@@ -269,7 +268,10 @@ def save_extract(session, doc: IpsDocument, payload: dict, *, text_hash: str) ->
     extract = IpsExtract(
         plan_id=doc.plan_id,
         ips_document_id=doc.id,
-        extracted_at=datetime.utcnow(),
+        # extracted_at deliberately omitted: the column default is
+        # database._utcnow, which is timezone-aware. Overriding it here with a
+        # naive datetime.utcnow() (deprecated in 3.12) would put naive and
+        # aware values in the same column depending on the insert path.
         model_used=MODEL,
         prompt_version=PROMPT_VERSION,
         text_hash=text_hash,
@@ -329,10 +331,17 @@ def extract_one(session, plan: Plan) -> str:
         return "no_candidates"
 
     text = doc.extracted_text
+
+    # Hash the FULL text, before truncation. Hashing the truncated slice makes
+    # the idempotency check blind to any revision past MAX_INPUT_CHARS: a plan
+    # that republishes its IPS with a rewritten back half but an untouched
+    # leading 180k characters would hash identically and return "already_have"
+    # forever. (Existing rows are unaffected — extractor.py caps extracted text
+    # at 150k chars, so nothing on disk has ever reached this truncation.)
+    text_hash = hashlib.md5(text.encode("utf-8", errors="ignore")).hexdigest()
+
     if len(text) > MAX_INPUT_CHARS:
         text = text[:MAX_INPUT_CHARS]
-
-    text_hash = hashlib.md5(text.encode("utf-8", errors="ignore")).hexdigest()
 
     existing = session.query(IpsExtract).filter_by(ips_document_id=doc.id).first()
     if (existing is not None

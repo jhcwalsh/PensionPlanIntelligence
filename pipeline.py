@@ -6,15 +6,15 @@ Run this script to process one or more pension plans end-to-end.
 Usage:
     python pipeline.py                         # all plans
     python pipeline.py calpers calstrs         # specific plans
-    python pipeline.py --local-only            # only the WAF-blocked plans (Task Scheduler)
     python pipeline.py --extract-only          # skip fetch, just extract + summarize
     python pipeline.py --summarize-only        # skip fetch + extract, just summarize
 
-Hybrid GHA / local split: when GITHUB_ACTIONS=true is set (auto on hosted
-runners), the plans listed in data/local_only_plans.json are skipped --
-those have Cloudflare/WAF that blocks Azure IPs, so they stay on the
-local Windows Task Scheduler invocation that uses --local-only. Explicit
-positional plan_ids on the CLI bypass both filters.
+Cloud-only since 2026-08-16: the plans in data/waf_blocked_plans.json sit
+behind a WAF that blocks datacentre IPs and are skipped on every run. They
+used to be picked up by a local Windows Task Scheduler task; that dependency
+was removed so nothing about this app requires a particular machine to be on.
+Coverage is 137 of 148 plans. Naming a blocked plan explicitly on the CLI
+bypasses the filter, which is how to run one by hand from a residential IP.
 """
 
 import argparse
@@ -34,7 +34,7 @@ from dotenv import load_dotenv
 from rich.console import Console
 from rich.table import Table
 
-from database import Document, FetchRun, Plan, Summary, get_session, init_db
+from database import utcnow, Document, FetchRun, Plan, Summary, get_session, init_db
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 console = Console(legacy_windows=False)
@@ -83,30 +83,29 @@ def print_status(session):
                 console.print(f"  [red]{err}[/red]")
 
 
-LOCAL_ONLY_FILE = Path(__file__).parent / "data" / "local_only_plans.json"
+WAF_BLOCKED_FILE = Path(__file__).parent / "data" / "waf_blocked_plans.json"
 
 
-def _load_local_only_ids() -> list[str]:
-    with open(LOCAL_ONLY_FILE, encoding="utf-8") as f:
+def _load_waf_blocked_ids() -> list[str]:
+    with open(WAF_BLOCKED_FILE, encoding="utf-8") as f:
         return [p["id"] for p in json.load(f)["plans"]]
 
 
-def _resolve_plan_ids(explicit: list[str] | None, local_only: bool) -> list[str] | None:
+def _resolve_plan_ids(explicit: list[str] | None) -> list[str] | None:
     """Determine which plan IDs to actually process.
 
-    Precedence: explicit CLI args > --local-only > GITHUB_ACTIONS env var > all.
-    Returns None to mean "all plans" (the fetcher's default).
+    Explicit CLI args win and bypass the block list — that is how you run a
+    blocked plan by hand from a residential IP. Otherwise the WAF-blocked
+    plans are subtracted from the registry on every run, hosted or local:
+    since 2026-08-16 nothing runs from a local Task Scheduler, so attempting
+    them would just fail daily and add noise.
     """
     if explicit:
         return explicit
-    if local_only:
-        return _load_local_only_ids()
-    if os.environ.get("GITHUB_ACTIONS") == "true":
-        skip = set(_load_local_only_ids())
-        registry = Path(__file__).parent / "data" / "known_plans.json"
-        with open(registry, encoding="utf-8") as f:
-            return [p["id"] for p in json.load(f) if p["id"] not in skip]
-    return None
+    skip = set(_load_waf_blocked_ids())
+    registry = Path(__file__).parent / "data" / "known_plans.json"
+    with open(registry, encoding="utf-8") as f:
+        return [p["id"] for p in json.load(f) if p["id"] not in skip]
 
 
 def run_pipeline(
@@ -119,7 +118,7 @@ def run_pipeline(
     retry_failed: bool = False,
 ):
     init_db()
-    start = datetime.utcnow()
+    start = utcnow()
     source = "gha" if os.environ.get("GITHUB_ACTIONS") == "true" else "local"
     console.rule("[bold blue]Pension Plan Intelligence Pipeline[/bold blue]")
 
@@ -153,7 +152,7 @@ def run_pipeline(
         run = log_session.get(FetchRun, fetch_run_id)
         run.status = "failed"
         run.error_message = f"{type(exc).__name__}: {exc}"
-        run.completed_at = datetime.utcnow()
+        run.completed_at = utcnow()
         log_session.commit()
         log_session.close()
         raise
@@ -166,7 +165,7 @@ def run_pipeline(
     ]
     run = log_session.get(FetchRun, fetch_run_id)
     run.status = "success"
-    run.completed_at = datetime.utcnow()
+    run.completed_at = utcnow()
     run.new_document_ids = json.dumps(new_doc_ids)
     log_session.commit()
     log_session.close()
@@ -174,7 +173,7 @@ def run_pipeline(
     session = get_session()
     try:
         console.rule("[bold]Pipeline Complete[/bold]")
-        elapsed = (datetime.utcnow() - start).seconds
+        elapsed = (utcnow() - start).seconds
         console.print(f"Total time: {elapsed}s ({len(new_doc_ids)} new documents)\n")
         print_status(session)
     finally:
@@ -199,11 +198,6 @@ def main():
                         help="Print new meetings with agenda summaries and material links")
     parser.add_argument("--updates-days", type=int, default=14,
                         help="Lookback window for --updates (default: 14 days)")
-    parser.add_argument("--local-only", action="store_true",
-                        help="Process only the WAF-blocked plans listed in "
-                             "data/local_only_plans.json (use from Windows "
-                             "Task Scheduler in the hybrid GHA/local model)")
-    args = parser.parse_args()
 
     if args.status:
         init_db()
@@ -256,7 +250,7 @@ def main():
         do_fetch, do_extract, do_summarize = False, True, False
 
     run_pipeline(
-        plan_ids=_resolve_plan_ids(args.plan_ids, args.local_only),
+        plan_ids=_resolve_plan_ids(args.plan_ids),
         do_fetch=do_fetch,
         do_extract=do_extract,
         do_summarize=do_summarize,

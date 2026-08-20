@@ -167,8 +167,8 @@ def _resolve_cafr_url(plan: dict) -> tuple[str | None, str]:
     """
     fy_end = plan.get("fiscal_year_end")
     if fy_end:
-        from datetime import datetime
-        now = datetime.utcnow()
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
         target_year = _expected_fiscal_year(now.year, now.month, now.day, fy_end)
     else:
         target_year = None

@@ -27,7 +27,7 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from rich.console import Console
@@ -114,7 +114,7 @@ def main():
             return
 
     # Commit & push (only stage notes/, nothing else)
-    today = datetime.utcnow().strftime("%Y-%m-%d")
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     msg = args.message or f"Refresh published notes ({today})"
 
     run(["git", "add", "--", "notes/"])

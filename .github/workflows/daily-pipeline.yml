@@ -1,9 +1,9 @@
 name: Daily pipeline (GHA edition)
 
-# Fetch + extract + summarize for the GHA-eligible plans (137 of 148;
-# the WAF-blocked 11 stay on local Task Scheduler -- see
-# data/local_only_plans.json). Runs daily at 11:00 UTC (~7 AM EDT /
-# 6 AM EST) and on manual dispatch.
+# Fetch + extract + summarize for the reachable plans (137 of 148). The
+# WAF-blocked plans in data/waf_blocked_plans.json are skipped everywhere --
+# they used to run from a local Task Scheduler task, removed 2026-08-16.
+# Runs daily at 11:00 UTC (~7 AM EDT / 6 AM EST) and on manual dispatch.
 #
 # Manual dispatch defaults to actually pushing the resulting db/pension.db.
 # Tick "Skip the final commit/push" for a debug run that exercises
@@ -80,17 +80,28 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python pipeline.py ${{ github.event.inputs.plan_ids }}
 
+      # Every step from here down carries `if: ${{ !cancelled() }}` so that a
+      # failure in the pipeline or in either derived-data build cannot discard
+      # the day's work. pipeline.py fetches, extracts and summarises 137 plans
+      # and writes as it goes; without the guard a single plan's data quirk
+      # skips the commit step and the whole run is thrown away with the
+      # runner. This mirrors pipeline.py's own stated principle that "a data
+      # quirk must not block the day's DB push". The job still reports failure,
+      # so nothing becomes invisible — only the discarding is removed.
       - name: Pipeline status
+        if: ${{ !cancelled() }}
         run: python pipeline.py --status
 
       - name: Rebuild manager rosters
+        if: ${{ !cancelled() }}
         run: python -m scripts.build_manager_roster
 
       - name: Build twin snapshots
+        if: ${{ !cancelled() }}
         run: python twin_builder.py
 
       - name: Push DB to R2
-        if: ${{ github.event.inputs.dry_run != 'true' }}
+        if: ${{ !cancelled() && github.event.inputs.dry_run != 'true' }}
         env:
           R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -99,7 +110,7 @@ jobs:
         run: python -m scripts.db_sync push --by "${{ github.workflow }}"
 
       - name: Daily DB snapshot to R2
-        if: ${{ github.event.inputs.dry_run != 'true' }}
+        if: ${{ !cancelled() && github.event.inputs.dry_run != 'true' }}
         env:
           R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -111,7 +122,7 @@ jobs:
       # Scheduled runs have no inputs (dry_run is empty/null), so this
       # condition is true for cron and for unchecked manual runs.
       - name: Commit DB changes
-        if: ${{ github.event.inputs.dry_run != 'true' }}
+        if: ${{ !cancelled() && github.event.inputs.dry_run != 'true' }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -132,18 +143,10 @@ jobs:
             fi
           fi
 
-      # Email a daily digest summarising the new documents from this run
-      # (and any local-pipeline FetchRun rows from the same 26-hour window).
-      # Reuses the Resend secrets configured for insights approval emails.
-      # `if: success()` avoids spamming on red-flag pipeline failures —
-      # in that case the FetchRun row will be status=failed and the next
-      # day's digest will surface it. Skipped on dry_run dispatches.
-      - name: Send daily digest email
-        if: ${{ success() && github.event.inputs.dry_run != 'true' }}
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          APPROVAL_EMAIL_RECIPIENT: ${{ secrets.APPROVAL_EMAIL_RECIPIENT }}
-          APPROVAL_EMAIL_FROM: ${{ secrets.APPROVAL_EMAIL_FROM }}
-          INSIGHTS_MODE: live
-        run: python -m scripts.send_daily_digest
+      # The digest email used to be sent from here too, via
+      # scripts/send_daily_digest.py. That was a second, redundant digest
+      # alongside daily-digest.yml's `insights.scheduler daily`, and its one
+      # distinctive feature — regex RFP/consultant alerts from
+      # lib/rfp_alerts.py — went with the RFP subsystem on 2026-08-16.
+      # daily-digest.yml is now the only digest: it has lookback state in
+      # daily_runs and the volume/keyword/reappearing-plan trigger rules.
