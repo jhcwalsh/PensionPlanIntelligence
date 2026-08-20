@@ -97,3 +97,30 @@ def test_reset_sequences_is_safe_on_empty_tables(tmp_path, pg_engine):
     migrate(str(src), str(pg_engine.url))
     result = reset_sequences(str(pg_engine.url))
     assert all(v >= 1 for v in result.values()), result
+
+
+def test_verify_reports_a_clean_migration(tmp_path, pg_engine):
+    from scripts.verify_migration import compare
+    src = tmp_path / "src.db"
+    _seed_sqlite(src)
+    migrate(str(src), str(pg_engine.url))
+
+    report = compare(str(src), str(pg_engine.url))
+    assert report["count_mismatches"] == [], report["count_mismatches"]
+    assert report["twin_hash_mismatches"] == []
+    assert report["row_counts"]["documents"] == {"sqlite": 2, "postgres": 2}
+
+
+def test_verify_detects_a_dropped_row(tmp_path, pg_engine):
+    """A verifier that cannot fail is not a verifier."""
+    from scripts.verify_migration import compare
+    src = tmp_path / "src.db"
+    _seed_sqlite(src)
+    migrate(str(src), str(pg_engine.url))
+
+    with Session(pg_engine) as s:
+        s.delete(s.get(database.Document, 99))
+        s.commit()
+
+    report = compare(str(src), str(pg_engine.url))
+    assert "documents" in report["count_mismatches"]
