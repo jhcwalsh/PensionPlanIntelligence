@@ -14,6 +14,14 @@ The datetime audit (2026-08-19) established two things about the existing data:
 Together those mean every stored value is already UTC, so the offset can simply
 be appended rather than computed. No per-column analysis, no DST correction.
 
+EXPORT ONLY — do not run this against the live SQLite database.
+
+SQLAlchemy's SQLite DATETIME parses a trailing +00:00 when the column declares
+timezone=True, but SQLite writes still strip it. Stamping the live file would
+leave existing rows aware and every subsequent row naive — manufacturing the
+very naive/aware mixture this work exists to remove. Run it only on a copy
+being exported to Postgres.
+
 Run this against the SQLite file as part of the Postgres export, so values
 arrive at Neon already carrying their offset.
 
