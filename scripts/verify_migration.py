@@ -41,9 +41,9 @@ def _twin_hashes(engine) -> dict[str, str]:
     t = database.TwinSnapshot.__table__
     with engine.connect() as conn:
         rows = conn.execute(
-            sa.select(t.c.plan_id, t.c.facets_hash, t.c.built_at)
-            .order_by(t.c.plan_id, t.c.built_at.desc())).fetchall()
-    for plan_id, digest, _built in rows:
+            sa.select(t.c.plan_id, t.c.facets_hash, t.c.built_at, t.c.id)
+            .order_by(t.c.plan_id, t.c.built_at.desc(), t.c.id.desc())).fetchall()
+    for plan_id, digest, _built, _id in rows:
         out.setdefault(plan_id, digest)
     return out
 
