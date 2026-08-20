@@ -342,18 +342,30 @@ _utcnow = utcnow
 
 In `refresh_recordings.py`, `notify_new_recordings.py`, `download_recordings.py`:
 delete the local `def _utcnow()` and add `from database import utcnow as _utcnow`
-beside the existing `database` imports. This flips those modules from naive to
-aware in one step — intended, and covered by Task 5's sweep of their comparisons.
+beside the existing `database` imports.
 
-Also fix the two remaining strippers, which must now keep their offsets:
+This is safe *only* because every `_utcnow()` result in those three modules is
+assigned straight to a column and never compared: `refresh_recordings.py:274,
+275, 294, 296`, `download_recordings.py:284`, `notify_new_recordings.py:185,
+213`. Verified by inspection — confirm again before editing.
+
+**Do NOT touch the two `_ts_to_dt`-style strippers in this task**
+(`refresh_recordings.py:209`, `scripts/hydrate_recording_metadata.py:76`), even
+though they look like part of the same change. `refresh_recordings.py:297`
+compares their output against a value read from the database:
 
 ```python
-# refresh_recordings.py:209
-return datetime.fromtimestamp(int(ts), tz=timezone.utc)
-
-# scripts/hydrate_recording_metadata.py:76
-row.published_at = datetime.fromtimestamp(ts, tz=timezone.utc)
+source.last_checked_at = now
+if newest_published and (
+    source.last_recording_seen_at is None
+    or newest_published > source.last_recording_seen_at   # <-- naive, from the DB
+):
 ```
+
+Make `_ts_to_dt` aware while `last_recording_seen_at` still reads back naive and
+this raises `TypeError` immediately — on SQLite, today. It is the Finding 6(b)
+hazard in miniature. Both strippers are therefore converted in Task 5, in the
+same commit as the column-type change.
 
 - [ ] **Step 5: Run the full suite**
 
@@ -606,6 +618,19 @@ live smoke run are the evidence.
 For each file in `KNOWN_OFFENDERS`, replace `datetime.utcnow()` with `utcnow()`
 and add `from database import utcnow` (adjust to each module's import style).
 Three cases need judgement rather than substitution:
+
+0. **The two strippers deferred from Task 2** — now safe, because the columns they are compared against return aware values from this commit onward:
+
+```python
+# refresh_recordings.py:209
+return datetime.fromtimestamp(int(ts), tz=timezone.utc)
+
+# scripts/hydrate_recording_metadata.py:76
+row.published_at = datetime.fromtimestamp(ts, tz=timezone.utc)
+```
+
+Re-check `refresh_recordings.py:297` after this edit: both sides of that
+comparison must be aware.
 
 1. **Insert paths where the column default already fires** — delete the explicit argument and add the Finding 7 comment. Applies to `extract_cafr_investments.py:388`, `extractor.py:490`, `summarizer.py:340,388`, `refresh_cafrs.py:326`, `refresh_ips.py:215`.
 2. **`insights/config.py:127-142`** — the 4 helpers take an optional `now`; change only the fallback, keep the parameter.
