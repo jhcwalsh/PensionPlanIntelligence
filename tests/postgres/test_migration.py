@@ -52,9 +52,23 @@ def test_migrate_preserves_ids_and_content(tmp_path, pg_engine):
 
 
 def test_migrate_skips_tables_absent_from_the_source(tmp_path, pg_engine):
-    """Older DB files legitimately lack newer tables."""
-    src = tmp_path / "src.db"
-    _seed_sqlite(src)
+    """Older DB files legitimately lack tables added later.
+
+    Creates ONLY plans and documents in the source, so migrate()'s skip
+    branch is genuinely exercised — with a full metadata.create_all the
+    branch is unreachable and this test would pass with the guard deleted.
+    """
+    src = tmp_path / "partial.db"
+    engine = sa.create_engine(f"sqlite:///{src}")
+    database.Plan.__table__.create(engine)
+    database.Document.__table__.create(engine)
+    with Session(engine) as s:
+        s.add(database.Plan(id="calpers", name="CalPERS", state="CA"))
+        s.commit()
+    engine.dispose()
+
     counts = migrate(str(src), str(pg_engine.url))
+
     assert counts["plans"] == 1
-    assert all(isinstance(v, int) for v in counts.values())
+    assert "twin_snapshots" not in counts, \
+        "a table absent from the source must be skipped, not reported"
