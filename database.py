@@ -3,6 +3,7 @@ SQLite database schema and helper functions using SQLAlchemy.
 """
 
 import gzip
+import logging
 import os
 import re
 import uuid
@@ -13,6 +14,7 @@ from sqlalchemy import (
     Column, Integer, String, Text, Float, DateTime, Boolean, Date, JSON,
     LargeBinary, ForeignKey, create_engine, text, UniqueConstraint, Index
 )
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import DeclarativeBase, Session, relationship, sessionmaker
 from sqlalchemy.types import TypeDecorator
 
@@ -1096,16 +1098,43 @@ _FTS_TRIGGER_SQL = [
 ]
 
 
+logger = logging.getLogger(__name__)
+
+
+def _fts_dialect_supported(bind) -> bool:
+    """FTS5 is a SQLite feature. No other dialect has it, by any name.
+
+    Checked explicitly rather than discovered by catching an exception,
+    because the exception handlers here were written for "this SQLite build
+    lacks FTS5" and would swallow "this is not SQLite" identically — leaving
+    search silently degraded to substring matching on Postgres.
+    """
+    return bind.dialect.name == "sqlite"
+
+
 def _init_fts(engine_) -> bool:
     """Create the FTS5 virtual table, sync triggers, and backfill once.
 
-    Returns True when FTS5 is set up, False when the SQLite build lacks
-    the FTS5 module (callers fall back to ILIKE search).
+    Returns True when FTS5 is set up, False when it is unavailable — either
+    because the engine is not SQLite, or because this SQLite build lacks the
+    FTS5 module. Callers fall back to ILIKE search. Both cases are logged;
+    neither is silent.
     """
+    if not _fts_dialect_supported(engine_):
+        logger.warning(
+            "Full-text search index not created: FTS5 is SQLite-only and this "
+            "engine is '%s'. Search will fall back to unranked substring "
+            "matching until a dialect-native index exists.",
+            engine_.dialect.name)
+        return False
+
     with engine_.begin() as conn:
         try:
             conn.exec_driver_sql(_FTS_VIRTUAL_TABLE_SQL)
-        except Exception:
+        except OperationalError as exc:
+            logger.warning(
+                "This SQLite build lacks FTS5 (%s). Falling back to substring "
+                "search.", exc)
             return False
         for stmt in _FTS_TRIGGER_SQL:
             conn.exec_driver_sql(stmt)
@@ -1297,7 +1326,7 @@ def search_summaries(session: Session, query: str, plan_id: str = None,
     if not query or not query.strip():
         return []
     match = _build_fts_match(query)
-    if match is not None:
+    if match is not None and _fts_dialect_supported(session.get_bind()):
         sql = (
             "SELECT s.id "
             "FROM summaries_fts f "
@@ -1312,7 +1341,10 @@ def search_summaries(session: Session, query: str, plan_id: str = None,
         sql += "ORDER BY bm25(summaries_fts), d.meeting_date DESC LIMIT :lim"
         try:
             rows = session.execute(text(sql), params).fetchall()
-        except Exception:
+        except OperationalError as exc:
+            # A SQLite build without FTS5. Any other failure is a real bug and
+            # must surface rather than masquerade as "no full-text index".
+            logger.warning("FTS5 query failed, using substring search: %s", exc)
             rows = None
         if rows is not None:
             ids = [r[0] for r in rows]
@@ -1346,7 +1378,7 @@ def count_search_summaries(session: Session, query: str,
     if not query or not query.strip():
         return 0
     match = _build_fts_match(query)
-    if match is not None:
+    if match is not None and _fts_dialect_supported(session.get_bind()):
         sql = (
             "SELECT COUNT(*) "
             "FROM summaries_fts f "
@@ -1360,7 +1392,8 @@ def count_search_summaries(session: Session, query: str,
             params["pid"] = plan_id
         try:
             return session.execute(text(sql), params).scalar() or 0
-        except Exception:
+        except OperationalError as exc:
+            logger.warning("FTS5 count failed, using substring search: %s", exc)
             pass
 
     return _ilike_search_query(session, query, plan_id).count()
