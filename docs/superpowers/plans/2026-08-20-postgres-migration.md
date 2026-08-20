@@ -601,6 +601,23 @@ def test_empty_query_returns_nothing(pg_engine):
     _seed(pg_engine)
     with Session(pg_engine) as s:
         assert database.search_summaries(s, "   ") == []
+
+
+def test_the_gin_index_actually_exists(pg_engine):
+    """Without this, an inert index is invisible.
+
+    Postgres answers a tsvector query correctly via sequential scan, so every
+    other test here passes whether or not the index was created. At 4,200
+    summaries that is a silent performance cliff rather than a failure.
+    """
+    import sqlalchemy as sa
+    with pg_engine.connect() as conn:
+        rows = conn.execute(sa.text(
+            "SELECT indexdef FROM pg_indexes "
+            "WHERE tablename = 'summaries' AND indexname = :n"),
+            {"n": "ix_summaries_search_vector"}).fetchall()
+    assert rows, "ix_summaries_search_vector was not created"
+    assert "gin" in rows[0][0].lower(), rows[0][0]
 ```
 
 - [ ] **Step 2: Run to verify it fails**
@@ -611,24 +628,39 @@ exclusion syntax and will match on the literal string.
 
 - [ ] **Step 3: Add the index to `database.py`**
 
+**Amended by the pre-flight scan.** The obvious form —
+`Index("...", sa.text("to_tsvector(...)"), postgresql_using="gin")` — is
+**inert**: given only a `text()` expression SQLAlchemy cannot infer the table,
+so `idx.table is None`, the index never joins `Summary.__table__.indexes`, and
+it is created on no dialect at all. Verified empirically. It is also
+undetectable by the tests below, because Postgres returns correct ranked
+results from a sequential scan.
+
+Use a DDL event instead, which attaches explicitly and is Postgres-only.
 Directly below the `Summary` class definition:
 
 ```python
 # Postgres full-text index over the same four columns SQLite indexes with
 # FTS5. A GIN index on a computed tsvector: the text is already stored, so
 # this adds only the index, not a second copy of the content.
-Index(
-    "ix_summaries_search_vector",
-    sa.text(
-        "to_tsvector('english', "
+#
+# Declared as a DDL event rather than an Index() object for two reasons: an
+# Index() built from a bare text() expression has no table association and is
+# silently never created, and this statement is not valid on SQLite, which
+# still has to run create_all() for every test in the suite.
+event.listen(
+    Summary.__table__,
+    "after_create",
+    DDL(
+        "CREATE INDEX IF NOT EXISTS ix_summaries_search_vector "
+        "ON summaries USING gin (to_tsvector('english', "
         "coalesce(summary_text,'') || ' ' || coalesce(key_topics,'') || ' ' || "
-        "coalesce(investment_actions,'') || ' ' || coalesce(decisions,''))"
-    ),
-    postgresql_using="gin",
+        "coalesce(investment_actions,'') || ' ' || coalesce(decisions,'')))"
+    ).execute_if(dialect="postgresql"),
 )
 ```
 
-Add `import sqlalchemy as sa` to the imports if absent.
+Add `DDL` and `event` to the existing `from sqlalchemy import (...)` block.
 
 - [ ] **Step 4: Add the Postgres search branch**
 
@@ -702,7 +734,7 @@ In `count_search_summaries`, after its own empty-query guard:
 Run: `LLM_MODE=mock INSIGHTS_MODE=mock python -m pytest tests/ -q`
 Expected locally: 288 passed, 8 skipped — SQLite behaviour must be unchanged,
 including all 14 tests in `tests/unit/test_search_fts.py`.
-Push; expect the CI `postgres` job green on all 5 new tests.
+Push; expect the CI `postgres` job green on all 6 new tests.
 
 - [ ] **Step 7: Commit**
 
@@ -843,6 +875,7 @@ git commit -m "Raise the storage cap: what we index is not what we send to Claud
 | The next insert does not collide | `test_inserting_after_migration_does_not_collide` (**Postgres CI**) |
 | Row counts and twin hashes match | `test_verify_reports_a_clean_migration` + its negative case |
 | Search is ranked, not substring | `test_search_handles_a_phrase_and_an_exclusion` (**Postgres CI**) |
+| The GIN index exists, not just the query | `test_the_gin_index_actually_exists` (**Postgres CI**) |
 | SQLite search is unchanged | `tests/unit/test_search_fts.py`, 14 tests |
 | Storage is no longer capped at prompt size | `tests/test_extraction_limits.py` |
 | The prompt is still bounded at 50k | `test_smart_truncate_still_bounds_a_large_document` |
