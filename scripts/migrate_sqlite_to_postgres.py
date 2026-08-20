@@ -55,10 +55,46 @@ def migrate(sqlite_path: str, pg_url: str, batch_size: int = 500) -> dict[str, i
                         dconn.execute(sa.insert(table), rows)
                     total += len(rows)
             copied[table.name] = total
+        reset_sequences(pg_url)
         return copied
     finally:
         src.dispose()
         dst.dispose()
+
+
+def reset_sequences(pg_url: str) -> dict[str, int]:
+    """Advance each identity sequence past the largest id just inserted.
+
+    Inserting explicit ids does not move the sequence, so the next natural
+    insert would collide on id 1. setval with a floor of 1 keeps empty tables
+    legal — a sequence may not be set below its minimum.
+    """
+    engine = sa.create_engine(pg_url, future=True)
+    out: dict[str, int] = {}
+    try:
+        with engine.begin() as conn:
+            for table in database.Base.metadata.sorted_tables:
+                pks = list(table.primary_key.columns)
+                if len(pks) != 1:
+                    continue
+                col = pks[0]
+                if not isinstance(col.type, sa.Integer):
+                    continue
+                seq = conn.execute(sa.text(
+                    "SELECT pg_get_serial_sequence(:t, :c)"),
+                    {"t": table.name, "c": col.name}).scalar()
+                if seq is None:          # not an identity/serial column
+                    continue
+                high = conn.execute(sa.text(
+                    f'SELECT COALESCE(MAX("{col.name}"), 0) FROM "{table.name}"'
+                )).scalar() or 0
+                target = max(high, 1)
+                conn.execute(sa.text("SELECT setval(:s, :v, :called)"),
+                             {"s": seq, "v": target, "called": high > 0})
+                out[table.name] = target
+        return out
+    finally:
+        engine.dispose()
 
 
 def main(argv: list[str]) -> int:
