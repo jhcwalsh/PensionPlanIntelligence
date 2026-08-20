@@ -12,7 +12,8 @@ from typing import Optional
 
 from sqlalchemy import (
     Column, Integer, String, Text, Float, DateTime, Boolean, Date, JSON,
-    LargeBinary, ForeignKey, create_engine, text, UniqueConstraint, Index
+    LargeBinary, ForeignKey, create_engine, text, UniqueConstraint, Index,
+    DDL, event
 )
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import DeclarativeBase, Session, relationship, sessionmaker
@@ -602,6 +603,26 @@ class Summary(Base):
     text_hash = Column(String)          # MD5 of extracted_text — skip re-summarizing duplicates
 
     document = relationship("Document", back_populates="summary")
+
+
+# Postgres full-text index over the same four columns SQLite indexes with
+# FTS5. A GIN index on a computed tsvector: the text is already stored, so
+# this adds only the index, not a second copy of the content.
+#
+# Declared as a DDL event rather than an Index() object for two reasons: an
+# Index() built from a bare text() expression has no table association and is
+# silently never created, and this statement is not valid on SQLite, which
+# still has to run create_all() for every test in the suite.
+event.listen(
+    Summary.__table__,
+    "after_create",
+    DDL(
+        "CREATE INDEX IF NOT EXISTS ix_summaries_search_vector "
+        "ON summaries USING gin (to_tsvector('english', "
+        "coalesce(summary_text,'') || ' ' || coalesce(key_topics,'') || ' ' || "
+        "coalesce(investment_actions,'') || ' ' || coalesce(decisions,'')))"
+    ).execute_if(dialect="postgresql"),
+)
 
 
 # ---------------------------------------------------------------------------
@@ -1335,6 +1356,40 @@ def _ilike_search_query(session: Session, query: str, plan_id: Optional[str]):
     return q
 
 
+_PG_TSVECTOR = (
+    "to_tsvector('english', "
+    "coalesce(s.summary_text,'') || ' ' || coalesce(s.key_topics,'') || ' ' || "
+    "coalesce(s.investment_actions,'') || ' ' || coalesce(s.decisions,''))"
+)
+
+
+def _pg_search_ids(session: Session, query: str, plan_id: Optional[str],
+                   limit: Optional[int]) -> Optional[list[int]]:
+    """Ranked summary ids on Postgres, or None if this is not Postgres.
+
+    websearch_to_tsquery accepts quoted phrases and -exclusions without
+    teaching anyone a query syntax, and never raises on malformed input —
+    unlike to_tsquery, which is why it is used here.
+    """
+    if session.get_bind().dialect.name != "postgresql":
+        return None
+    sql = (
+        f"SELECT s.id FROM summaries s "
+        f"JOIN documents d ON d.id = s.document_id "
+        f"WHERE {_PG_TSVECTOR} @@ websearch_to_tsquery('english', :q) "
+    )
+    params = {"q": query}
+    if plan_id:
+        sql += "AND d.plan_id = :pid "
+        params["pid"] = plan_id
+    sql += (f"ORDER BY ts_rank_cd({_PG_TSVECTOR}, "
+            f"websearch_to_tsquery('english', :q)) DESC, d.meeting_date DESC")
+    if limit is not None:
+        sql += " LIMIT :lim"
+        params["lim"] = limit
+    return [r[0] for r in session.execute(text(sql), params).fetchall()]
+
+
 def search_summaries(session: Session, query: str, plan_id: str = None,
                      limit: int = 20) -> list[tuple[Document, Summary]]:
     """Ranked full-text search across summary_text, key_topics,
@@ -1343,9 +1398,23 @@ def search_summaries(session: Session, query: str, plan_id: str = None,
     Uses SQLite FTS5 with bm25 ranking when available; falls back to the
     legacy ILIKE substring scan if FTS5 is missing or the query reduces to
     nothing after sanitisation. Tied bm25 scores break by meeting_date desc.
+    On Postgres, uses a tsvector/GIN ranked search instead.
     """
     if not query or not query.strip():
         return []
+    pg_ids = _pg_search_ids(session, query, plan_id, limit)
+    if pg_ids is not None:
+        if not pg_ids:
+            return []
+        order = {sid: i for i, sid in enumerate(pg_ids)}
+        pairs = (
+            session.query(Document, Summary)
+            .join(Summary, Document.id == Summary.document_id)
+            .filter(Summary.id.in_(pg_ids))
+            .all()
+        )
+        pairs.sort(key=lambda p: order[p[1].id])
+        return pairs
     match = _build_fts_match(query)
     if match is not None and _fts_dialect_supported(session.get_bind()):
         sql = (
@@ -1398,6 +1467,9 @@ def count_search_summaries(session: Session, query: str,
     """
     if not query or not query.strip():
         return 0
+    pg_ids = _pg_search_ids(session, query, plan_id, limit=None)
+    if pg_ids is not None:
+        return len(pg_ids)
     match = _build_fts_match(query)
     if match is not None and _fts_dialect_supported(session.get_bind()):
         sql = (
