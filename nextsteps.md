@@ -1,8 +1,9 @@
 # Next steps
 
-**As of 2026-08-16.** Working doc for the low-maintenance app migration.
-Design: `docs/superpowers/specs/2026-08-16-low-maintenance-app-design.md`.
-Work so far is on branch `fix/cafr-actuarial-extraction`.
+**As of 2026-08-19.** Working doc for the low-maintenance app migration.
+Design: `docs/superpowers/specs/2026-08-16-low-maintenance-app-design.md`,
+plus `docs/superpowers/specs/2026-08-19-portal-readiness-design.md` (portal).
+Work so far is on branch `fix/cafr-actuarial-extraction`, **not yet pushed**.
 
 ## Where things stand
 
@@ -21,26 +22,44 @@ Task Scheduler jobs → one, no approval clicks, one daily email instead of two,
 and `app.py` holds zero queries. Nothing routine needs attention and no machine
 of James's is in the path.
 
-**The forcing function is still live.** `db/pension.db` is 64 MB against
-GitHub's hard 100 MB limit, committed daily. Step 5 is where that clears.
+**The forcing function is still live, and moved.** `db/pension.db` is now
+**68 MB** against GitHub's hard 100 MB limit (up from 64 MB after merging 18
+days of master on 2026-08-19), committed daily. Step 5 is where that clears.
 
 ---
 
-## Before step 3 — two prerequisites
+## Before step 3 — one prerequisite left
 
-### 1. The datetime audit (do this first)
+### 1. The datetime audit — **DONE 2026-08-19**
 
-The sharpest migration hazard, and the only part of step 3 that can be done
-and verified while still safely on SQLite.
+Findings and plan: `docs/superpowers/plans/2026-08-19-datetime-audit.md`.
 
-SQLite silently discards timezone information — that is why the naive/aware
-`extracted_at` mixture found on 2026-08-15 was harmless in practice. **Postgres
-will not discard it.** The latent bug becomes real at migration.
+It overturned the premise. There was **no naive/aware mixture**: all 45
+populated columns were 100% naive, because SQLite strips the offset on write —
+and ignores `DateTime(timezone=True)` entirely, so the suite could never have
+caught this. Scope was 81 call sites across 39 files and all 58 columns, not
+"three known sites". No writer ever used local time, so the backfill could
+stamp all 40,820 values as UTC wholesale.
 
-Known naive `utcnow()` call sites: `twin_builder.py`, `insights/daily.py`,
-`scripts/build_manager_roster.py`. The audit should sweep *every* datetime
-write, not just those three — `database._utcnow` is the tz-aware helper to
-standardise on.
+**Decided: `TIMESTAMPTZ`.** Landed on the branch:
+
+| Task | Status |
+|---|---|
+| 1. Ratchet test freezing the 39 offender files | Done — `9c67390` |
+| 2. Single `database.utcnow()`; 3 shadowing `_utcnow` deleted | Done — `2144b73` |
+| 3. Postgres CI job (service container) | Done — `a9f7b7c` |
+| 4. All 58 columns `timezone=True` | Done — `fd621da` |
+| 5. Convert the 81 call sites | **Not started** |
+| 6. One-shot UTC backfill script | Done — `e27ef41` |
+| 7. Correct the docs | Done |
+
+Task 5 is the remaining one, and the plan says not to split it: ~20 cutoff
+sites compare against DB reads, so a half-converted codebase raises TypeError.
+It is also the commit most likely to break a running pipeline, so it should
+land after CI has gone green on Task 4.
+
+**Nothing here is verified yet.** SQLite cannot test any of it; the Postgres
+job only runs on a push, which has not happened.
 
 ### 2. Two decisions needed from James
 
@@ -99,16 +118,28 @@ any of the above and doable at any time:
 
 ## Loose ends
 
-- **`db/pension.db` is uncommitted.** Carries the 3 actuarial rows from the
-  2026-08-16 live verification on top of a pre-existing delta. Deliberately
-  untouched — needs a decision.
+- **`db/pension.db` is uncommitted.** After the 2026-08-19 merge it holds
+  master's 18 days of pipeline data plus the local delta re-applied losslessly
+  (3 `cafr_actuarial` rows, 150 `ips_refresh_log` rows; the tables were
+  disjoint). Verified: 36 of 38 tables byte-identical to remote. Still
+  uncommitted by choice — needs a decision. `stash@{0}` holds the pre-merge
+  state.
+- **The branch is not pushed.** 31 commits ahead of `origin/master`, which
+  moves ~2 commits/day. Nothing in the datetime or search work is verified
+  until the Postgres CI job runs, and that needs a push.
 - **Mock mode writing to committed data has happened twice** —
   `data/asset_class_mappings.json` and `notes/`. Both fixed with the same
   frozen-path guard. Worth treating as a repo-wide hazard and searching for a
   third instance rather than waiting for it to appear.
 - **`twin_builder.build_rfp_facets` dedupes on raw manager names** — the same
   weakness fixed in the roster, deliberately left because fixing it would
-  rename displayed relationships across every twin.
+  rename displayed relationships across every twin. Lower stakes since
+  2026-08-19: the RFP-derived relationships are no longer displayed.
+- **The 150k extraction cap truncates 444 documents (10.5%)** —
+  `extractor.py:32`. Harmless for summarisation, which is what it was for, but
+  it caps full-text search at roughly the first 35 pages of the largest board
+  packets. Fixing it retroactively needs R2, since the PDFs are not kept. See
+  the portal spec §2.3.
 - **`or_pers` reads GASB-basis figures** from the Financial Section because its
   Actuarial Section is scanned images. Labelled in `notes`, but OCR is the real
   fix. Same applies to any other image-only CAFR.
@@ -125,6 +156,13 @@ any of the above and doable at any time:
 
 ## Recommendation
 
-Do **the datetime audit** next. It is small, it is a hard prerequisite for
-step 3, and it is the only piece that can be completed and proven correct
-while still on SQLite — everything after it carries migration risk.
+**Push the branch.** Everything landed since 2026-08-19 — 58 timezone-aware
+columns, the search dialect fix, the backfill script — is unverified by
+anything stronger than a SQLite suite that is structurally blind to all of it.
+The Postgres CI job exists and has never run. One push converts a pile of
+plausible work into evidence, and stops the branch drifting further from a
+master that moves twice a day.
+
+Then **datetime Task 5** (the 81 call sites), which the plan deliberately keeps
+as one commit, and which is the change most likely to break a running pipeline
+— so it wants a green CI behind it.

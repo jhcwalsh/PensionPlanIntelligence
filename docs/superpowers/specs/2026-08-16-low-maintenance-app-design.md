@@ -278,10 +278,36 @@ write, not just the two extractors already fixed. Known remaining naive
 `utcnow()` call sites include `twin_builder.py`, `insights/daily.py` and
 `scripts/build_manager_roster.py`.
 
+**CORRECTED 2026-08-19 — there was no mixture, and the scope was ~27× larger.**
+The audit (`docs/superpowers/plans/2026-08-19-datetime-audit.md`) found **no
+column holding both naive and aware values**. All 45 populated `DateTime`
+columns were 100% naive, *including* the 17 whose default is the timezone-aware
+`database._utcnow` — because SQLAlchemy's SQLite `DATETIME` format has no
+timezone field and strips the offset on write.
+
+Two consequences the paragraph above gets wrong:
+
+- **SQLite ignores `DateTime(timezone=True)` entirely** — verified empirically. Every test in the suite runs on SQLite, so *no test could distinguish a correct fix from a broken one*. This promotes §11's Postgres CI container from "most valuable addition" to a hard prerequisite; it was built first for that reason.
+- **"Three known call sites" was 81 sites across 39 files**, plus all 58 `DateTime` columns. Also found: four functions named `_utcnow` with two opposite meanings (`database`'s is aware; the three recordings modules' stripped the offset).
+
+One risk turned out not to exist: no writer has ever used local time, so every
+stored value was genuinely UTC and the backfill could stamp all 40,820 of them
+wholesale.
+
 **Other dialect risks:** `LENGTH()` over gzipped `BYTEA` measures compressed
 bytes (already true on SQLite, but worth re-checking any aggregate query);
 JSON-in-Text columns are unaffected; autoincrement id preservation must be
 explicit in the migration script.
+
+**CORRECTED 2026-08-19 — search is a fourth dialect risk, and the worst kind.**
+Full-text search is SQLite **FTS5**, which has no Postgres equivalent, and this
+spec never mentions it. Worse, it degraded *silently*: `_init_fts` and
+`search_summaries` each wrapped their failure in a bare `except Exception`
+written for "this SQLite build lacks FTS5", which would have swallowed "this is
+not SQLite" identically — `init_db()` succeeding on Neon while ranked search
+quietly became a substring scan. Fixed 2026-08-19 with explicit dialect
+detection. The replacement index is specified in
+`docs/superpowers/specs/2026-08-19-portal-readiness-design.md` §2.
 
 **Single point of failure moves, not disappears.** Today it is James's PC;
 afterwards it is Neon plus Render. Both are managed with backups, which is the

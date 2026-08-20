@@ -203,9 +203,20 @@ as a current one.
 
 **Decision: hide the RFP-derived facets** from the twin display until something
 refreshes them. The rows stay, because `build_manager_roster` still consumes
-them; only the user-visible `rfp_state` facet is suppressed. If consultant data
-is wanted later, the extraction code is recoverable from git history and
-un-hiding is one change.
+them. If consultant data is wanted later, the extraction code is recoverable
+from git history and un-hiding is one change.
+
+**CORRECTED during implementation (2026-08-19).** This section originally said
+"only the user-visible `rfp_state` facet is suppressed". That was wrong in both
+directions:
+
+- `governance_people` is **also** RFP-derived, and it is the facet carrying the consultant/actuary/custodian relationships that motivated this decision. Suppressing only `rfp_state` would have left the actual credibility risk on screen.
+- But `governance_people` is a **mixture**: `twin_builder` appends live `ips_relationship` and `actuary_relationship` entries to the same list, so hiding the whole facet would have discarded good, current data.
+
+Implemented as: the `rfp_state` expander removed outright, and
+`governance_people` **filtered** by relationship `basis` — `rfp_awarded` and
+`rfp_incumbent` withheld, everything else shown. A relationship with no `basis`
+is kept, since unknown provenance is not evidence of staleness.
 
 ## 6. What deliberately does not change
 

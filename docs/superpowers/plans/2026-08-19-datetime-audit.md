@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status (2026-08-19):** Tasks 1, 2, 3, 4, 6, 7 landed. **Task 5 remains** — and nothing is verified until the Postgres CI job runs, which needs a push.
+
 **Goal:** Make every datetime in the codebase timezone-aware UTC — in the schema, in the code, and in the existing data — so the SQLite→Postgres migration (step 3) cannot silently shift or crash on timestamps.
 
 **Architecture:** One source of truth for "now" (`database.utcnow()`), all 58 `DateTime` columns redeclared `DateTime(timezone=True)`, all 81 naive `datetime.utcnow()` call sites converted, and a one-shot backfill that stamps UTC onto the 45 populated columns. Enforced by a shrinking allowlist ("ratchet") test that runs on SQLite, and verified for real semantics by a new CI job against a Postgres service container.
@@ -195,7 +197,7 @@ mistake their absence for an oversight.
 - Consumes: nothing.
 - Produces: `KNOWN_OFFENDERS: set[str]` — later tasks delete entries from it. `_scan_offenders() -> dict[str, list[int]]`.
 
-- [ ] **Step 1: Write the test (it passes immediately — it encodes today's state)**
+- [x] **Step 1: Write the test (it passes immediately — it encodes today's state)**
 
 ```python
 """Datetime discipline: UTC-aware everywhere, enforced by a shrinking list.
@@ -267,12 +269,12 @@ def test_offender_list_has_no_stale_entries():
         "KNOWN_OFFENDERS: " + ", ".join(sorted(stale)))
 ```
 
-- [ ] **Step 2: Run it — both must pass, proving the list matches reality**
+- [x] **Step 2: Run it — both must pass, proving the list matches reality**
 
 Run: `LLM_MODE=mock INSIGHTS_MODE=mock python -m pytest tests/test_datetime_discipline.py -v`
 Expected: 2 passed. If `test_offender_list_has_no_stale_entries` fails, the list drifted — correct it to match the scan output.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/test_datetime_discipline.py
@@ -288,7 +290,7 @@ git commit -m "Freeze the naive-utcnow offender list as a shrinking ratchet"
 **Interfaces:**
 - Produces: `database.utcnow() -> datetime` (aware, UTC). `database._utcnow` retained as an alias so the 17 existing column defaults need no edit.
 
-- [ ] **Step 1: Write the failing test** (append to `tests/test_datetime_discipline.py`)
+- [x] **Step 1: Write the failing test** (append to `tests/test_datetime_discipline.py`)
 
 ```python
 def test_database_utcnow_is_public_and_aware():
@@ -315,12 +317,12 @@ def test_no_module_defines_its_own_utcnow():
         "Local _utcnow definitions shadow database.utcnow(): " + ", ".join(offenders))
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `LLM_MODE=mock INSIGHTS_MODE=mock python -m pytest tests/test_datetime_discipline.py -v`
 Expected: FAIL — `AttributeError: module 'database' has no attribute 'utcnow'`, and the second test lists 3 files.
 
-- [ ] **Step 3: Add the public name in `database.py`**
+- [x] **Step 3: Add the public name in `database.py`**
 
 Replace lines 66-68:
 
@@ -339,7 +341,7 @@ def utcnow() -> datetime:
 _utcnow = utcnow
 ```
 
-- [ ] **Step 4: Delete the 3 shadowing definitions and repoint their callers**
+- [x] **Step 4: Delete the 3 shadowing definitions and repoint their callers**
 
 In `refresh_recordings.py`, `notify_new_recordings.py`, `download_recordings.py`:
 delete the local `def _utcnow()` and add `from database import utcnow as _utcnow`
@@ -368,12 +370,12 @@ this raises `TypeError` immediately — on SQLite, today. It is the Finding 6(b)
 hazard in miniature. Both strippers are therefore converted in Task 5, in the
 same commit as the column-type change.
 
-- [ ] **Step 5: Run the full suite**
+- [x] **Step 5: Run the full suite**
 
 Run: `LLM_MODE=mock INSIGHTS_MODE=mock python -m pytest tests/ -q`
 Expected: 267 passed (263 baseline + 2 from Task 1 + 2 here). SQLite strips the offsets, so no behaviour changes yet.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add database.py refresh_recordings.py notify_new_recordings.py \
@@ -396,7 +398,7 @@ git commit -m "One source of truth for UTC now; delete the three shadowing _utcn
 existing suite is blind. Without this harness the rest of the plan is unverifiable.
 Docker is not installed locally, so these tests **skip** on a dev machine and run in CI.
 
-- [ ] **Step 1: Add the driver**
+- [x] **Step 1: Add the driver**
 
 Append to `requirements.txt`:
 
@@ -404,7 +406,7 @@ Append to `requirements.txt`:
 psycopg[binary]>=3.1
 ```
 
-- [ ] **Step 2: Write the fixture**
+- [x] **Step 2: Write the fixture**
 
 `tests/postgres/conftest.py`:
 
@@ -438,7 +440,7 @@ def pg_engine():
     engine.dispose()
 ```
 
-- [ ] **Step 3: Write the failing semantic tests**
+- [x] **Step 3: Write the failing semantic tests**
 
 `tests/postgres/test_tz_semantics.py`:
 
@@ -477,7 +479,7 @@ def test_aware_value_round_trips_with_its_offset(pg_engine):
     assert (database.utcnow() - read).total_seconds() >= 0
 ```
 
-- [ ] **Step 4: Add the CI job**
+- [x] **Step 4: Add the CI job**
 
 Append to `.github/workflows/test.yml` (a second job alongside the existing one):
 
@@ -507,13 +509,13 @@ Append to `.github/workflows/test.yml` (a second job alongside the existing one)
           TEST_POSTGRES_URL: postgresql+psycopg://postgres:postgres@localhost:5432/pension_test
 ```
 
-- [ ] **Step 5: Verify the skip works locally, then push for the real run**
+- [x] **Step 5: Verify the skip works locally, then push for the real run**
 
 Run: `LLM_MODE=mock INSIGHTS_MODE=mock python -m pytest tests/postgres -v`
 Expected locally: 2 skipped ("TEST_POSTGRES_URL not set").
 Expected in CI after push: `test_every_datetime_column_is_timestamptz` **FAILS**, listing all 58 columns. That failure is the point — it is Task 4's specification.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add tests/postgres .github/workflows/test.yml requirements.txt
@@ -528,7 +530,7 @@ git commit -m "Add a Postgres CI job — the only harness that can test timezone
 
 **Unblocked:** `TIMESTAMPTZ` confirmed 2026-08-19 (Part 2).
 
-- [ ] **Step 1: Write the failing schema test** (append to `tests/test_datetime_discipline.py`)
+- [x] **Step 1: Write the failing schema test** (append to `tests/test_datetime_discipline.py`)
 
 ```python
 def test_all_datetime_columns_declare_timezone():
@@ -563,12 +565,12 @@ def test_no_column_default_is_naive():
     assert not bad, "Columns defaulting to naive datetime.utcnow: " + ", ".join(bad)
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `LLM_MODE=mock INSIGHTS_MODE=mock python -m pytest tests/test_datetime_discipline.py -v`
 Expected: FAIL — "58 naive DateTime columns", and 4 naive defaults.
 
-- [ ] **Step 3: Rewrite the declarations**
+- [x] **Step 3: Rewrite the declarations**
 
 Mechanical and total — every `DateTime` in `database.py` becomes `DateTime(timezone=True)`:
 
@@ -587,12 +589,12 @@ Read the diff before committing — confirm 58 columns changed and the 4 default
 at `approval_tokens.created_at`, `subscribers.created_at`,
 `subscriber_tokens.created_at`, `weekly_runs.started_at` now read `default=utcnow`.
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `LLM_MODE=mock INSIGHTS_MODE=mock python -m pytest tests/ -q`
 Expected: 269 passed. SQLite still strips offsets, so nothing else moves.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add database.py tests/test_datetime_discipline.py
@@ -681,7 +683,7 @@ part of step 3's export, so the values arrive at Postgres already carrying
 `+00:00`. Idempotent: a value that already ends in an offset is skipped, so
 re-running is safe (same contract as `scripts/migrate_compress_extracted_text.py`).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 import sqlite3
@@ -710,12 +712,12 @@ def test_stamps_naive_values_and_is_idempotent(tmp_path):
     assert second["pipeline_runs.started_at"] == 0, "must be idempotent"
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `LLM_MODE=mock python -m pytest tests/test_backfill_utc_datetimes.py -v`
 Expected: FAIL — `ModuleNotFoundError: scripts.backfill_utc_datetimes`.
 
-- [ ] **Step 3: Write the script**
+- [x] **Step 3: Write the script**
 
 ```python
 """Stamp +00:00 onto every naive datetime value in the SQLite file.
@@ -770,12 +772,12 @@ if __name__ == "__main__":
             print(f"{count:>7}  {key}")
 ```
 
-- [ ] **Step 4: Run the test**
+- [x] **Step 4: Run the test**
 
 Run: `LLM_MODE=mock python -m pytest tests/test_backfill_utc_datetimes.py -v`
 Expected: PASS.
 
-- [ ] **Step 5: Dry-run against a COPY of the real DB — never the tracked file**
+- [x] **Step 5: Dry-run against a COPY of the real DB — never the tracked file**
 
 ```bash
 cp db/pension.db /tmp/backfill_check.db
@@ -785,7 +787,7 @@ python scripts/backfill_utc_datetimes.py /tmp/backfill_check.db
 Expected: 45 columns listed, ~35,000 rows total, `documents.downloaded_at` (4241)
 and `summaries.generated_at` (4203) at the top. Run it a second time: every count 0.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add scripts/backfill_utc_datetimes.py tests/test_backfill_utc_datetimes.py
@@ -797,19 +799,19 @@ git commit -m "Add the one-shot UTC backfill for existing rows"
 **Files:**
 - Modify: `nextsteps.md`, `docs/superpowers/specs/2026-08-16-low-maintenance-app-design.md`
 
-- [ ] **Step 1: Correct the spec's §10 premise**
+- [x] **Step 1: Correct the spec's §10 premise**
 
 Add a `CORRECTED` block in the house style, recording that there was no
 naive/aware data mixture — the data was uniformly naive because SQLite strips
 offsets even from `DateTime(timezone=True)` — and that this makes the Postgres CI
 container from §11 a prerequisite rather than an enhancement.
 
-- [ ] **Step 2: Update `nextsteps.md`**
+- [x] **Step 2: Update `nextsteps.md`**
 
 Mark the datetime audit done, correct "three known call sites" to 81 sites across
 39 files plus 58 columns, and record the `TIMESTAMPTZ` decision.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add nextsteps.md docs/superpowers/specs/2026-08-16-low-maintenance-app-design.md
