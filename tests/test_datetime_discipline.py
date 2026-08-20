@@ -68,3 +68,28 @@ def test_offender_list_has_no_stale_entries():
     assert not stale, (
         "These files no longer call datetime.utcnow() — delete them from "
         "KNOWN_OFFENDERS: " + ", ".join(sorted(stale)))
+
+
+def test_database_utcnow_is_public_and_aware():
+    """The single source of truth for "now" must be aware UTC."""
+    import database
+    assert database.utcnow().tzinfo is not None, "utcnow() must be aware"
+    assert database.utcnow().utcoffset().total_seconds() == 0, "must be UTC"
+    assert database._utcnow is database.utcnow, "_utcnow must alias utcnow"
+
+
+def test_no_module_defines_its_own_utcnow():
+    """Four functions named _utcnow with two opposite meanings caused this bug.
+
+    refresh_recordings/notify_new_recordings/download_recordings each defined a
+    _utcnow() that STRIPPED the offset, the opposite of database._utcnow.
+    """
+    offenders = [
+        path.relative_to(ROOT).as_posix()
+        for path in sorted(ROOT.rglob("*.py"))
+        if not any(p in SKIP_DIRS for p in path.relative_to(ROOT).parts)
+        and path.name != "database.py"
+        and "def _utcnow" in path.read_text(encoding="utf-8", errors="replace")
+    ]
+    assert not offenders, (
+        "Local _utcnow definitions shadow database.utcnow(): " + ", ".join(offenders))

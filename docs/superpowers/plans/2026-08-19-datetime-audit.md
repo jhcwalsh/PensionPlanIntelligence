@@ -371,7 +371,7 @@ same commit as the column-type change.
 - [ ] **Step 5: Run the full suite**
 
 Run: `LLM_MODE=mock INSIGHTS_MODE=mock python -m pytest tests/ -q`
-Expected: 265 passed (263 baseline + 2 new). SQLite strips the offsets, so no behaviour changes yet.
+Expected: 267 passed (263 baseline + 2 from Task 1 + 2 here). SQLite strips the offsets, so no behaviour changes yet.
 
 - [ ] **Step 6: Commit**
 
@@ -590,7 +590,7 @@ at `approval_tokens.created_at`, `subscribers.created_at`,
 - [ ] **Step 4: Run the tests**
 
 Run: `LLM_MODE=mock INSIGHTS_MODE=mock python -m pytest tests/ -q`
-Expected: 267 passed. SQLite still strips offsets, so nothing else moves.
+Expected: 269 passed. SQLite still strips offsets, so nothing else moves.
 
 - [ ] **Step 5: Commit**
 
@@ -646,7 +646,7 @@ KNOWN_OFFENDERS: set[str] = set()
 - [ ] **Step 3: Run the full suite**
 
 Run: `LLM_MODE=mock INSIGHTS_MODE=mock python -m pytest tests/ -q`
-Expected: 267 passed, and the DeprecationWarning count drops sharply (the 485 warnings at baseline are dominated by these calls).
+Expected: 269 passed, and the DeprecationWarning count drops sharply (the 485 warnings at baseline are dominated by these calls).
 
 - [ ] **Step 4: Smoke-test the two cadences that do the most datetime arithmetic**
 
@@ -827,4 +827,4 @@ git commit -m "Correct the spec against what the datetime audit found"
 | Columns are really `TIMESTAMPTZ` | `test_every_datetime_column_is_timestamptz` (**Postgres CI only**) |
 | Offsets survive a round trip | `test_aware_value_round_trips_with_its_offset` (**Postgres CI only**) |
 | Existing rows carry UTC | `test_stamps_naive_values_and_is_idempotent` + dry run on a DB copy |
-| Nothing regressed | Full suite, 267 expected; two live cadence smoke runs |
+| Nothing regressed | Full suite, 269 expected; two live cadence smoke runs |

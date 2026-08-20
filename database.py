@@ -63,9 +63,18 @@ class Base(DeclarativeBase):
     pass
 
 
-def _utcnow() -> datetime:
-    """Return current UTC time with timezone awareness."""
+def utcnow() -> datetime:
+    """Current UTC time, timezone-aware.
+
+    The single source of truth for "now" across the codebase. Never use
+    datetime.utcnow(): it is naive (so it cannot survive a Postgres
+    TIMESTAMPTZ round-trip) and deprecated since Python 3.12.
+    """
     return datetime.now(timezone.utc)
+
+
+# Retained so the 17 existing column defaults keep working unchanged.
+_utcnow = utcnow
 
 
 # ---------------------------------------------------------------------------

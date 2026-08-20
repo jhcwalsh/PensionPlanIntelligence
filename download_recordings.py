@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Iterable
 
 from database import MeetingRecording, SessionLocal, init_db
+from database import utcnow as _utcnow
 from video_storage import RECORDINGS_DIR, plan_dir, recording_path
 
 
@@ -76,10 +77,6 @@ DOWNLOADABLE_PLATFORMS = ("youtube", "vimeo")
 # Default download retry budget. yt-dlp does its own internal retries; we
 # count whole-row attempts so a row that consistently fails is shelved.
 MAX_ATTEMPTS = 3
-
-
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def _sha256_file(path: Path) -> str:
