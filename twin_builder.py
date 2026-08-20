@@ -33,6 +33,27 @@ console = Console(legacy_windows=False)
 TWIN_SCHEMA_VERSION = "twin_v1"
 KEEP_RECENT = 8
 GOVERNANCE_RFP_TYPES = ("Consultant", "Custodian", "Actuary", "Audit", "Legal")
+
+# Relationship `basis` values derived from rfp_records. That table has been
+# frozen since 2026-08-16 — the extraction code was deleted and nothing
+# refreshes the 189 rows — so these relationships never advance their
+# freshness date. A stale consultant or actuary reads as a current one, which
+# a freshness label does not adequately signal, so they are withheld from
+# display while remaining in the snapshot for scripts/build_manager_roster.
+# Re-showing them is one change here once something refreshes the source.
+# See docs/superpowers/specs/2026-08-19-portal-readiness-design.md §5.
+RFP_DERIVED_BASES = ("rfp_awarded", "rfp_incumbent")
+
+
+def visible_relationships(relationships):
+    """Governance relationships fit to display.
+
+    Drops the frozen RFP-derived entries and keeps the live ones (IPS-declared
+    and actuary-from-CAFR), which is why this filters rather than hiding the
+    whole governance_people facet — that facet is a mixture of both.
+    """
+    return [rel for rel in relationships
+            if rel.get("basis") not in RFP_DERIVED_BASES]
 MANAGER_MAPPINGS_PATH = Path(__file__).parent / "data" / "manager_mappings.json"
 ASSET_CLASS_MAPPINGS_PATH = Path(__file__).parent / "data" / "asset_class_mappings.json"
 

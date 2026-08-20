@@ -27,6 +27,7 @@ from database import (
     init_db,
     search_summaries,
 )
+from twin_builder import visible_relationships
 from video_storage import RECORDINGS_DIR, recording_path
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
@@ -2163,19 +2164,16 @@ def page_plan_twin(plan_id: str) -> None:
                 line += f" ([doc](?doc={item['doc_id']}))"
             st.markdown(line)
 
-    with st.expander("RFP / search state", expanded=False):
-        recs = f["rfp_state"]["records"]
-        if recs:
-            st.dataframe(pd.DataFrame(recs), use_container_width=True, hide_index=True)
-        else:
-            st.info("No RFP records for this plan.")
+    # The "RFP / search state" expander was removed on 2026-08-19: rfp_records
+    # is frozen, so every record shown was stale with no way to tell. The rows
+    # remain in the snapshot and the table.
 
     with st.expander("Governance & relationships", expanded=False):
-        rels = f["governance_people"]["relationships"]
+        rels = visible_relationships(f["governance_people"]["relationships"])
         if rels:
             st.dataframe(pd.DataFrame(rels), use_container_width=True, hide_index=True)
         else:
-            st.info("No relationships derived yet.")
+            st.info("No current relationships derived yet.")
 
     with st.expander("Funding & actuarial", expanded=True):
         fund = f["funding_actuarial"]
