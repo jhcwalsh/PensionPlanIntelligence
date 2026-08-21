@@ -36,7 +36,32 @@ def test_every_extraction_path_uses_the_storage_cap():
         "truncate to the storage cap")
 
 
-def test_smart_truncate_still_bounds_a_large_document():
-    """The prompt stays bounded even though storage no longer is."""
-    huge = "investment " * 200_000          # ~2.2M chars
-    assert len(summarizer.smart_truncate(huge)) <= summarizer.SMART_TRUNCATE_TARGET
+def test_smart_truncate_bounds_a_large_document_with_real_keyword_hits():
+    """The prompt stays bounded even though storage no longer is.
+
+    The input must contain words INVESTMENT_SIGNAL actually matches, or
+    hit_positions is empty, middle_chunks is empty, and smart_truncate
+    degenerates to head+tail — passing without ever exercising the
+    multi-chunk assembly this is meant to bound.
+
+    The bound is not exact: chunks are joined with a 9-char "\\n\\n[...]\\n\\n"
+    separator and two more wrap the middle, none counted against
+    middle_budget (summarizer.py:143-144). Allow for that overhead rather
+    than asserting a limit the function was never written to hold.
+    """
+    # "portfolio", "manager", "allocation" and "benchmark" are all in
+    # INVESTMENT_SIGNAL, so this genuinely populates middle_chunks.
+    unit = "the portfolio manager reviewed allocation against benchmark. "
+    huge = unit * 40_000                       # ~2.3M chars, well past the new cap
+    assert len(huge) > extractor.MAX_STORED_CHARS / 2
+
+    out = summarizer.smart_truncate(huge)
+
+    # Prove the middle path actually ran, rather than head+tail only.
+    assert "[...]" in out
+    assert len(out) > summarizer.HEAD_CHARS + summarizer.TAIL_CHARS, \
+        "degenerated to head+tail — the keyword path did not run"
+
+    # Bounded, allowing the uncounted separator overhead.
+    slack = 1_000
+    assert len(out) <= summarizer.SMART_TRUNCATE_TARGET + slack, len(out)
