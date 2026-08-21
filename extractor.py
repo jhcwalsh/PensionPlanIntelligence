@@ -30,8 +30,14 @@ from database import (
 
 console = Console(legacy_windows=False)
 
-# Max characters to store (Claude's context window is large but we want to be economical)
-MAX_TEXT_CHARS = 150_000
+# What we KEEP and index, which has no per-token cost. This is deliberately
+# not the prompt limit: summarizer.smart_truncate caps what Claude sees at
+# SMART_TRUNCATE_TARGET (50k chars) regardless of how much is stored. Capping
+# storage at the old 150k truncated 444 documents — 10.5% of the corpus, and
+# the largest board packets — which would have capped full-text search at
+# roughly their first 35 pages.
+# See docs/superpowers/specs/2026-08-19-portal-readiness-design.md §2.3.
+MAX_STORED_CHARS = 2_000_000
 
 # Cap pages sent to vision OCR to bound cost on accidental 500-page agendas.
 # A typical board pack is 5–60 pages; 100 covers the long tail.
@@ -85,7 +91,7 @@ def extract_pdf_pdfplumber(path: str) -> tuple[str, int]:
                 if text.strip():
                     pages_text.append(f"[Page {i + 1}]\n{text}")
         full_text = "\n\n".join(pages_text)
-        return full_text[:MAX_TEXT_CHARS], page_count
+        return full_text[:MAX_STORED_CHARS], page_count
     except Exception as e:
         console.print(f"  [yellow]pdfplumber failed: {e}, trying pymupdf...[/yellow]")
         return "", 0
@@ -103,7 +109,7 @@ def extract_pdf_pymupdf(path: str) -> tuple[str, int]:
             if text.strip():
                 pages_text.append(f"[Page {i + 1}]\n{text}")
         full_text = "\n\n".join(pages_text)
-        return full_text[:MAX_TEXT_CHARS], page_count
+        return full_text[:MAX_STORED_CHARS], page_count
     except Exception as e:
         console.print(f"  [red]pymupdf also failed: {e}[/red]")
         return "", 0
@@ -201,7 +207,7 @@ def extract_pdf_ocr(path: str) -> tuple[str, int, OcrInfo]:
             if page_text.strip():
                 pages_text.append(f"[Page {i + 1}]\n{page_text}")
         full_text = "\n\n".join(pages_text)
-        return full_text[:MAX_TEXT_CHARS], page_count, OcrInfo(pages_ocred=pages_attempted)
+        return full_text[:MAX_STORED_CHARS], page_count, OcrInfo(pages_ocred=pages_attempted)
     except Exception as e:
         console.print(f"  [red]Vision OCR failed: {e}[/red]")
         return "", 0, OcrInfo()
@@ -246,7 +252,7 @@ def extract_docx(path: str) -> tuple[str, int]:
                     paragraphs.append(row_text)
 
         full_text = "\n".join(paragraphs)
-        return full_text[:MAX_TEXT_CHARS], 1  # DOCX doesn't have "pages" in the same way
+        return full_text[:MAX_STORED_CHARS], 1  # DOCX doesn't have "pages" in the same way
     except Exception as e:
         console.print(f"  [red]DOCX extraction failed: {e}[/red]")
         return "", 0

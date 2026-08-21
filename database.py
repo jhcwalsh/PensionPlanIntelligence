@@ -12,7 +12,8 @@ from typing import Optional
 
 from sqlalchemy import (
     Column, Integer, String, Text, Float, DateTime, Boolean, Date, JSON,
-    LargeBinary, ForeignKey, create_engine, text, UniqueConstraint, Index
+    LargeBinary, ForeignKey, create_engine, text, UniqueConstraint, Index,
+    DDL, event
 )
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import DeclarativeBase, Session, relationship, sessionmaker
@@ -44,7 +45,10 @@ class GzippedText(TypeDecorator):
             return None
         if isinstance(value, str):
             return value
-        if isinstance(value, (bytes, bytearray)):
+        # psycopg2 hands BYTEA back as memoryview rather than bytes. Without
+        # it in this check the value falls through unconverted and callers
+        # silently receive a memoryview where they expect str.
+        if isinstance(value, (bytes, bytearray, memoryview)):
             b = bytes(value)
             if b.startswith(self.GZIP_MAGIC):
                 return gzip.decompress(b).decode("utf-8")
@@ -56,6 +60,23 @@ DB_PATH = os.environ.get(
     os.path.join(os.path.dirname(__file__), "db", "pension.db"),
 )
 DATABASE_URL = f"sqlite:///{DB_PATH}"
+
+
+def normalise_pg_url(url: str) -> str:
+    """Pin bare ``postgresql://`` URLs to the psycopg (v3) driver.
+
+    Managed providers (Neon among them) hand out ``postgresql://``, which
+    SQLAlchemy 2.0 maps to psycopg2 — a driver this project does not install.
+    Worse than the ImportError: if psycopg2 happens to be present it returns
+    BYTEA as ``memoryview``, a shape GzippedText only learned to handle
+    defensively. Normalising here keeps every tool on ``psycopg[binary]``.
+    """
+    if url.startswith("postgresql://"):
+        return "postgresql+psycopg://" + url[len("postgresql://"):]
+    if url.startswith("postgres://"):        # heroku-style legacy alias
+        return "postgresql+psycopg://" + url[len("postgres://"):]
+    return url
+
 
 engine = create_engine(DATABASE_URL, echo=False)
 SessionLocal = sessionmaker(bind=engine)
@@ -602,6 +623,45 @@ class Summary(Base):
     text_hash = Column(String)          # MD5 of extracted_text — skip re-summarizing duplicates
 
     document = relationship("Document", back_populates="summary")
+
+
+# Postgres full-text index over the same four columns SQLite indexes with
+# FTS5. A GIN index on a computed tsvector: the text is already stored, so
+# this adds only the index, not a second copy of the content.
+#
+# Declared as a DDL event rather than an Index() object for two reasons: an
+# Index() built from a bare text() expression has no table association and is
+# silently never created, and this statement is not valid on SQLite, which
+# still has to run create_all() for every test in the suite.
+_PG_SEARCH_INDEX_SQL = (
+    "CREATE INDEX IF NOT EXISTS ix_summaries_search_vector "
+    "ON summaries USING gin (to_tsvector('english', "
+    "coalesce(summary_text,'') || ' ' || coalesce(key_topics,'') || ' ' || "
+    "coalesce(investment_actions,'') || ' ' || coalesce(decisions,'')))"
+)
+
+event.listen(
+    Summary.__table__,
+    "after_create",
+    DDL(_PG_SEARCH_INDEX_SQL).execute_if(dialect="postgresql"),
+)
+
+
+def _init_pg_search_index(engine_) -> bool:
+    """Ensure the GIN search index exists on an already-created Postgres.
+
+    ``after_create`` only fires when create_all() actually creates
+    ``summaries``. Against a Postgres where the table already exists — the
+    normal case after the first deploy — the event never runs, so the index
+    would never appear. The statement is IF NOT EXISTS, so calling it from
+    init_db() every time is idempotent. Not attempted on SQLite, which has
+    neither GIN nor tsvector.
+    """
+    if engine_.dialect.name != "postgresql":
+        return False
+    with engine_.begin() as conn:
+        conn.exec_driver_sql(_PG_SEARCH_INDEX_SQL)
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -1179,6 +1239,7 @@ def init_db():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     Base.metadata.create_all(engine)
     _init_fts(engine)
+    _init_pg_search_index(engine)
 
 
 def get_session() -> Session:
@@ -1335,6 +1396,69 @@ def _ilike_search_query(session: Session, query: str, plan_id: Optional[str]):
     return q
 
 
+_PG_TSVECTOR = (
+    "to_tsvector('english', "
+    "coalesce(s.summary_text,'') || ' ' || coalesce(s.key_topics,'') || ' ' || "
+    "coalesce(s.investment_actions,'') || ' ' || coalesce(s.decisions,''))"
+)
+
+
+def _pg_search_ids(session: Session, query: str, plan_id: Optional[str],
+                   limit: Optional[int]) -> Optional[list[int]]:
+    """Ranked summary ids on Postgres, or None if this is not Postgres.
+
+    websearch_to_tsquery accepts quoted phrases and -exclusions without
+    teaching anyone a query syntax, and never raises on malformed input —
+    unlike to_tsquery, which is why it is used here.
+    """
+    if session.get_bind().dialect.name != "postgresql":
+        return None
+    sql = (
+        f"SELECT s.id FROM summaries s "
+        f"JOIN documents d ON d.id = s.document_id "
+        f"WHERE {_PG_TSVECTOR} @@ websearch_to_tsquery('english', :q) "
+    )
+    params = {"q": query}
+    if plan_id:
+        sql += "AND d.plan_id = :pid "
+        params["pid"] = plan_id
+    # NULLS LAST is explicit because the engines disagree by default:
+    # Postgres sorts NULLs first under DESC, SQLite sorts them last. Without
+    # it, dual-running the two databases produces visibly different orders
+    # for documents that have no meeting_date.
+    sql += (f"ORDER BY ts_rank_cd({_PG_TSVECTOR}, "
+            f"websearch_to_tsquery('english', :q)) DESC, "
+            f"d.meeting_date DESC NULLS LAST")
+    if limit is not None:
+        sql += " LIMIT :lim"
+        params["lim"] = limit
+    return [r[0] for r in session.execute(text(sql), params).fetchall()]
+
+
+def _pg_search_count(session: Session, query: str,
+                     plan_id: Optional[str]) -> Optional[int]:
+    """Number of matching summaries on Postgres, or None if not Postgres.
+
+    Deliberately not ``len(_pg_search_ids(...))``: that materialises every
+    matching id and pays ts_rank_cd on all of them just to discard the list.
+    A bare COUNT(*) with no ORDER BY and no LIMIT answers the same question.
+    Returning 0 (not None) for a Postgres query with no matches is what keeps
+    the caller from silently falling through to the ILIKE path.
+    """
+    if session.get_bind().dialect.name != "postgresql":
+        return None
+    sql = (
+        f"SELECT COUNT(*) FROM summaries s "
+        f"JOIN documents d ON d.id = s.document_id "
+        f"WHERE {_PG_TSVECTOR} @@ websearch_to_tsquery('english', :q) "
+    )
+    params = {"q": query}
+    if plan_id:
+        sql += "AND d.plan_id = :pid"
+        params["pid"] = plan_id
+    return session.execute(text(sql), params).scalar() or 0
+
+
 def search_summaries(session: Session, query: str, plan_id: str = None,
                      limit: int = 20) -> list[tuple[Document, Summary]]:
     """Ranked full-text search across summary_text, key_topics,
@@ -1343,9 +1467,23 @@ def search_summaries(session: Session, query: str, plan_id: str = None,
     Uses SQLite FTS5 with bm25 ranking when available; falls back to the
     legacy ILIKE substring scan if FTS5 is missing or the query reduces to
     nothing after sanitisation. Tied bm25 scores break by meeting_date desc.
+    On Postgres, uses a tsvector/GIN ranked search instead.
     """
     if not query or not query.strip():
         return []
+    pg_ids = _pg_search_ids(session, query, plan_id, limit)
+    if pg_ids is not None:
+        if not pg_ids:
+            return []
+        order = {sid: i for i, sid in enumerate(pg_ids)}
+        pairs = (
+            session.query(Document, Summary)
+            .join(Summary, Document.id == Summary.document_id)
+            .filter(Summary.id.in_(pg_ids))
+            .all()
+        )
+        pairs.sort(key=lambda p: order[p[1].id])
+        return pairs
     match = _build_fts_match(query)
     if match is not None and _fts_dialect_supported(session.get_bind()):
         sql = (
@@ -1398,6 +1536,9 @@ def count_search_summaries(session: Session, query: str,
     """
     if not query or not query.strip():
         return 0
+    pg_count = _pg_search_count(session, query, plan_id)
+    if pg_count is not None:
+        return pg_count
     match = _build_fts_match(query)
     if match is not None and _fts_dialect_supported(session.get_bind()):
         sql = (
