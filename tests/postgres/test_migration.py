@@ -84,11 +84,11 @@ def _seed_sqlite_with_tied_snapshots(path):
     return engine
 
 
-def test_migrate_preserves_ids_and_content(tmp_path, pg_engine):
+def test_migrate_preserves_ids_and_content(tmp_path, pg_engine, pg_url):
     src = tmp_path / "src.db"
     _seed_sqlite(src)
 
-    counts = migrate(str(src), str(pg_engine.url))
+    counts = migrate(str(src), pg_url)
 
     assert counts["plans"] == 1
     assert counts["documents"] == 2
@@ -102,7 +102,7 @@ def test_migrate_preserves_ids_and_content(tmp_path, pg_engine):
         assert doc.downloaded_at.tzinfo is not None, "datetimes must arrive aware"
 
 
-def test_migrate_skips_tables_absent_from_the_source(tmp_path, pg_engine):
+def test_migrate_skips_tables_absent_from_the_source(tmp_path, pg_engine, pg_url):
     """Older DB files legitimately lack tables added later.
 
     Creates ONLY plans and documents in the source, so migrate()'s skip
@@ -118,18 +118,18 @@ def test_migrate_skips_tables_absent_from_the_source(tmp_path, pg_engine):
         s.commit()
     engine.dispose()
 
-    counts = migrate(str(src), str(pg_engine.url))
+    counts = migrate(str(src), pg_url)
 
     assert counts["plans"] == 1
     assert "twin_snapshots" not in counts, \
         "a table absent from the source must be skipped, not reported"
 
 
-def test_inserting_after_migration_does_not_collide(tmp_path, pg_engine):
+def test_inserting_after_migration_does_not_collide(tmp_path, pg_engine, pg_url):
     """The failure this prevents: explicit ids leave the sequence at 1."""
     src = tmp_path / "src.db"
     _seed_sqlite(src)
-    migrate(str(src), str(pg_engine.url))
+    migrate(str(src), pg_url)
 
     with Session(pg_engine) as s:
         fresh = database.Document(
@@ -143,7 +143,7 @@ def test_inserting_after_migration_does_not_collide(tmp_path, pg_engine):
         assert fresh.id > 99, f"sequence not advanced past the copied max: {fresh.id}"
 
 
-def test_reset_sequences_leaves_empty_tables_starting_at_one(tmp_path, pg_engine):
+def test_reset_sequences_leaves_empty_tables_starting_at_one(tmp_path, pg_engine, pg_url):
     """A table empty in the source must still hand out id 1 to its first row.
 
     setval's floor of 1 is only legal alongside is_called=false; get that
@@ -152,7 +152,7 @@ def test_reset_sequences_leaves_empty_tables_starting_at_one(tmp_path, pg_engine
     """
     src = tmp_path / "src.db"
     _seed_sqlite(src)
-    migrate(str(src), str(pg_engine.url))
+    migrate(str(src), pg_url)
 
     with Session(pg_engine) as s:
         seq = s.execute(sa.text(
@@ -170,44 +170,44 @@ def test_reset_sequences_leaves_empty_tables_starting_at_one(tmp_path, pg_engine
             f"first insert into an empty table must get id 1, got {first.id}"
 
 
-def test_migrate_refuses_a_non_empty_destination(tmp_path, pg_engine):
+def test_migrate_refuses_a_non_empty_destination(tmp_path, pg_engine, pg_url):
     """Re-running over partial state would collide; it must stop instead."""
     src = tmp_path / "src.db"
     _seed_sqlite(src)
-    migrate(str(src), str(pg_engine.url))
+    migrate(str(src), pg_url)
 
     with pytest.raises(RuntimeError) as exc:
-        migrate(str(src), str(pg_engine.url))
+        migrate(str(src), pg_url)
     assert "documents" in str(exc.value)
     assert "replace" in str(exc.value)
 
 
-def test_migrate_replace_starts_from_a_clean_schema(tmp_path, pg_engine):
+def test_migrate_replace_starts_from_a_clean_schema(tmp_path, pg_engine, pg_url):
     src = tmp_path / "src.db"
     _seed_sqlite(src)
-    migrate(str(src), str(pg_engine.url))
+    migrate(str(src), pg_url)
 
-    counts = migrate(str(src), str(pg_engine.url), replace=True)
+    counts = migrate(str(src), pg_url, replace=True)
 
     assert counts["documents"] == 2
     with Session(pg_engine) as s:
         assert s.query(database.Document).count() == 2, "no duplicated rows"
 
 
-def test_verify_reports_a_clean_migration(tmp_path, pg_engine):
+def test_verify_reports_a_clean_migration(tmp_path, pg_engine, pg_url):
     from scripts.verify_migration import compare
     src = tmp_path / "src.db"
     _seed_sqlite(src)
-    migrate(str(src), str(pg_engine.url))
+    migrate(str(src), pg_url)
 
-    report = compare(str(src), str(pg_engine.url))
+    report = compare(str(src), pg_url)
     assert report["count_mismatches"] == [], report["count_mismatches"]
     assert report["twin_hash_mismatches"] == []
     assert report["content_mismatches"] == []
     assert report["row_counts"]["documents"] == {"sqlite": 2, "postgres": 2}
 
 
-def test_verify_detects_mangled_extracted_text(tmp_path, pg_engine):
+def test_verify_detects_mangled_extracted_text(tmp_path, pg_engine, pg_url):
     """Row counts and twin hashes both stay clean when only the text rots.
 
     This is the case the verifier existed to miss: same number of documents,
@@ -216,23 +216,23 @@ def test_verify_detects_mangled_extracted_text(tmp_path, pg_engine):
     from scripts.verify_migration import compare
     src = tmp_path / "src.db"
     _seed_sqlite(src)
-    migrate(str(src), str(pg_engine.url))
+    migrate(str(src), pg_url)
 
     with Session(pg_engine) as s:
         s.get(database.Document, 7).extracted_text = "corrupted on arrival"
         s.commit()
 
-    report = compare(str(src), str(pg_engine.url))
+    report = compare(str(src), pg_url)
     assert report["count_mismatches"] == []
     assert report["content_mismatches"] == [7]
 
 
-def test_verify_streams_content_in_chunks(tmp_path, pg_engine):
+def test_verify_streams_content_in_chunks(tmp_path, pg_engine, pg_url):
     """A chunk size smaller than the corpus must not change the verdict."""
     from scripts.verify_migration import _content_mismatches
     src = tmp_path / "src.db"
     _seed_sqlite(src)
-    migrate(str(src), str(pg_engine.url))
+    migrate(str(src), pg_url)
 
     src_engine = sa.create_engine(f"sqlite:///{src}")
     try:
@@ -241,56 +241,56 @@ def test_verify_streams_content_in_chunks(tmp_path, pg_engine):
         src_engine.dispose()
 
 
-def test_verify_detects_a_dropped_row(tmp_path, pg_engine):
+def test_verify_detects_a_dropped_row(tmp_path, pg_engine, pg_url):
     """A verifier that cannot fail is not a verifier."""
     from scripts.verify_migration import compare
     src = tmp_path / "src.db"
     _seed_sqlite(src)
-    migrate(str(src), str(pg_engine.url))
+    migrate(str(src), pg_url)
 
     with Session(pg_engine) as s:
         s.delete(s.get(database.Document, 99))
         s.commit()
 
-    report = compare(str(src), str(pg_engine.url))
+    report = compare(str(src), pg_url)
     assert "documents" in report["count_mismatches"]
 
 
-def test_verify_matches_twin_hashes_across_multiple_plans(tmp_path, pg_engine):
+def test_verify_matches_twin_hashes_across_multiple_plans(tmp_path, pg_engine, pg_url):
     """The happy path, but with twin_snapshots rows actually present."""
     from scripts.verify_migration import compare
     src = tmp_path / "src.db"
     _seed_sqlite_with_twins(src)
-    migrate(str(src), str(pg_engine.url))
+    migrate(str(src), pg_url)
 
-    report = compare(str(src), str(pg_engine.url))
+    report = compare(str(src), pg_url)
     assert report["twin_hash_mismatches"] == []
 
 
-def test_verify_detects_a_changed_twin_hash(tmp_path, pg_engine):
+def test_verify_detects_a_changed_twin_hash(tmp_path, pg_engine, pg_url):
     """The test that proves the twin-hash comparison can actually fail."""
     from scripts.verify_migration import compare
     src = tmp_path / "src.db"
     _seed_sqlite_with_twins(src)
-    migrate(str(src), str(pg_engine.url))
+    migrate(str(src), pg_url)
 
     with Session(pg_engine) as s:
         snap = s.get(database.TwinSnapshot, 2)  # calpers' latest snapshot
         snap.facets_hash = "corrupted-hash"
         s.commit()
 
-    report = compare(str(src), str(pg_engine.url))
+    report = compare(str(src), pg_url)
     assert report["twin_hash_mismatches"] == ["calpers"]
 
 
-def test_verify_breaks_built_at_ties_by_id_consistently(tmp_path, pg_engine):
+def test_verify_breaks_built_at_ties_by_id_consistently(tmp_path, pg_engine, pg_url):
     """Two snapshots sharing built_at must resolve to the same row on both sides."""
     from scripts.verify_migration import compare, _twin_hashes
     src = tmp_path / "src.db"
     _seed_sqlite_with_tied_snapshots(src)
-    migrate(str(src), str(pg_engine.url))
+    migrate(str(src), pg_url)
 
-    report = compare(str(src), str(pg_engine.url))
+    report = compare(str(src), pg_url)
     assert report["twin_hash_mismatches"] == []
 
     src_engine = sa.create_engine(f"sqlite:///{src}")

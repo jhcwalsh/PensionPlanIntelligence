@@ -44,3 +44,22 @@ def pg_engine():
     yield engine
     database.Base.metadata.drop_all(engine)
     engine.dispose()
+
+
+@pytest.fixture()
+def pg_url(pg_engine):
+    """The connection URL WITH its password, for code that opens its own engine.
+
+    `str(engine.url)` masks the password as `***` — SQLAlchemy redacts it so
+    URLs are safe to log. Passing that string to create_engine authenticates
+    with the literal password "***", which a real Postgres rejects:
+
+        FATAL: password authentication failed for user "postgres"
+
+    Locally this is invisible, because these tests skip. It only ever fails
+    against a live server, which is why it survived every review and was
+    caught by the first CI run.
+
+    Depends on pg_engine so the schema is created and torn down as usual.
+    """
+    return pg_engine.url.render_as_string(hide_password=False)
