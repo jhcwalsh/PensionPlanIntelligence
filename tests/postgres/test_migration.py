@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+import pytest
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
@@ -135,18 +136,62 @@ def test_inserting_after_migration_does_not_collide(tmp_path, pg_engine):
             plan_id="calpers", url="https://x/c.pdf", filename="c.pdf",
             doc_type="minutes", extraction_status="pending")
         s.add(fresh)
-        s.commit()                      # would raise UniqueViolation before
+        # Without reset_sequences this does not raise: the sequence is still
+        # at 1 and ids 1..6 are unoccupied, so the insert quietly succeeds and
+        # lands on id 1 — the assert below is what catches it.
+        s.commit()
         assert fresh.id > 99, f"sequence not advanced past the copied max: {fresh.id}"
 
 
-def test_reset_sequences_is_safe_on_empty_tables(tmp_path, pg_engine):
-    """A table with no rows must not have its sequence set to 0."""
-    from scripts.migrate_sqlite_to_postgres import reset_sequences
+def test_reset_sequences_leaves_empty_tables_starting_at_one(tmp_path, pg_engine):
+    """A table empty in the source must still hand out id 1 to its first row.
+
+    setval's floor of 1 is only legal alongside is_called=false; get that
+    wrong and either the setval errors or the first insert skips to id 2.
+    _seed_sqlite creates no meetings, so 'meetings' is the empty table here.
+    """
     src = tmp_path / "src.db"
     _seed_sqlite(src)
     migrate(str(src), str(pg_engine.url))
-    result = reset_sequences(str(pg_engine.url))
-    assert all(v >= 1 for v in result.values()), result
+
+    with Session(pg_engine) as s:
+        seq = s.execute(sa.text(
+            "SELECT pg_get_serial_sequence('meetings', 'id')")).scalar()
+        assert seq, "meetings.id must be backed by a sequence"
+        is_called = s.execute(
+            sa.text(f'SELECT is_called FROM "{seq.split(".")[-1]}"')).scalar()
+        assert is_called is False, \
+            "an empty table's sequence must not be marked called"
+
+        first = database.Meeting(plan_id="calpers", meeting_type="board")
+        s.add(first)
+        s.commit()
+        assert first.id == 1, \
+            f"first insert into an empty table must get id 1, got {first.id}"
+
+
+def test_migrate_refuses_a_non_empty_destination(tmp_path, pg_engine):
+    """Re-running over partial state would collide; it must stop instead."""
+    src = tmp_path / "src.db"
+    _seed_sqlite(src)
+    migrate(str(src), str(pg_engine.url))
+
+    with pytest.raises(RuntimeError) as exc:
+        migrate(str(src), str(pg_engine.url))
+    assert "documents" in str(exc.value)
+    assert "replace" in str(exc.value)
+
+
+def test_migrate_replace_starts_from_a_clean_schema(tmp_path, pg_engine):
+    src = tmp_path / "src.db"
+    _seed_sqlite(src)
+    migrate(str(src), str(pg_engine.url))
+
+    counts = migrate(str(src), str(pg_engine.url), replace=True)
+
+    assert counts["documents"] == 2
+    with Session(pg_engine) as s:
+        assert s.query(database.Document).count() == 2, "no duplicated rows"
 
 
 def test_verify_reports_a_clean_migration(tmp_path, pg_engine):
@@ -158,7 +203,42 @@ def test_verify_reports_a_clean_migration(tmp_path, pg_engine):
     report = compare(str(src), str(pg_engine.url))
     assert report["count_mismatches"] == [], report["count_mismatches"]
     assert report["twin_hash_mismatches"] == []
+    assert report["content_mismatches"] == []
     assert report["row_counts"]["documents"] == {"sqlite": 2, "postgres": 2}
+
+
+def test_verify_detects_mangled_extracted_text(tmp_path, pg_engine):
+    """Row counts and twin hashes both stay clean when only the text rots.
+
+    This is the case the verifier existed to miss: same number of documents,
+    same twins, one document's body silently different.
+    """
+    from scripts.verify_migration import compare
+    src = tmp_path / "src.db"
+    _seed_sqlite(src)
+    migrate(str(src), str(pg_engine.url))
+
+    with Session(pg_engine) as s:
+        s.get(database.Document, 7).extracted_text = "corrupted on arrival"
+        s.commit()
+
+    report = compare(str(src), str(pg_engine.url))
+    assert report["count_mismatches"] == []
+    assert report["content_mismatches"] == [7]
+
+
+def test_verify_streams_content_in_chunks(tmp_path, pg_engine):
+    """A chunk size smaller than the corpus must not change the verdict."""
+    from scripts.verify_migration import _content_mismatches
+    src = tmp_path / "src.db"
+    _seed_sqlite(src)
+    migrate(str(src), str(pg_engine.url))
+
+    src_engine = sa.create_engine(f"sqlite:///{src}")
+    try:
+        assert _content_mismatches(src_engine, pg_engine, chunk_size=1) == []
+    finally:
+        src_engine.dispose()
 
 
 def test_verify_detects_a_dropped_row(tmp_path, pg_engine):

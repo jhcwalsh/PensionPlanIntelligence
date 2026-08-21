@@ -63,5 +63,8 @@ def test_smart_truncate_bounds_a_large_document_with_real_keyword_hits():
         "degenerated to head+tail — the keyword path did not run"
 
     # Bounded, allowing the uncounted separator overhead.
-    slack = 1_000
+    # The real overage is 18 chars (observed output: 50,018). 100 leaves room
+    # for a separator tweak without letting a few-hundred-char regression in
+    # the truncation budget through unnoticed.
+    slack = 100
     assert len(out) <= summarizer.SMART_TRUNCATE_TARGET + slack, len(out)
