@@ -198,6 +198,7 @@ def main():
                         help="Print new meetings with agenda summaries and material links")
     parser.add_argument("--updates-days", type=int, default=14,
                         help="Lookback window for --updates (default: 14 days)")
+    args = parser.parse_args()
 
     if args.status:
         init_db()
