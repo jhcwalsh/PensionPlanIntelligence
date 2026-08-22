@@ -24,6 +24,7 @@ import pathlib
 import sys
 from decimal import Decimal
 
+import sqlalchemy as sa
 from sqlalchemy.orm import sessionmaker
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -58,7 +59,11 @@ def normalise(value):
         return round(float(value), FLOAT_PLACES)
     if isinstance(value, float):
         return round(value, FLOAT_PLACES)
-    if isinstance(value, (list, tuple)):
+    # sa.Row is Sequence, NOT a tuple subclass, so a plain (list, tuple) check
+    # misses every multi-column query result -- which is most of queries.py.
+    # Left unhandled they fall through to `return value` and compare by
+    # identity, so every such case reports a mismatch it cannot explain.
+    if isinstance(value, (list, tuple, sa.Row)):
         return [normalise(v) for v in value]
     if isinstance(value, set):
         return sorted(normalise(v) for v in value)
@@ -104,7 +109,8 @@ CASES = {
     "skipped_document_rows": {"args": ()},
     "cafr_coverage_summary": {"args": ()},
     "recent_cafr_refresh_runs": {"args": (20,)},
-    "cafr_refresh_rows": {"args": ([],)},        # resolved from the data below
+    "cafr_refresh_rows": {"args_fn": lambda s: (
+        queries.recent_cafr_refresh_runs(s, 3),)},
     "plan_labels": {"args": ()},
     "plans_by_id": {"args": ()},
     "video_sources": {"args": (None,)},
@@ -114,15 +120,26 @@ CASES = {
 }
 
 
-def _resolve_dynamic_args(session) -> None:
-    """Fill in arguments that only exist in the data.
+def case_args(case: dict, session):
+    """The arguments for one case, against one session.
 
-    cafr_refresh_rows selects by run timestamp, so a hardcoded value would
-    match nothing on either side and the case would compare two empty lists --
-    passing while testing nothing.
+    Most cases carry literal args. A few select by a value that only exists in
+    the data -- cafr_refresh_rows filters on run timestamps -- and a hardcoded
+    value there would match nothing on either side, so the case would compare
+    two empty lists and pass while testing nothing.
+
+    Such a case resolves its args *per session*, not once from the source,
+    because the two backends need them in different shapes. SQLite stores
+    datetimes naive and compares them as strings; Postgres stores TIMESTAMPTZ.
+    A naive value from SQLite passed into the Postgres query is interpreted in
+    the session timezone and matches nothing, and an aware value passed into
+    SQLite renders with a "+00:00" that no stored string carries. Resolving on
+    each side gives each its native shape, and the comparison is of the
+    results -- which is the thing under test.
     """
-    runs = queries.recent_cafr_refresh_runs(session, 3)
-    CASES["cafr_refresh_rows"]["args"] = ([r.run_at for r in runs],)
+    if "args_fn" in case:
+        return case["args_fn"](session)
+    return case["args"]
 
 
 def compare(sqlite_path: str, other_url: str) -> dict:
@@ -141,12 +158,11 @@ def compare(sqlite_path: str, other_url: str) -> dict:
     errored: dict[str, str] = {}
     try:
         with SrcSession() as ss, DstSession() as ds:
-            _resolve_dynamic_args(ss)
             for name, case in CASES.items():
                 fn = getattr(queries, name)
                 try:
-                    left = normalise(fn(ss, *case["args"]))
-                    right = normalise(fn(ds, *case["args"]))
+                    left = normalise(fn(ss, *case_args(case, ss)))
+                    right = normalise(fn(ds, *case_args(case, ds)))
                 except Exception as exc:              # noqa: BLE001
                     errored[name] = "%s: %s" % (type(exc).__name__, exc)
                     continue
@@ -160,7 +176,37 @@ def compare(sqlite_path: str, other_url: str) -> dict:
     return {"matched": matched, "mismatched": mismatched, "errored": errored}
 
 
-def _summarise(value, limit: int = 240) -> str:
+def first_difference(left, right, path: str = ""):
+    """Where two normalised results first diverge, as (path, left, right).
+
+    Printing a truncated prefix of each side is useless when the results agree
+    for the first few hundred characters and differ deep inside element 40 --
+    which is the common case, because the usual cause is ordering rather than
+    content. Returns None when they are equal.
+    """
+    if left == right:
+        return None
+    if isinstance(left, list) and isinstance(right, list):
+        if len(left) != len(right):
+            return ("%s (length %d vs %d)" % (path, len(left), len(right)),
+                    left[:1], right[:1])
+        for i, (a, b) in enumerate(zip(left, right)):
+            found = first_difference(a, b, "%s[%d]" % (path, i))
+            if found:
+                return found
+    if isinstance(left, dict) and isinstance(right, dict):
+        if set(left) != set(right):
+            return ("%s (keys differ)" % path,
+                    sorted(set(left) - set(right)), sorted(set(right) - set(left)))
+        for key in left:
+            found = first_difference(left[key], right[key],
+                                     "%s.%s" % (path, key))
+            if found:
+                return found
+    return (path or "<value>", left, right)
+
+
+def _summarise(value, limit: int = 200) -> str:
     text = repr(value)
     return text if len(text) <= limit else text[:limit] + " ..."
 
@@ -176,8 +222,10 @@ def main(argv: list[str]) -> int:
         print("  ok        %s" % name)
     for name, (left, right) in sorted(result["mismatched"].items()):
         print("  MISMATCH  %s" % name)
-        print("      sqlite  : %s" % _summarise(left))
-        print("      other   : %s" % _summarise(right))
+        where, a, b = first_difference(left, right)
+        print("      at      : %s" % where)
+        print("      sqlite  : %s" % _summarise(a))
+        print("      other   : %s" % _summarise(b))
     for name, message in sorted(result["errored"].items()):
         print("  ERROR     %s -- %s" % (name, message))
 

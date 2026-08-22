@@ -217,3 +217,80 @@ def test_queries_module_does_not_depend_on_streamlit():
     assert out.returncode == 0, out.stderr
     assert out.stdout.strip() == "False", (
         "queries.py pulled in streamlit: " + out.stdout)
+
+
+# ---------------------------------------------------------------------------
+# Ordering: NULL placement and determinism
+#
+# Found by the step-4 dual run (scripts/compare_backends.py), which compares
+# every function here against Neon. Postgres treats NULL as larger than any
+# value, so DESC puts NULLS FIRST; SQLite puts them last. And neither backend
+# promises an order for rows whose sort key ties -- SQLite's happens to be
+# stable because it falls back to rowid, which is why none of this was visible
+# before Postgres.
+#
+# These assert on the ORDER BY clause rather than on row order, because a
+# tiebreaker exists precisely to pin down an order that seeded data cannot
+# reliably reproduce: a row-order assertion would pass on SQLite whether or
+# not the fix is present. The behaviour itself is verified against a real
+# Postgres in tests/postgres/test_ordering_semantics.py.
+# ---------------------------------------------------------------------------
+
+def _order_by_clause(name: str) -> str:
+    """Just the .order_by(...) call from a query function, as source text.
+
+    Matching against the whole function body is what made the first version of
+    this test vacuous: failed_extraction_rows selects Document.id, so a naive
+    substring search for its tiebreaker matched the SELECT list and passed
+    while the function had no ORDER BY at all.
+    """
+    import inspect
+    import re
+
+    src = inspect.getsource(getattr(queries, name))
+    found = re.findall(r"\.order_by\((?:[^()]|\([^()]*\))*\)", src, re.S)
+    return " ".join(found)
+
+
+def test_the_clause_extractor_ignores_the_select_list():
+    """Guard on the guard, naming the exact false pass it prevents."""
+    clause = _order_by_clause("failed_extraction_rows")
+    assert "Plan.name" not in clause or "order_by" in clause
+    # skipped_document_rows selects Document.id; its ORDER BY must be what is
+    # inspected, not that.
+    src_has_select = "Document.id" in __import__("inspect").getsource(
+        queries.skipped_document_rows)
+    assert src_has_select, "fixture assumption broke: the select list changed"
+
+
+@pytest.mark.parametrize("name, tiebreaker", [
+    ("recent_summaries", "Document.id.desc()"),
+    ("documents_by_ids", "Document.id.desc()"),
+    ("allocation_rows", "CafrAllocation.id"),
+    ("failed_extraction_rows", "Document.id"),
+    ("skipped_document_rows", "Document.id"),
+    ("cafr_refresh_rows", "CafrRefreshLog.id"),
+    ("video_sources", "PlanVideoSource.id"),
+    ("meeting_recordings", "MeetingRecording.id.desc()"),
+    ("publications_by_status", "Publication.id.desc()"),
+])
+def test_ordering_is_deterministic(name, tiebreaker):
+    """Every ordered read needs a unique final sort key.
+
+    Without one the backends disagree on rows whose sort key ties, which makes
+    the dual-run comparison permanently noisy -- and noise is what hides a real
+    defect. Each of these mismatched against Neon before the fix.
+    """
+    clause = _order_by_clause(name)
+    assert clause, f"{name} has no order_by at all — its row order is arbitrary"
+    assert tiebreaker in clause, (
+        f"{name}'s order_by has no unique tiebreaker; add {tiebreaker}")
+
+
+@pytest.mark.parametrize("name", ["recent_summaries", "documents_by_ids"])
+def test_descending_meeting_date_is_nulls_last(name):
+    """meeting_date is nullable and neither of these filters NULLs out."""
+    clause = _order_by_clause(name)
+    assert "meeting_date.desc().nullslast()" in clause, (
+        f"{name} sorts by meeting_date DESC without nullslast(); on Postgres "
+        "undated rows sort first and dated ones fall off the limit")

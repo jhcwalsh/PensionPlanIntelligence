@@ -17,7 +17,35 @@ from decimal import Decimal
 import sqlalchemy as sa
 
 import database
-from scripts.compare_backends import CASES, compare, normalise
+from scripts.compare_backends import (
+    CASES, compare, first_difference, normalise,
+)
+
+
+def test_first_difference_is_none_when_equal():
+    assert first_difference([1, 2, 3], [1, 2, 3]) is None
+
+
+def test_first_difference_points_deep_into_a_list():
+    """The truncated-prefix report was useless: results routinely agree for
+    hundreds of characters and diverge at element 40."""
+    left = [{"a": i} for i in range(50)]
+    right = [{"a": i} for i in range(50)]
+    right[40]["a"] = 999
+    where, a, b = first_difference(left, right)
+    assert where == "[40].a"
+    assert (a, b) == (40, 999)
+
+
+def test_first_difference_reports_a_length_change():
+    where, _, _ = first_difference([1, 2], [1, 2, 3])
+    assert "length 2 vs 3" in where
+
+
+def test_first_difference_reports_differing_keys():
+    where, a, b = first_difference({"x": 1}, {"y": 1})
+    assert "keys differ" in where
+    assert (a, b) == (["x"], ["y"])
 
 
 def test_aware_and_naive_datetimes_compare_equal():
@@ -86,6 +114,44 @@ def test_null_text_is_not_hashed():
     assert normalise(doc)["extracted_text"] is None
 
 
+def test_sqlalchemy_rows_are_normalised(tmp_path):
+    """sa.Row is a Sequence but NOT a tuple subclass.
+
+    A plain (list, tuple) check misses every multi-column query result -- most
+    of queries.py -- and unhandled they fall through to being returned as-is
+    and compared by identity, so each such case reports a mismatch that no
+    amount of staring at the data explains. This cost a full triage pass on
+    the first real run against Neon.
+    """
+    from sqlalchemy.orm import sessionmaker
+
+    path = _seed(tmp_path / "rows.db")
+    engine = sa.create_engine("sqlite:///%s" % path)
+    with sessionmaker(bind=engine)() as session:
+        row = session.query(database.Plan.id, database.Plan.name).first()
+        assert isinstance(row, sa.Row) and not isinstance(row, tuple)
+        assert normalise(row) == ["opers", "Ohio PERS"]
+    engine.dispose()
+
+
+def test_datetimes_inside_a_row_are_normalised(tmp_path):
+    """The shape that actually bit: an aware datetime nested in a Row.
+
+    Normalising the Row but not recursing would leave Postgres's tz-aware
+    value beside SQLite's naive one and report a false mismatch.
+    """
+    from sqlalchemy.orm import sessionmaker
+
+    path = _seed(tmp_path / "rowdt.db")
+    engine = sa.create_engine("sqlite:///%s" % path)
+    with sessionmaker(bind=engine)() as session:
+        row = session.query(database.CafrRefreshLog.plan_id,
+                            database.CafrRefreshLog.run_at).first()
+        out = normalise(row)
+        assert out[0] == "opers"
+        assert isinstance(out[1], str) and out[1].endswith("+00:00"), out
+
+
 def test_every_public_query_function_has_a_case():
     """The harness is only evidence if it covers the surface. A new query
     function with no case must fail here rather than be silently unchecked."""
@@ -116,8 +182,45 @@ def _seed(path, plan_name="Ohio PERS"):
     with engine.begin() as c:
         c.execute(sa.text("INSERT INTO plans (id, name) VALUES ('opers', :n)"),
                   {"n": plan_name})
+        c.execute(sa.text(
+            "INSERT INTO cafr_refresh_log (id, plan_id, run_at, status) "
+            "VALUES (1, 'opers', '2026-06-01 16:49:57.440368', 'saved')"))
     engine.dispose()
     return str(path)
+
+
+def test_a_dynamic_case_resolves_to_real_arguments(tmp_path):
+    """cafr_refresh_rows filters on run timestamps that only exist in the data.
+
+    With a hardcoded argument it would match nothing on either side, compare
+    two empty lists, and pass while testing nothing -- so the resolved
+    argument has to be non-empty when rows exist.
+    """
+    from sqlalchemy.orm import sessionmaker
+
+    from scripts.compare_backends import case_args
+
+    path = _seed(tmp_path / "dyn.db")
+    engine = sa.create_engine("sqlite:///%s" % path)
+    with sessionmaker(bind=engine)() as session:
+        args = case_args(CASES["cafr_refresh_rows"], session)
+        assert args[0], "resolved to no run timestamps -- the case is vacuous"
+        import queries
+        assert queries.cafr_refresh_rows(session, *args), \
+            "the resolved timestamps match no rows"
+    engine.dispose()
+
+
+def test_a_literal_case_is_passed_through_unchanged(tmp_path):
+    from sqlalchemy.orm import sessionmaker
+
+    from scripts.compare_backends import case_args
+
+    path = _seed(tmp_path / "lit.db")
+    engine = sa.create_engine("sqlite:///%s" % path)
+    with sessionmaker(bind=engine)() as session:
+        assert case_args(CASES["recent_fetch_runs"], session) == (20,)
+    engine.dispose()
 
 
 def test_compare_reports_a_seeded_difference(tmp_path):
