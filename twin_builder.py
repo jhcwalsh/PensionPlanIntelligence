@@ -20,7 +20,6 @@ from collections import Counter
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from rich.console import Console
 
 from database import (
     as_utc,
@@ -30,7 +29,23 @@ from database import (
     Summary, TwinBuildRun, TwinSnapshot, get_session, get_twin_snapshot, init_db,
 )
 
-console = Console(legacy_windows=False)
+_CONSOLE = None
+
+
+def _console():
+    """rich, imported lazily and only for CLI output.
+
+    app.py imports this module for visible_relationships, and Render's web
+    service installs requirements.txt — which has no rich, because nothing on
+    the web path needs pretty tables. A module-level `from rich.console import
+    Console` therefore took the entire site down with a ModuleNotFoundError at
+    import, for a library used by three print statements in the CLI.
+    """
+    global _CONSOLE
+    if _CONSOLE is None:
+        from rich.console import Console
+        _CONSOLE = Console(legacy_windows=False)
+    return _CONSOLE
 
 TWIN_SCHEMA_VERSION = "twin_v1"
 KEEP_RECENT = 8
@@ -785,7 +800,7 @@ def run_builder(plan_ids=None) -> None:
                 twin = build_twin(session, plan, mappings, asset_mappings)
                 if save_snapshot(session, plan.id, twin):
                     written += 1
-                    console.print(f"  [green]snapshot[/green] {plan.id}")
+                    _console().print(f"  [green]snapshot[/green] {plan.id}")
             except Exception as exc:  # noqa: BLE001
                 # A failure inside save_snapshot (e.g. database locked) can
                 # leave the session in a pending-rollback state; without
@@ -793,7 +808,7 @@ def run_builder(plan_ids=None) -> None:
                 # raises PendingRollbackError instead of its own error.
                 session.rollback()
                 errors.append(f"{plan.id}: {exc}")
-                console.print(f"  [red]failed[/red] {plan.id}: {exc}")
+                _console().print(f"  [red]failed[/red] {plan.id}: {exc}")
     finally:
         try:
             run.snapshots_written = written
@@ -801,7 +816,7 @@ def run_builder(plan_ids=None) -> None:
             run.status = "succeeded" if not errors else "failed"
             run.completed_at = utcnow()
             session.commit()
-            console.print(f"[bold]{written}/{len(plans)} snapshots written[/bold]")
+            _console().print(f"[bold]{written}/{len(plans)} snapshots written[/bold]")
         except Exception as exc:  # noqa: BLE001
             # Never let bookkeeping itself blow up the build run: roll back
             # and try once more so the run row still gets finalized.
