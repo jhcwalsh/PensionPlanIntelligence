@@ -1,0 +1,86 @@
+name: DB connectivity check
+
+# Answers one question: does this repository's DATABASE_URL secret reach the
+# real Postgres from a runner?
+#
+# It exists because the cutover's worst failure mode is silent.
+# database.resolve_database_url() treats an unset or empty DATABASE_URL as
+# "use DB_PATH", which on a runner is an empty SQLite file — so a job with a
+# missing or malformed secret reads nothing, writes nothing, and exits zero.
+# Every cron would go green while the database stayed frozen.
+#
+# Read-only, manual dispatch only, no schedule. Run it after rotating the
+# Neon credential, and before merging anything that changes how the DSN is
+# resolved.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # database.py imports only sqlalchemy, psycopg and python-dotenv beyond
+      # the standard library, so the full pipeline requirements are not needed
+      # and this stays a sub-minute check.
+      - name: Install the database layer's dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install "sqlalchemy>=2" "psycopg[binary]" python-dotenv
+
+      - name: Connect and report
+        run: |
+          python - <<'PY'
+          import os
+          import sys
+
+          import sqlalchemy as sa
+
+          import database
+
+          if not (os.environ.get("DATABASE_URL") or "").strip():
+              sys.exit("::error::DATABASE_URL is unset or empty. Set the "
+                       "repository secret: Settings -> Secrets and variables "
+                       "-> Actions.")
+
+          dialect = database.engine.dialect.name
+          print("dialect:", dialect)
+          if dialect != "postgresql":
+              sys.exit("::error::Resolved to %r, not postgresql. The secret is "
+                       "malformed and every job would silently run against an "
+                       "empty SQLite file." % dialect)
+
+          with database.engine.connect() as conn:
+              print("server:", conn.execute(
+                  sa.text("select version()")).scalar().split(",")[0])
+              counts = {}
+              for name in ("plans", "documents", "summaries", "cafr_extract"):
+                  table = database.Base.metadata.tables[name]
+                  counts[name] = conn.execute(
+                      sa.select(sa.func.count()).select_from(table)).scalar()
+
+          for name, n in counts.items():
+              print("  %-14s %8d" % (name, n))
+
+          # A reachable but empty database is the other half of the same
+          # failure: it means the DSN points somewhere real and wrong.
+          if not counts["plans"]:
+              sys.exit("::error::Connected, but `plans` is empty — this DSN "
+                       "points at the wrong database.")
+
+          print("OK: DATABASE_URL reaches a populated Postgres.")
+          PY
