@@ -28,6 +28,7 @@ from sqlalchemy import case, desc, distinct, func, or_
 
 from database import (
     utcnow,
+    sort_key,
     CafrAllocation,
     CafrExtract,
     CafrPerformance,
@@ -213,8 +214,8 @@ def cafr_coverage_rows(session) -> list[dict]:
         if prev is None:
             latest_cafr[d.plan_id] = d
             continue
-        prev_key = (prev.fiscal_year or 0, prev.downloaded_at or datetime.min)
-        d_key = (d.fiscal_year or 0, d.downloaded_at or datetime.min)
+        prev_key = (prev.fiscal_year or 0, sort_key(prev.downloaded_at))
+        d_key = (d.fiscal_year or 0, sort_key(d.downloaded_at))
         if d_key > prev_key:
             latest_cafr[d.plan_id] = d
 

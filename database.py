@@ -157,6 +157,27 @@ def as_utc(value: Optional[datetime]) -> Optional[datetime]:
     return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
 
 
+# An aware floor, for sorting rows whose datetime is NULL.
+MIN_UTC = datetime.min.replace(tzinfo=timezone.utc)
+
+
+def sort_key(value: Optional[datetime]) -> datetime:
+    """A datetime safe to sort a mixed column by, on either backend.
+
+    The idiom this replaces — falling back to a bare ``datetime.min`` when the
+    column is NULL — is a silent Postgres bug. That sentinel is naive, so the
+    moment one row in the list has a NULL date and another does not, sorted()
+    compares it against an aware value and raises:
+
+        TypeError: can't compare offset-naive and offset-aware datetimes
+
+    On SQLite reads are naive too, so it never fires. It took running the
+    Streamlit app itself against Neon to surface it — the read layer returned
+    correct data and the crash was in the sort above it.
+    """
+    return as_utc(value) or MIN_UTC
+
+
 # ---------------------------------------------------------------------------
 # Models
 # ---------------------------------------------------------------------------
@@ -1364,7 +1385,8 @@ def get_new_meetings(session: Session, days: int = 7) -> list[dict]:
         .filter(Document.doc_type.notin_(["cafr", "performance"]))
         .filter((Document.meeting_date.is_(None)) |
                 (Document.meeting_date <= future_cap))
-        .order_by(Document.meeting_date.desc())
+        .order_by(Document.meeting_date.desc().nullslast(),
+                  Document.plan_id, Document.id)
         .all()
     )
 
@@ -1398,7 +1420,14 @@ def get_new_meetings(session: Session, days: int = 7) -> list[dict]:
                 .first()
             )
 
-    return sorted(seen.values(), key=lambda e: e["meeting_date"] or datetime.min, reverse=True)
+    # plan id breaks the tie: a dozen plans can share a meeting date, and
+    # sorting on the date alone leaves their order to whatever the query
+    # happened to return -- which the two backends do not agree on.
+    return sorted(
+        seen.values(),
+        key=lambda e: (sort_key(e["meeting_date"]),
+                       e["plan"].id if e["plan"] else ""),
+        reverse=True)
 
 
 # Characters that have meaning in an FTS5 MATCH expression. We strip them

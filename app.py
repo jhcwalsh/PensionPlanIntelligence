@@ -17,6 +17,7 @@ from dotenv import load_dotenv
 import queries
 from database import (
     utcnow,
+    sort_key as db_sort_key,
     Document,
     Plan,
     Summary,
@@ -460,7 +461,7 @@ def _render_activity_by_document(plan_id, plan_label, sort: str = "Most recent")
         results = sorted(
             results,
             key=lambda ds: ((ds[0].plan.abbreviation or ds[0].plan_id or "").lower(),
-                            ds[0].meeting_date or datetime.min),
+                            db_sort_key(ds[0].meeting_date)),
         )
 
     if not results:
@@ -551,7 +552,7 @@ def _render_activity_by_plan(plan_id, plan_label, sort: str = "Most recent"):
         )
         sort_reverse = False
     else:
-        sort_key = lambda kv: kv[1][0]["meeting_date"] or datetime.min
+        sort_key = lambda kv: db_sort_key(kv[1][0]["meeting_date"])
         sort_reverse = True
     for pid, plan_meetings in sorted(by_plan.items(),
                                      key=sort_key,

@@ -31,6 +31,34 @@ services:
       - key: APPROVAL_EMAIL_RECIPIENT
         sync: false
 
+  # ---------------------------------------------------------------------------
+  # Staging — the same app on Postgres, for the step-4 dual run. Read-only
+  # against Neon: no cadence, cron or pipeline points here. Delete this
+  # service once step 5 cuts production over.
+  #
+  # No disk, deliberately. DATABASE_URL is the only thing making this Postgres
+  # rather than SQLite, and without it database.resolve_database_url() falls
+  # back to DB_PATH — which on a diskless service is an empty ephemeral file.
+  # That failure looks like total data loss rather than a missing variable, so
+  # check the variable first if this service ever comes up empty.
+  #
+  # No email vars: staging must never send. The cadences are not wired to it,
+  # and a missing RESEND_API_KEY is a second line of defence if one ever is.
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: pension-plan-intelligence-staging
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run app.py --server.port $PORT --server.address 0.0.0.0
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: APP_BASE_URL
+        value: https://pension-plan-intelligence-staging.onrender.com
+      - key: ADMIN_PASSWORD
+        sync: false
+
 # ---------------------------------------------------------------------------
 # The FastAPI service (pension-rfp-api) was removed on 2026-08-16 along with
 # the RFP subsystem it served. Streamlit is the only Render service.
