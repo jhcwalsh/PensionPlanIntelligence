@@ -59,9 +59,6 @@ DB_PATH = os.environ.get(
     "DB_PATH",
     os.path.join(os.path.dirname(__file__), "db", "pension.db"),
 )
-DATABASE_URL = f"sqlite:///{DB_PATH}"
-
-
 def normalise_pg_url(url: str) -> str:
     """Pin bare ``postgresql://`` URLs to the psycopg (v3) driver.
 
@@ -78,7 +75,46 @@ def normalise_pg_url(url: str) -> str:
     return url
 
 
-engine = create_engine(DATABASE_URL, echo=False)
+def resolve_database_url(env=None, db_path: str | None = None) -> str:
+    """The URL to connect to, taken from the environment.
+
+    ``DATABASE_URL`` wins when it holds a non-empty value; otherwise the
+    historical SQLite file. Both Render and GitHub Actions materialise an
+    unset secret as the empty string, which is why a blank value falls
+    through to SQLite rather than being handed to create_engine as a DSN —
+    the failure mode there is an unparseable-URL traceback at import, i.e. a
+    dead deploy rather than a running app on the old backend.
+
+    Pure, and takes its environment as an argument, because this module
+    builds its engine at import: the only other way to exercise it would be
+    to reload the module, and a reload orphans the ORM classes and breaks
+    SQLAlchemy's mapper registry (see tests/conftest.py).
+    """
+    env = os.environ if env is None else env
+    url = (env.get("DATABASE_URL") or "").strip()
+    if url:
+        return normalise_pg_url(url)
+    return f"sqlite:///{db_path or DB_PATH}"
+
+
+def create_app_engine(url: str):
+    """An engine tuned for the backend the URL names.
+
+    Neon drops idle connections, so a Postgres engine needs pre-ping:
+    without it the first query after an idle period raises OperationalError
+    rather than reconnecting, which under Streamlit surfaces as a stack
+    trace on a page the user simply left open. SQLite keeps today's
+    settings untouched — its pool has no pre-ping to set and pool_recycle
+    is meaningless for a local file.
+    """
+    if url.startswith("postgresql"):
+        return create_engine(url, echo=False, pool_pre_ping=True,
+                             pool_recycle=300)
+    return create_engine(url, echo=False)
+
+
+DATABASE_URL = resolve_database_url()
+engine = create_app_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine)
 
 
