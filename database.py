@@ -215,7 +215,12 @@ class CafrExtract(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     plan_id = Column(String, ForeignKey("plans.id"), nullable=False)
-    document_id = Column(Integer, ForeignKey("documents.id"), nullable=False, unique=True)
+    # Nullable: a CAFR extraction outlives its PDF. The prune scripts delete
+    # documents whose generic text extraction failed even when this table holds
+    # a good extraction read straight from the PDF, and the PDFs are never
+    # committed. Clearing the provenance beats discarding the data — see
+    # scripts/repair_orphaned_document_refs.py.
+    document_id = Column(Integer, ForeignKey("documents.id"), unique=True)
     fiscal_year = Column(Integer)
     investment_policy_text = Column(Text)
     extracted_at = Column(DateTime(timezone=True))
