@@ -15,3 +15,11 @@ _cafr_run_*.json
 _cafr_state_*.json
 tmp/
 notes/pdfs/
+
+# Local Postgres test DSN (holds a password) — see tests/postgres/conftest.py
+.test_pg_url
+
+# The database left git in the 2026-08-21 Postgres cutover. The final
+# committed SQLite file is preserved in history at e0d6f45 — recover it with
+#   git show e0d6f45:db/pension.db > db/pension.db
+db/pension.db

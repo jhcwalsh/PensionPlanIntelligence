@@ -27,6 +27,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from database import (
     utcnow,
+    sort_key,
     Document, Plan, Summary, get_new_meetings, get_session, init_db,
 )
 
@@ -303,7 +304,7 @@ def gather_recent_insights_data(session, days: int = 30) -> dict:
 
     meetings = sorted(
         grouped.values(),
-        key=lambda e: e["meeting_date"] or datetime.min,
+        key=lambda e: sort_key(e["meeting_date"]),
         reverse=True,
     )
 

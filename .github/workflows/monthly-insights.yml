@@ -5,7 +5,8 @@ name: Monthly insights (GHA edition)
 #
 # Runs the 1st of each month at 18:00 UTC (~2 PM EDT / 1 PM EST). Late
 # in the day deliberately, so the local CAFR refresh has time to fire,
-# push, and have its DB changes available when GHA pulls fresh.
+# push. Both write the same Postgres, so ordering is about data freshness,
+# not about one job's commit reaching the other.
 
 on:
   schedule:
@@ -13,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "Skip the final commit/push of db/pension.db + notes/ + cafr_summaries/"
+        description: "Skip the final commit/push of notes/ + cafr_summaries/"
         required: false
         type: boolean
         default: false
@@ -29,6 +30,13 @@ jobs:
   monthly:
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    # Every step in this job talks to the same Postgres. Declared at job
+    # level rather than per step so a new step cannot silently fall back
+    # to SQLite: database.resolve_database_url() treats an unset or empty
+    # DATABASE_URL as "use DB_PATH", which on a runner is an empty file —
+    # the job would appear to succeed having read and written nothing.
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
     steps:
       - uses: actions/checkout@v5
 
@@ -57,20 +65,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-pipeline.txt
 
-      - name: Pull DB from R2
-        env:
-          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
-        run: python -m scripts.db_sync pull
-
-      # NOTE: extract_cafr_investments.py used to run here, but it can't
-      # see the PDF binaries — those are downloaded by the cafr-refresh
-      # workflow on a different runner and never committed to git. Moved
-      # to monthly-cafr-refresh.yml so it runs in the same job as the
-      # refresh while the PDFs are still on disk.
-
       - name: Compose monthly insights + auto-publish
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -83,21 +77,12 @@ jobs:
       # `!cancelled()`: the compose step auto-publishes and emails before the
       # workflow commits, so skipping the commit on failure would leave a
       # briefing that was sent to readers but never recorded as published.
-      - name: Push DB to R2
-        if: ${{ !cancelled() && github.event.inputs.dry_run != 'true' }}
-        env:
-          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
-        run: python -m scripts.db_sync push --by "${{ github.workflow }}"
-
-      - name: Commit DB + notes + cafr_summaries changes
+      - name: Commit notes + cafr_summaries
         if: ${{ !cancelled() && github.event.inputs.dry_run != 'true' }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add db/pension.db notes/ cafr_summaries/
+          git add notes/ cafr_summaries/
           if git diff --staged --quiet; then
             echo "No changes to commit."
           else

@@ -13,8 +13,9 @@ REM                                  is 1-3 GB — download manually on demand)
 REM   4. notify_new_recordings.py  — email digest of newly-discovered videos
 REM
 REM Recordings live on the local D: drive (D:\PensionGraph\meetingrecordings),
-REM not on Render. Only the SQLite metadata lives in db/pension.db, which we
-REM commit and push so the Streamlit catalogue tab on Render stays in sync.
+REM not on Render. Only the metadata lives in the database -- now Postgres,
+REM which both this job and Render read directly, so the catalogue tab is in
+REM sync the moment a row is written. No commit, no push, no time slot.
 REM
 REM Schedule: weekly, Saturdays 08:00 local with --no-downloads (see
 REM register_tasks.ps1), so the catalogue is fresh before the Sunday GHA
@@ -53,13 +54,6 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [%TIME%] db_sync pull >> "%LOG%"
-python -m scripts.db_sync pull >> "%LOG%" 2>&1
-if errorlevel 1 (
-    python -m scripts.notify_failure %TASK% db_sync_pull "%LOG%" %ERRORLEVEL%
-    exit /b 1
-)
-
 echo [%TIME%] discover_video_sources.py >> "%LOG%"
 python discover_video_sources.py >> "%LOG%" 2>&1
 if errorlevel 1 (
@@ -92,38 +86,10 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM Commit and push the metadata changes so the Streamlit catalogue on
-REM Render shows the new rows. Recording files themselves stay local.
-echo [%TIME%] db_sync push >> "%LOG%"
-python -m scripts.db_sync push --by %TASK% >> "%LOG%" 2>&1
-if errorlevel 1 (
-    python -m scripts.notify_failure %TASK% db_sync_push "%LOG%" %ERRORLEVEL%
-    exit /b 1
-)
-
-git add db/pension.db >> "%LOG%" 2>&1
-git diff-index --quiet HEAD
-if errorlevel 1 (
-    git commit -m "Recordings refresh %DATE%" >> "%LOG%" 2>&1
-    git push origin master >> "%LOG%" 2>&1
-    if errorlevel 1 (
-        echo [%TIME%] push rejected, retrying with pull --rebase >> "%LOG%"
-        git pull --rebase origin master >> "%LOG%" 2>&1
-        if errorlevel 1 (
-            git rebase --abort >> "%LOG%" 2>&1
-            python -m scripts.notify_failure %TASK% git_rebase "%LOG%" %ERRORLEVEL%
-            exit /b 1
-        )
-        git push origin master >> "%LOG%" 2>&1
-        if errorlevel 1 (
-            python -m scripts.notify_failure %TASK% git_push "%LOG%" %ERRORLEVEL%
-            exit /b 1
-        )
-    )
-    echo [%TIME%] pushed recordings metadata >> "%LOG%"
-) else (
-    echo [%TIME%] no metadata changes to push >> "%LOG%"
-)
+REM The catalogue rows are already in Postgres by this point -- they were
+REM written as refresh_recordings.py went. Nothing to commit or push: the
+REM database left git in the 2026-08-21 cutover, which is what removed this
+REM job's conflict-avoidance time slot along with it.
 
 echo === [%DATE% %TIME%] %TASK% completed === >> "%LOG%"
 endlocal

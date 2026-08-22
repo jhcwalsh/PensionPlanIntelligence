@@ -1,5 +1,8 @@
 """
-SQLite database schema and helper functions using SQLAlchemy.
+Database schema and helper functions using SQLAlchemy.
+
+Backend is chosen by DATABASE_URL — Postgres when set, the historical SQLite
+file at DB_PATH otherwise. See resolve_database_url.
 """
 
 import gzip
@@ -9,6 +12,23 @@ import re
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+
+from dotenv import load_dotenv
+
+# Loaded here, not left to the entry point.
+#
+# This module resolves DATABASE_URL and builds its engine at import. Every
+# entry point that calls load_dotenv() -- app.py, pipeline.py, generate_notes.py
+# and the extractors -- does so *after* importing database, so a DATABASE_URL
+# living only in .env was invisible: both app.py and pipeline.py silently came
+# up on SQLite with the variable sitting right there. Nothing raised; they just
+# read and wrote the wrong database.
+#
+# override=False so a real environment variable always beats the file. On
+# GitHub Actions and Render there is no .env at all and the secret wins; this
+# only ever fills a gap.
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"),
+            override=False)
 
 from sqlalchemy import (
     Column, Integer, String, Text, Float, DateTime, Boolean, Date, JSON,
@@ -59,9 +79,6 @@ DB_PATH = os.environ.get(
     "DB_PATH",
     os.path.join(os.path.dirname(__file__), "db", "pension.db"),
 )
-DATABASE_URL = f"sqlite:///{DB_PATH}"
-
-
 def normalise_pg_url(url: str) -> str:
     """Pin bare ``postgresql://`` URLs to the psycopg (v3) driver.
 
@@ -78,7 +95,46 @@ def normalise_pg_url(url: str) -> str:
     return url
 
 
-engine = create_engine(DATABASE_URL, echo=False)
+def resolve_database_url(env=None, db_path: str | None = None) -> str:
+    """The URL to connect to, taken from the environment.
+
+    ``DATABASE_URL`` wins when it holds a non-empty value; otherwise the
+    historical SQLite file. Both Render and GitHub Actions materialise an
+    unset secret as the empty string, which is why a blank value falls
+    through to SQLite rather than being handed to create_engine as a DSN —
+    the failure mode there is an unparseable-URL traceback at import, i.e. a
+    dead deploy rather than a running app on the old backend.
+
+    Pure, and takes its environment as an argument, because this module
+    builds its engine at import: the only other way to exercise it would be
+    to reload the module, and a reload orphans the ORM classes and breaks
+    SQLAlchemy's mapper registry (see tests/conftest.py).
+    """
+    env = os.environ if env is None else env
+    url = (env.get("DATABASE_URL") or "").strip()
+    if url:
+        return normalise_pg_url(url)
+    return f"sqlite:///{db_path or DB_PATH}"
+
+
+def create_app_engine(url: str):
+    """An engine tuned for the backend the URL names.
+
+    Neon drops idle connections, so a Postgres engine needs pre-ping:
+    without it the first query after an idle period raises OperationalError
+    rather than reconnecting, which under Streamlit surfaces as a stack
+    trace on a page the user simply left open. SQLite keeps today's
+    settings untouched — its pool has no pre-ping to set and pool_recycle
+    is meaningless for a local file.
+    """
+    if url.startswith("postgresql"):
+        return create_engine(url, echo=False, pool_pre_ping=True,
+                             pool_recycle=300)
+    return create_engine(url, echo=False)
+
+
+DATABASE_URL = resolve_database_url()
+engine = create_app_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine)
 
 
@@ -119,6 +175,27 @@ def as_utc(value: Optional[datetime]) -> Optional[datetime]:
     if value is None:
         return None
     return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+
+
+# An aware floor, for sorting rows whose datetime is NULL.
+MIN_UTC = datetime.min.replace(tzinfo=timezone.utc)
+
+
+def sort_key(value: Optional[datetime]) -> datetime:
+    """A datetime safe to sort a mixed column by, on either backend.
+
+    The idiom this replaces — falling back to a bare ``datetime.min`` when the
+    column is NULL — is a silent Postgres bug. That sentinel is naive, so the
+    moment one row in the list has a NULL date and another does not, sorted()
+    compares it against an aware value and raises:
+
+        TypeError: can't compare offset-naive and offset-aware datetimes
+
+    On SQLite reads are naive too, so it never fires. It took running the
+    Streamlit app itself against Neon to surface it — the read layer returned
+    correct data and the crash was in the sort above it.
+    """
+    return as_utc(value) or MIN_UTC
 
 
 # ---------------------------------------------------------------------------
@@ -215,7 +292,12 @@ class CafrExtract(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     plan_id = Column(String, ForeignKey("plans.id"), nullable=False)
-    document_id = Column(Integer, ForeignKey("documents.id"), nullable=False, unique=True)
+    # Nullable: a CAFR extraction outlives its PDF. The prune scripts delete
+    # documents whose generic text extraction failed even when this table holds
+    # a good extraction read straight from the PDF, and the PDFs are never
+    # committed. Clearing the provenance beats discarding the data — see
+    # scripts/repair_orphaned_document_refs.py.
+    document_id = Column(Integer, ForeignKey("documents.id"), unique=True)
     fiscal_year = Column(Integer)
     investment_policy_text = Column(Text)
     extracted_at = Column(DateTime(timezone=True))
@@ -1323,7 +1405,8 @@ def get_new_meetings(session: Session, days: int = 7) -> list[dict]:
         .filter(Document.doc_type.notin_(["cafr", "performance"]))
         .filter((Document.meeting_date.is_(None)) |
                 (Document.meeting_date <= future_cap))
-        .order_by(Document.meeting_date.desc())
+        .order_by(Document.meeting_date.desc().nullslast(),
+                  Document.plan_id, Document.id)
         .all()
     )
 
@@ -1357,7 +1440,14 @@ def get_new_meetings(session: Session, days: int = 7) -> list[dict]:
                 .first()
             )
 
-    return sorted(seen.values(), key=lambda e: e["meeting_date"] or datetime.min, reverse=True)
+    # plan id breaks the tie: a dozen plans can share a meeting date, and
+    # sorting on the date alone leaves their order to whatever the query
+    # happened to return -- which the two backends do not agree on.
+    return sorted(
+        seen.values(),
+        key=lambda e: (sort_key(e["meeting_date"]),
+                       e["plan"].id if e["plan"] else ""),
+        reverse=True)
 
 
 # Characters that have meaning in an FTS5 MATCH expression. We strip them

@@ -11,20 +11,21 @@ Work so far is on branch `fix/cafr-actuarial-extraction`, **not yet pushed**.
 |---|---|
 | 1. Delete (RFP, approval gate, local jobs) — still on SQLite | **Done** — `e742197`, `4a5b561`, `4512e04`, `67c842b` |
 | 2. Move queries out of `app.py` into the read layer | **Done** — `785e4f3`, `d75cf22`, `9a04e6a` |
-| 3. Stand up Neon; migrate SQLite → Postgres | Not started |
-| 4. Dual-run staging on Postgres beside prod on SQLite | Not started |
-| 5. Cut workflows over; delete `db_sync` and the DB-commit steps | Not started |
+| 3. Stand up Neon; migrate SQLite → Postgres | **Done** — 2026-08-21, 33 tables, verified |
+| 4. Dual-run staging on Postgres beside prod on SQLite | **Done** — 25/25 reads match, app renders identically |
+| 5. Cut workflows over; delete `db_sync` and the DB-commit steps | **Done on the branch** — no GHA run has exercised it yet |
 | 6. Add auth | Not started |
-| 7. Point the local recordings job at Postgres | Not started |
+| 7. Point the local recordings job at Postgres | **Done on the branch** — reads DATABASE_URL from `.env`, no longer commits or pushes |
 
 Net so far: 10 scheduled workflows → 8, two Render services → one, five local
 Task Scheduler jobs → one, no approval clicks, one daily email instead of two,
 and `app.py` holds zero queries. Nothing routine needs attention and no machine
 of James's is in the path.
 
-**The forcing function is still live, and moved.** `db/pension.db` is now
-**68 MB** against GitHub's hard 100 MB limit (up from 64 MB after merging 18
-days of master on 2026-08-19), committed daily. Step 5 is where that clears.
+**The forcing function is cleared.** `db/pension.db` left git on 2026-08-21 at
+64.5 MB. Nothing commits a database any more, so the 100 MB ceiling, the pack
+bloat and the multi-writer contention are all gone. The file is preserved in
+history at `e0d6f45`.
 
 ---
 

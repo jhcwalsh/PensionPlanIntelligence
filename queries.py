@@ -28,6 +28,7 @@ from sqlalchemy import case, desc, distinct, func, or_
 
 from database import (
     utcnow,
+    sort_key,
     CafrAllocation,
     CafrExtract,
     CafrPerformance,
@@ -75,7 +76,9 @@ def recent_summaries(session, plan_id=None, limit: int = 20):
     )
     if plan_id and plan_id != "All":
         q = q.filter(Document.plan_id == plan_id)
-    return q.order_by(Document.meeting_date.desc()).limit(limit).all()
+    return (q.order_by(Document.meeting_date.desc().nullslast(),
+                       Document.id.desc())
+            .limit(limit).all())
 
 
 def corpus_stats(session) -> tuple[int, int, int, int]:
@@ -211,8 +214,8 @@ def cafr_coverage_rows(session) -> list[dict]:
         if prev is None:
             latest_cafr[d.plan_id] = d
             continue
-        prev_key = (prev.fiscal_year or 0, prev.downloaded_at or datetime.min)
-        d_key = (d.fiscal_year or 0, d.downloaded_at or datetime.min)
+        prev_key = (prev.fiscal_year or 0, sort_key(prev.downloaded_at))
+        d_key = (d.fiscal_year or 0, sort_key(d.downloaded_at))
         if d_key > prev_key:
             latest_cafr[d.plan_id] = d
 
@@ -398,7 +401,7 @@ def allocation_rows(session, match_patterns: tuple, exclude_patterns: tuple,
     )
     for pat in exclude_patterns:
         query = query.filter(~asset_class_lower.like(pat))
-    return query.all()
+    return query.order_by(Plan.id, CafrAllocation.id).all()
 
 
 # ---------------------------------------------------------------------------
@@ -428,7 +431,8 @@ def documents_by_ids(session, doc_ids, limit: int = 20) -> list[Document]:
     return (
         session.query(Document)
         .filter(Document.id.in_(doc_ids))
-        .order_by(Document.meeting_date.desc())
+        .order_by(Document.meeting_date.desc().nullslast(),
+                  Document.id.desc())
         .limit(limit)
         .all()
     )
@@ -482,6 +486,7 @@ def failed_extraction_rows(session) -> list[tuple]:
         .outerjoin(ExtractionDetail,
                    ExtractionDetail.document_id == Document.id)
         .filter(Document.extraction_status == "failed")
+        .order_by(Plan.id, Document.id)
         .all()
     )
 
@@ -493,6 +498,7 @@ def skipped_document_rows(session) -> list[tuple]:
                       DocumentSkip.reason, DocumentSkip.error_message)
         .join(Document, Document.plan_id == Plan.id)
         .join(DocumentSkip, DocumentSkip.document_id == Document.id)
+        .order_by(Plan.id, Document.id)
         .all()
     )
 
@@ -552,7 +558,8 @@ def cafr_refresh_rows(session, run_ats) -> list[tuple]:
             CafrRefreshLog.notes,
         )
         .filter(CafrRefreshLog.run_at.in_(run_ats))
-        .order_by(desc(CafrRefreshLog.run_at), CafrRefreshLog.plan_id)
+        .order_by(desc(CafrRefreshLog.run_at), CafrRefreshLog.plan_id,
+                  CafrRefreshLog.id)
         .all()
     )
 
@@ -577,7 +584,8 @@ def video_sources(session, plan_id=None) -> list[PlanVideoSource]:
     q = session.query(PlanVideoSource)
     if plan_id:
         q = q.filter(PlanVideoSource.plan_id == plan_id)
-    return q.order_by(PlanVideoSource.plan_id, PlanVideoSource.platform).all()
+    return q.order_by(PlanVideoSource.plan_id, PlanVideoSource.platform,
+                      PlanVideoSource.id).all()
 
 
 def meeting_recordings(session, plan_id=None) -> list[MeetingRecording]:
@@ -588,6 +596,7 @@ def meeting_recordings(session, plan_id=None) -> list[MeetingRecording]:
     return q.order_by(
         MeetingRecording.published_at.desc().nullslast(),
         MeetingRecording.discovered_at.desc(),
+        MeetingRecording.id.desc(),
     ).all()
 
 
@@ -605,7 +614,7 @@ def publications_by_status(session, statuses) -> list[Publication]:
     return (
         session.query(Publication)
         .filter(Publication.status.in_(tuple(statuses)))
-        .order_by(Publication.period_start.desc())
+        .order_by(Publication.period_start.desc(), Publication.id.desc())
         .all()
     )
 

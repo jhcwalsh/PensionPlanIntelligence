@@ -11,7 +11,7 @@ The scrape/extract phase delegates to the existing ``fetcher`` and
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Optional
 
 from database import (
@@ -116,7 +116,8 @@ def _run_scrape_and_extract(session, run: WeeklyRun) -> None:
     )
     run.documents_fetched = (
         session.query(Document)
-        .filter(Document.downloaded_at >= datetime.combine(run.period_start, datetime.min.time()))
+        .filter(Document.downloaded_at >=
+                datetime.combine(run.period_start, time.min, tzinfo=timezone.utc))
         .count()
     )
     session.commit()
