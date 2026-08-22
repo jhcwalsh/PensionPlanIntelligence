@@ -15,11 +15,6 @@ name: DB connectivity check
 
 on:
   workflow_dispatch:
-  # TEMPORARY: workflow_dispatch only works from the default branch, so
-  # this cannot be run before it merges. Removed in the next commit.
-  push:
-    branches: [fix/orphaned-document-refs]
-    paths: ['.github/workflows/db-connectivity.yml']
 
 permissions:
   contents: read
