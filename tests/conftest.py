@@ -40,6 +40,13 @@ def _isolated_environment(tmp_path, monkeypatch):
     db_path = tmp_path / "pension_test.db"
     test_tmp = tmp_path / "ins_tmp"
 
+    # database.py loads .env at import so DATABASE_URL reaches it whatever the
+    # entry point's import order. A developer with a real DSN in .env would
+    # otherwise carry it into every test — the engine below is rebound anyway,
+    # but anything reading the variable directly, or spawning a subprocess,
+    # would reach the live database. Tests must not depend on whose machine
+    # they run on.
+    monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.setenv("DB_PATH", str(db_path))
     monkeypatch.setenv("INSIGHTS_MODE", "mock")
     monkeypatch.setenv("APPROVAL_BASE_URL", "https://test.local")

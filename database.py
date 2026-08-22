@@ -1,5 +1,8 @@
 """
-SQLite database schema and helper functions using SQLAlchemy.
+Database schema and helper functions using SQLAlchemy.
+
+Backend is chosen by DATABASE_URL — Postgres when set, the historical SQLite
+file at DB_PATH otherwise. See resolve_database_url.
 """
 
 import gzip
@@ -9,6 +12,23 @@ import re
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+
+from dotenv import load_dotenv
+
+# Loaded here, not left to the entry point.
+#
+# This module resolves DATABASE_URL and builds its engine at import. Every
+# entry point that calls load_dotenv() -- app.py, pipeline.py, generate_notes.py
+# and the extractors -- does so *after* importing database, so a DATABASE_URL
+# living only in .env was invisible: both app.py and pipeline.py silently came
+# up on SQLite with the variable sitting right there. Nothing raised; they just
+# read and wrote the wrong database.
+#
+# override=False so a real environment variable always beats the file. On
+# GitHub Actions and Render there is no .env at all and the secret wins; this
+# only ever fills a gap.
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"),
+            override=False)
 
 from sqlalchemy import (
     Column, Integer, String, Text, Float, DateTime, Boolean, Date, JSON,

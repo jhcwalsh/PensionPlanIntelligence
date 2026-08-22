@@ -1,7 +1,15 @@
 services:
   # ---------------------------------------------------------------------------
-  # Streamlit web app — primary public surface.
-  # Owns the /data persistent disk (the SQLite DB lives there).
+  # Streamlit web app — the only Render service, and the primary public
+  # surface. Reads Neon Postgres over the network.
+  #
+  # The persistent disk is gone. It existed so the committed db/pension.db had
+  # somewhere to live; with Postgres there is no database file, so there is
+  # nothing to mount and nothing to keep in sync. DOWNLOADS_DIR goes with it:
+  # app.py fetches a PDF on demand purely to serve it, and the pipeline's
+  # downloads were never committed or durable anyway, so the default
+  # (./downloads on the container's ephemeral filesystem) is the honest home
+  # for a cache.
   # ---------------------------------------------------------------------------
 
   - type: web
@@ -9,67 +17,45 @@ services:
     runtime: python
     buildCommand: pip install -r requirements.txt
     startCommand: streamlit run app.py --server.port $PORT --server.address 0.0.0.0
-    disk:
-      name: pension-db
-      mountPath: /data
-      sizeGB: 5
     envVars:
-      - key: DB_PATH
-        value: /data/pension.db
-      - key: DOWNLOADS_DIR
-        value: /data/downloads
+      # The whole cutover hinges on this one variable. database.py treats an
+      # unset or empty DATABASE_URL as "use DB_PATH", which on a diskless
+      # service is an empty ephemeral SQLite file — the app would come up
+      # looking like total data loss rather than a missing setting. If this
+      # service is ever empty, check here first.
+      #
+      # sync: false — the value lives in the Render dashboard, never in git.
+      - key: DATABASE_URL
+        sync: false
       - key: APP_BASE_URL
         value: https://pensionplanintelligence.onrender.com
-      # Email sending — subscriber confirmation, welcome, digest fan-out
-      # and approval-link clicks all send mail from the Streamlit process.
-      # Values live in the Render dashboard; declared here so a missing
-      # var fails the deploy instead of silently breaking sign-ups.
+      # Email sending — subscriber confirmation, welcome, digest fan-out and
+      # approval-link clicks all send mail from the Streamlit process. Values
+      # live in the Render dashboard; declared here so a missing var fails the
+      # deploy instead of silently breaking sign-ups.
       - key: RESEND_API_KEY
         sync: false
       - key: APPROVAL_EMAIL_FROM
         sync: false
       - key: APPROVAL_EMAIL_RECIPIENT
         sync: false
-
-  # ---------------------------------------------------------------------------
-  # Staging — the same app on Postgres, for the step-4 dual run. Read-only
-  # against Neon: no cadence, cron or pipeline points here. Delete this
-  # service once step 5 cuts production over.
-  #
-  # No disk, deliberately. DATABASE_URL is the only thing making this Postgres
-  # rather than SQLite, and without it database.resolve_database_url() falls
-  # back to DB_PATH — which on a diskless service is an empty ephemeral file.
-  # That failure looks like total data loss rather than a missing variable, so
-  # check the variable first if this service ever comes up empty.
-  #
-  # No email vars: staging must never send. The cadences are not wired to it,
-  # and a missing RESEND_API_KEY is a second line of defence if one ever is.
-  # ---------------------------------------------------------------------------
-  - type: web
-    name: pension-plan-intelligence-staging
-    runtime: python
-    plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: streamlit run app.py --server.port $PORT --server.address 0.0.0.0
-    envVars:
-      - key: DATABASE_URL
-        sync: false
-      - key: APP_BASE_URL
-        value: https://pension-plan-intelligence-staging.onrender.com
+      # Gates the Archive / Drafts / Admin tabs. Unset = fail-open (local dev).
       - key: ADMIN_PASSWORD
         sync: false
 
 # ---------------------------------------------------------------------------
 # The FastAPI service (pension-rfp-api) was removed on 2026-08-16 along with
-# the RFP subsystem it served. Streamlit is the only Render service.
+# the RFP subsystem it served.
 #
-# Nothing cron-shaped runs on Render: Render cron jobs cannot mount persistent
-# disks, so their writes would be ephemeral and invisible to the web service.
-# All scheduled work runs from GitHub Actions instead — see
-# .github/workflows/ and the cadence table in CLAUDE.md.
+# The staging service added for the step-4 dual run is gone too: it existed to
+# run this same app against Postgres beside a SQLite production, and now that
+# production *is* the Postgres one they would read the same database and prove
+# nothing. Recreate it from git history if a future migration needs the same
+# side-by-side comparison.
 #
-# Next: migrate db/pension.db → managed Postgres, per
-# docs/superpowers/specs/2026-08-16-low-maintenance-app-design.md. That
-# removes the persistent disk, the DB-in-git deploy mechanism, and the
-# 100 MB single-file ceiling in one step.
+# Nothing cron-shaped runs on Render. That used to be because Render cron jobs
+# cannot mount persistent disks, so their writes were invisible to the web
+# service; with a shared Postgres that specific objection is gone, but the
+# scheduled work already lives in GitHub Actions and there is no reason to move
+# it back. See .github/workflows/ and the cadence table in CLAUDE.md.
 # ---------------------------------------------------------------------------

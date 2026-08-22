@@ -21,7 +21,7 @@ on:
         required: false
         default: ""
       dry_run:
-        description: "Skip the final commit/push of db/pension.db + notes/"
+        description: "Skip the final commit/push of notes/"
         required: false
         type: boolean
         default: false
@@ -37,6 +37,13 @@ jobs:
   annual:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    # Every step in this job talks to the same Postgres. Declared at job
+    # level rather than per step so a new step cannot silently fall back
+    # to SQLite: database.resolve_database_url() treats an unset or empty
+    # DATABASE_URL as "use DB_PATH", which on a runner is an empty file —
+    # the job would appear to succeed having read and written nothing.
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
     steps:
       - uses: actions/checkout@v5
 
@@ -65,14 +72,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-pipeline.txt
 
-      - name: Pull DB from R2
-        env:
-          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
-        run: python -m scripts.db_sync pull
-
       - name: Compose annual insights + auto-publish
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -90,23 +89,14 @@ jobs:
       # `!cancelled()`: the compose step auto-publishes and emails before the
       # workflow commits, so skipping the commit on failure would leave a
       # briefing that was sent to readers but never recorded as published.
-      - name: Push DB to R2
-        if: ${{ !cancelled() && github.event.inputs.dry_run != 'true' }}
-        env:
-          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
-        run: python -m scripts.db_sync push --by "${{ github.workflow }}"
-
-      - name: Commit DB + notes changes
+      - name: Commit notes
         if: ${{ !cancelled() && github.event.inputs.dry_run != 'true' }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add db/pension.db notes/
+          git add notes/
           if git diff --staged --quiet; then
-            echo "No DB/notes changes to commit."
+            echo "No notes changes to commit."
           else
             git commit -m "Annual insights $(date -u +%Y-%m-%d) [GHA]"
             git push

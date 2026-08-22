@@ -30,6 +30,12 @@ LLM_MODE=mock pytest tests/ -k token                            # by name patter
 # DB schema management — no Alembic; init_db() is idempotent
 python -c "import database; database.init_db()"
 
+# Which backend am I on? (DATABASE_URL decides; .env is loaded by database.py)
+python -c "import database; print(database.engine.dialect.name)"
+
+# Compare every read in queries.py across two backends (read-only both sides)
+python scripts/compare_backends.py db/pension.db "$DATABASE_URL"
+
 # Pipeline (local; uses Playwright)
 python pipeline.py                              # all plans, full fetch+extract+summarize
 python pipeline.py calpers --extract-only       # one plan, skip fetch
@@ -55,19 +61,55 @@ streamlit run app.py
 
 ## Architecture you have to internalize before editing
 
-### The DB IS the deploy mechanism for data
-`db/pension.db` is committed. Pushing to `master` is how new data lands on Render. The Streamlit web service on Render mounts the persistent disk at `/data` but read from the deployed `db/pension.db` until something writes back. Two things now write back to master:
-1. **GHA daily-pipeline** (~11:00 UTC) — fetches/extracts/summarizes 137 plans, commits the DB.
-3. **GHA weekly-insights** (Sundays 12:30 UTC, silent) and **GHA monthly-insights** (1st of month 18:00 UTC) — compose digests, auto-publish, commit the DB + `notes/` (+ `cafr_summaries/` for monthly).
+### The database is Neon Postgres, reached by `DATABASE_URL`
 
-Local Task Scheduler now owns exactly one job: the weekly meeting-recordings catalogue (`scripts/run_recordings.bat`). It is a deliberate, best-effort exception — a side dataset that no cloud job depends on, so if this machine is off for a month nothing else degrades.
+Cut over on 2026-08-21. `database.py` resolves the backend at import:
+`DATABASE_URL` when set, otherwise the historical SQLite file at `DB_PATH`.
+Every writer — the GHA crons, Render's Streamlit, the one local job — talks to
+the same Neon database over the network. There is no deploy step for data; a
+row is visible everywhere the moment it is committed.
 
-GitHub's hard 100 MB single-file limit is the ceiling on this model. The DB started bumping into it once `documents.extracted_text` accumulated, which forced the gzip wrapper (next section). When the DB approaches ~80 MB again, plan a real fix (Git LFS, or moving the DB out of git onto Render's persistent disk via a separate sync) rather than another column-level workaround.
+Three consequences worth holding on to:
 
-**Do not run a full re-extraction before the Postgres cutover.** `MAX_STORED_CHARS` was raised to 2,000,000, and 450 documents in the corpus were truncated at the old 150k cap. Forward growth under the new cap is harmless (~1.2 MB/month), but a sweep that re-extracts those 450 — `python pipeline.py --extract-only`, or an OCR retry pass — would restore roughly +72.4M chars ≈ **+20.5 MB compressed**, taking `db/pension.db` from 68.4 MB to ~89 MB. That is past the ~80 MB "act now" line above and 11 MB from GitHub's hard limit, i.e. one more sweep from an unpushable repo. Re-extraction has to wait for the Postgres cutover or the R2 PDF store; single-document re-extractions are fine.
+- **`db/pension.db` is no longer in git.** It is gitignored, still on disk
+  locally, and preserved in history: `git show e0d6f45:db/pension.db > db/pension.db`
+  recovers the exact file the migration was taken from. The 100 MB single-file
+  ceiling, the pack bloat, and the multi-writer commit contention all went with
+  it — as did `scripts/db_sync.py`, every DB-commit workflow step, and the
+  `boto3`/`moto` dependencies that existed only for the abandoned R2 route.
+- **`database.py` loads `.env` itself**, before resolving the URL, with
+  `override=False`. Every entry point calls `load_dotenv()` *after* importing
+  `database`, so a `DATABASE_URL` living only in `.env` used to be invisible —
+  `import app` came up on SQLite with the variable sitting right there and
+  nothing raised. Real environment variables still win, which is what GitHub
+  Actions and Render supply.
+- **An unset or empty `DATABASE_URL` silently means SQLite.** On a runner or a
+  diskless Render service that is an empty file: the job reads nothing, writes
+  nothing, and exits zero. Every DB-touching workflow declares the secret at
+  *job* level so a step added later cannot miss it, and
+  `tests/test_deployment_config.py` asserts that. If a deployment looks like
+  total data loss, check this variable first.
+
+Workflows still commit `notes/`, `cafr_summaries/` and
+`data/asset_class_mappings.json` — those are files, not data, and the
+`!cancelled()` guards on those steps survive for them. The guards' original
+rationale (irreversible work living only on the runner until the commit
+recorded it) is gone: rows are durable when written. What they still buy is
+that one plan's data quirk, which makes an extractor exit 1, does not leave the
+derived-data builds a day stale.
+
+Local Task Scheduler owns exactly one job: the weekly meeting-recordings
+catalogue (`scripts/run_recordings.bat`). It no longer commits or pushes
+anything, which is what removed its conflict-avoidance time slot.
+
+**Re-extraction is no longer size-gated.** `MAX_STORED_CHARS` is 2,000,000 and
+450 documents were truncated at the old 150k cap. Re-extracting them would have
+added ~20.5 MB to a 68 MB file 11 MB from GitHub's hard limit; against Postgres
+that constraint does not exist. What still gates it is the source PDFs, which
+are never kept — see the portal spec §2.3 on the R2 PDF store.
 
 ### `documents.extracted_text` is gzipped on disk
-The full extracted PDF text is the bulk of the DB by 10× over everything else. To stay under GitHub's size limit, `Document.extracted_text` uses a `GzippedText` `TypeDecorator` (`database.py`): callers see plain `str` both ways, but on disk values are gzipped UTF-8 bytes (`impl=LargeBinary`). Legacy uncompressed `str` rows are returned as-is, so the model change was safe to land before the data migration. Implications:
+The full extracted PDF text is the bulk of the database by 10× over everything else. `Document.extracted_text` uses a `GzippedText` `TypeDecorator` (`database.py`): callers see plain `str` both ways, but stored values are gzipped UTF-8 bytes (`impl=LargeBinary`, which is `BYTEA` on Postgres). It was introduced to stay under GitHub's file-size limit; that reason is gone, but it still cuts storage and transfer roughly tenfold over the network, so it stays. Legacy uncompressed `str` rows are returned as-is, so the model change was safe to land before the data migration. Implications:
 - Don't run raw SQL like `SELECT extracted_text FROM documents` — you'll get gzip bytes. Always go through the SQLAlchemy ORM, or `gzip.decompress(row[0])` yourself.
 - Aggregate queries like `LENGTH(extracted_text)` measure compressed bytes, not text length.
 - `scripts/migrate_compress_extracted_text.py` is the one-shot migration; idempotent on the gzip magic header. Re-running it is safe.
@@ -134,7 +176,7 @@ RFP alerts. It was removed with the RFP subsystem; `daily-digest.yml` is the
 only digest now.
 
 ### Where each cadence runs
-Render hosts one web service: Streamlit (`pension-plan-intelligence`), mounting the persistent disk `pension-db` at `/data`. All cron-style work moved off Render — partly to GHA, partly to local Windows Task Scheduler:
+Render hosts one web service: Streamlit (`pension-plan-intelligence`), reading Neon over the network. The persistent disk is gone — it existed only to hold the committed SQLite file. All cron-style work runs off Render — mostly GHA, one local Windows Task Scheduler job:
 
 | Cadence | Trigger | Where | Workflow / .bat |
 |---|---|---|---|
@@ -147,36 +189,34 @@ Render hosts one web service: Streamlit (`pension-plan-intelligence`), mounting 
 | Quarterly insights composition + auto-publish | cron 1st of Jan/Apr/Jul/Oct 19:00 UTC | GHA | `.github/workflows/quarterly-insights.yml` |
 | Annual insights composition + auto-publish | cron Jan 5 19:00 UTC | GHA | `.github/workflows/annual-insights.yml` |
 
-GHA secrets that must exist for the cron entries to work: `ANTHROPIC_API_KEY`, `RESEND_API_KEY`, `APPROVAL_EMAIL_RECIPIENT`, `APPROVAL_EMAIL_FROM`. Local cron uses the same names from `.env`. Schedules are UTC; ET drifts one hour between EDT and EST. The 1st-of-month sequence is deliberate: GHA CAFR refresh @ 15:00 UTC → local CAFR refresh runs early ET → GHA monthly-insights @ 18:00 UTC pulls a DB that already has both runs' new CAFRs.
+GHA secrets that must exist for the cron entries to work: `DATABASE_URL`, `ANTHROPIC_API_KEY`, `RESEND_API_KEY`, `APPROVAL_EMAIL_RECIPIENT`, `APPROVAL_EMAIL_FROM`. Local runs read the same names from `.env`. Schedules are UTC; ET drifts one hour between EDT and EST. The 1st-of-month sequence is still deliberate — CAFR refresh @ 15:00 UTC, IPS @ 16:00, monthly-insights @ 18:00 — but now only so monthly composes from fresh CAFRs, not because one job's commit has to reach another. They share a database.
 
-### Commit/push steps must never be gated on success alone
-Every workflow that writes the DB back guards its push/commit steps — and the
-derived-data steps ahead of them — with `if: ${{ !cancelled() && ... }}`, not
-with a bare `dry_run` check (which still implies `success()`). The reason is
-that by the time those steps run, irreversible work has already happened and
-lives only on the runner:
+### `!cancelled()` on the derived-data and file-commit steps
 
-- the pipeline and CAFR refresh have downloaded PDFs that are **never committed**, and written rows as they go;
-- the insights cadences have already **auto-published and emailed** the briefing, and only the DB records that it went out — skip the commit and a briefing readers have already received is not recorded as published (and the weekly row monthly depends on is lost);
-- the daily digest has already sent, and its `daily_runs` row is what stops tomorrow's digest repeating today's documents.
+The workflows guard their later steps with `if: ${{ !cancelled() && ... }}`
+rather than letting them default to `success()`. The original reason is gone:
+irreversible work used to live only on the runner until a commit recorded it,
+so skipping the commit discarded a whole day. Rows are durable when written
+now.
 
-The extractors exit `1` when *any single item* fails (one Claude error out of
-~138 documents is enough), so without the guard one data quirk discards the
-whole run. Use `!cancelled()` rather than `continue-on-error` so the job still
-goes red and the failure stays visible — only the discarding is removed. This
-mirrors `pipeline.py`'s own principle that "a data quirk must not block the
-day's DB push". `scripts/run_recordings.bat`, the one remaining local job,
-follows the same rule by notifying on failure without `exit /b 1`.
+What the guard still buys is worth keeping. The extractors exit `1` when *any
+single item* fails — one Claude error out of ~138 documents is enough — and
+without the guard that one quirk would skip the manager-roster and twin-snapshot
+rebuilds, leaving the derived data a day stale, and skip the `notes/` /
+`cafr_summaries/` commits, losing a briefing's published file even though the
+`Publication` row says it went out. `!cancelled()` rather than
+`continue-on-error` so the job still goes red and the failure stays visible;
+only the discarding is removed.
 
-Deliberate exception: `daily-pipeline.yml`'s "Send daily digest email" stays
-on `success()`, to avoid emailing a digest for a failed run.
+Deliberate exception: `daily-pipeline.yml`'s digest email stays on `success()`,
+to avoid emailing a digest for a failed run.
 
 ## Conventions worth knowing
 
 - **Don't run `git add .`** — dozens of untracked scratch files at the repo root (`_cafr_*.json`, `*.log`, `data/known_plans.json.bak*`, screenshots, an empty stray `pension.db` at the repo root) are intentionally left out. Stage by name or path.
 - **CAFR overrides** live in `_cafr_overrides.json` (committed) — manual `{plan_id: pdf_url}` map for plans where URL templates fail. Treat as config, not run-state.
 - **Plan registry** is `data/known_plans.json` (committed). Optional fields: `cafr_url_template` (with `{year}`), `cafr_landing`, `cafr_url`, `playwright_wait_selector`, `sub_page_pattern`. The DB `plans` table doesn't store these CAFR fields; `refresh_cafrs.py` reads them from JSON at runtime.
-- **Two distinct DB files** look similar: `db/pension.db` (the real ~42 MB DB, tracked) and an empty `pension.db` at the repo root (stray, untracked, ignore). `DB_PATH` env var defaults to the former.
+- **`db/pension.db` is a local leftover, not the database.** Since the 2026-08-21 cutover it is gitignored and nothing reads it unless `DATABASE_URL` is unset. The stray empty `pension.db` at the repo root is a separate, older accident — ignore both. The live data is in Neon.
 - **Notes vs. publications**: `notes/` directory holds approved markdown briefings (committed, served by Streamlit); `tmp/sent_emails/` holds mock-mode email artifacts (gitignored).
 
 ## CI

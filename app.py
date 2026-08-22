@@ -14,6 +14,7 @@ from pathlib import Path
 import streamlit as st
 from dotenv import load_dotenv
 
+import database
 import queries
 from database import (
     utcnow,
@@ -106,18 +107,26 @@ st.html(
 # ---------------------------------------------------------------------------
 
 def _apply_column_migrations() -> None:
-    """Idempotently add columns that exist on the ORM model but not yet
-    on the live ``/data/pension.db`` (the persistent-disk DB on Render).
+    """Add columns present on the ORM model but missing from a local SQLite file.
 
-    Render's Streamlit reads from the persistent disk, which the GHA
-    cron's ``git push`` of ``db/pension.db`` does not update — so any
-    schema change that adds a new column has to be re-applied here on
-    Streamlit startup. ``init_db()`` only creates missing tables, not
-    missing columns. Each guarded ALTER below is safe to re-run on a
-    DB that already has the column.
+    Vestigial as of the 2026-08-21 Postgres cutover, and deliberately kept for
+    local SQLite work only. It existed because Render's Streamlit read a
+    persistent disk that the GHA cron's ``git push`` of ``db/pension.db`` never
+    updated, so a new column had to be re-applied at startup — there is no disk
+    and no committed database now, and Render never reaches the body below.
+
+    The gap it patches is real on both backends: ``init_db()`` creates missing
+    tables, never missing columns. On Postgres that is handled by migrating
+    deliberately rather than by guessing at startup, which is why this stays
+    SQLite-only rather than being generalised.
+
+    Each guarded ALTER is safe to re-run on a database that already has the
+    column.
     """
     import sqlite3
     import os
+    if not database.engine.dialect.name == "sqlite":
+        return
     db_path = os.environ.get("DB_PATH", str(Path(__file__).parent / "db" / "pension.db"))
     if not os.path.exists(db_path):
         return
@@ -148,52 +157,6 @@ def load_recent_summaries(plan_id=None, limit=20):
 
 def get_stats():
     return queries.corpus_stats(get_db_session())
-
-
-@st.cache_data(ttl=300, show_spinner=False)
-def _ensure_fresh_db() -> bool:
-    """Re-pull the DB from R2 when a writer pushed a new generation.
-
-    TTL-cached so at most one manifest check per 5 minutes per process.
-    Returns True when the local file was replaced. The engine is
-    disposed and the cached session (``get_db_session``) is cleared
-    BEFORE the file swap via ``pre_replace`` — Windows can't replace a
-    file with open handles, and a stale cached session would otherwise
-    keep serving the old file's connections forever.
-
-    Skips the pull entirely while an auto-push is pending (debounce
-    timer armed or a push in flight) so we never yank the local file
-    out from under a just-committed local write. Any failure here (an
-    R2 blip, a transient network error) is caught and logged to stderr
-    rather than propagating — this must never error-page the site.
-    """
-    try:
-        from scripts import db_sync
-        if not db_sync.enabled():
-            return False
-        if db_sync.auto_push_pending():
-            return False
-        import database
-
-        def _pre_replace():
-            database.engine.dispose()
-            get_db_session.clear()
-
-        return db_sync.pull(database.DB_PATH, pre_replace=_pre_replace)
-    except Exception as exc:  # noqa: BLE001
-        print(f"[db_sync] freshness pull failed: {exc}", file=sys.stderr)
-        return False
-
-
-@st.cache_resource(show_spinner=False)
-def _install_db_auto_push() -> bool:
-    """Once per process: push after any Streamlit-side DB commit."""
-    from scripts import db_sync
-    import database
-    db_sync.install_auto_push(database.SessionLocal,
-                              uploaded_by="streamlit",
-                              db_path=database.DB_PATH)
-    return True
 
 
 def parse_json_field(val):
@@ -3182,9 +3145,6 @@ def page_archive():
 
 
 def main():
-    _ensure_fresh_db()
-    _install_db_auto_push()
-
     plan_id, plan_label = render_sidebar()
 
     # Handle deep-link to a specific document
