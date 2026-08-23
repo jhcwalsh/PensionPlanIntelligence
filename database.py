@@ -128,6 +128,18 @@ def create_app_engine(url: str):
     is meaningless for a local file.
     """
     if url.startswith("postgresql"):
+        # No connect_args options here, deliberately. Raising
+        # idle_in_transaction_session_timeout would be the obvious answer to
+        # the pipeline's IdleInTransactionSessionTimeout, and it cannot be
+        # done: Neon's pooled endpoint rejects `options` startup parameters
+        # outright, so the attempt breaks every connection rather than
+        # loosening one setting.
+        #
+        # It is also the wrong answer. The pooler is pgbouncer in transaction
+        # mode, where a server connection is held for the life of a
+        # transaction — so a transaction left open across minutes of network
+        # I/O pins a backend whether or not it is allowed to. Short sessions
+        # are the requirement, not a courtesy; see pipeline.py's log_session.
         return create_engine(url, echo=False, pool_pre_ping=True,
                              pool_recycle=300)
     return create_engine(url, echo=False)

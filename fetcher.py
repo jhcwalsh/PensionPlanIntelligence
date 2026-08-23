@@ -569,6 +569,18 @@ def run_fetcher(plan_ids: list[str] = None, max_docs_per_plan: int = 50):
                     meeting_date=doc_info.get("meeting_date"),
                 )
                 session.add(doc)
+                # Committed per document, not per plan. Neon's
+                # idle_in_transaction_session_timeout is 5 minutes, and a plan
+                # with many large PDFs can spend longer than that between its
+                # first add and the end of the plan — the transaction would be
+                # terminated mid-run. Safe because dedup is by URL
+                # (document_exists above), so a re-run skips whatever landed:
+                # partial progress is resumable rather than lost.
+                #
+                # A transaction is still briefly open across one document's
+                # download, opened by the document_exists SELECT above. One
+                # file is comfortably inside the budget; a plan's worth is not.
+                session.commit()
                 new_count += 1
                 total_new += 1
 

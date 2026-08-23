@@ -130,6 +130,15 @@ def run_pipeline(
     log_session.add(fetch_run)
     log_session.commit()
     fetch_run_id = fetch_run.id
+    # Closed immediately, and reopened only when there is something to write.
+    # commit() expires the instance's attributes, so reading fetch_run.id above
+    # issues a refresh — which opens a *new* transaction. Left open, that
+    # transaction then sits idle for the whole fetch/extract/summarize run and
+    # Postgres terminates it:
+    #     psycopg.errors.IdleInTransactionSessionTimeout
+    # SQLite had no server to object, so this was free for the life of the
+    # project and only surfaced on the first run against Neon.
+    log_session.close()
 
     try:
         if do_fetch:
@@ -149,6 +158,7 @@ def run_pipeline(
             from summarizer import run_summarizer
             run_summarizer()
     except Exception as exc:
+        log_session = get_session()
         run = log_session.get(FetchRun, fetch_run_id)
         run.status = "failed"
         run.error_message = f"{type(exc).__name__}: {exc}"
@@ -158,6 +168,7 @@ def run_pipeline(
         raise
 
     # Success path: capture document IDs created during this run window.
+    log_session = get_session()
     new_doc_ids = [
         d.id for d in log_session.query(Document.id)
         .filter(Document.downloaded_at >= start)

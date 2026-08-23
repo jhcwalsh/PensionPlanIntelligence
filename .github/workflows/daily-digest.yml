@@ -27,13 +27,11 @@ jobs:
       APPROVAL_EMAIL_FROM: ${{ secrets.APPROVAL_EMAIL_FROM }}
       APPROVAL_EMAIL_RECIPIENT: ${{ secrets.APPROVAL_EMAIL_RECIPIENT }}
       APPROVAL_BASE_URL: https://pensionplanintelligence.onrender.com
-
-    # Every step in this job talks to the same Postgres. Declared at job
-    # level rather than per step so a new step cannot silently fall back
-    # to SQLite: database.resolve_database_url() treats an unset or empty
-    # DATABASE_URL as "use DB_PATH", which on a runner is an empty file —
-    # the job would appear to succeed having read and written nothing.
-    env:
+      # Declared at job level rather than per step so a new step cannot
+      # silently fall back to SQLite: database.resolve_database_url() treats an
+      # unset or empty DATABASE_URL as "use DB_PATH", which on a runner is an
+      # empty file — the job would appear to succeed having read and written
+      # nothing.
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
     steps:
       - uses: actions/checkout@v4
