@@ -146,3 +146,78 @@ def test_the_local_recordings_job_does_not_push():
     assert "db_sync" not in bat
     assert "git commit" not in bat
     assert "git push" not in bat
+
+
+# ---------------------------------------------------------------------------
+# Duplicate keys
+#
+# yaml.safe_load accepts a duplicate mapping key and keeps the last one, with
+# no error. GitHub Actions' parser rejects the file outright: the run fails
+# instantly and the workflow shows up in the UI as its file path rather than
+# its `name:`, which is the only visible symptom.
+#
+# The cutover inserted a job-level `env:` into eight workflows. daily-digest
+# already had one, so it gained a second, and every run from that merge onward
+# failed before executing a step — including the 13:00 UTC digest. The
+# validation at the time used yaml.safe_load and saw nothing wrong.
+# ---------------------------------------------------------------------------
+
+class _DuplicateKeyError(Exception):
+    pass
+
+
+class _StrictLoader(yaml.SafeLoader):
+    """SafeLoader that refuses duplicate mapping keys, as Actions does."""
+
+
+def _no_duplicates(loader, node, deep=False):
+    mapping = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        if key in mapping:
+            raise _DuplicateKeyError(
+                "duplicate key %r at line %d"
+                % (key, key_node.start_mark.line + 1))
+        mapping[key] = loader.construct_object(value_node, deep=deep)
+    return mapping
+
+
+_StrictLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _no_duplicates)
+
+
+@pytest.mark.parametrize(
+    "name", sorted(p.name for p in WORKFLOWS.glob("*.yml")))
+def test_no_workflow_has_a_duplicate_key(name):
+    """Every workflow, not just the DB ones — a parse error breaks any file."""
+    try:
+        yaml.load((WORKFLOWS / name).read_text(encoding="utf-8"),
+                  Loader=_StrictLoader)
+    except _DuplicateKeyError as exc:
+        pytest.fail("%s: %s — GitHub Actions will refuse to parse this" % (name, exc))
+
+
+def test_the_strict_loader_actually_rejects_duplicates():
+    """Guard on the guard.
+
+    If the loader silently degraded to SafeLoader's behaviour, the test above
+    would pass on every file forever while checking nothing.
+    """
+    doc = "job:\n  env:\n    a: 1\n  env:\n    b: 2\n"
+    assert yaml.safe_load(doc) == {"job": {"env": {"b": 2}}}, \
+        "safe_load stopped accepting duplicates — this test's premise changed"
+    with pytest.raises(_DuplicateKeyError):
+        yaml.load(doc, Loader=_StrictLoader)
+
+
+@pytest.mark.parametrize("name", DB_WORKFLOWS)
+def test_each_db_job_declares_the_dsn_exactly_once(name):
+    """Two env blocks is the specific shape that broke daily-digest."""
+    import re
+    text = (WORKFLOWS / name).read_text(encoding="utf-8")
+    per_job = len(re.findall(r"^    env:$", text, re.M))
+    jobs = len(_load(name).get("jobs", {}))
+    assert per_job <= jobs, (
+        "%s has %d job-level env blocks across %d job(s)"
+        % (name, per_job, jobs))
+    assert text.count("DATABASE_URL: ${{ secrets.DATABASE_URL }}") == jobs, name
