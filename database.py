@@ -33,7 +33,7 @@ load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"),
 from sqlalchemy import (
     Column, Integer, String, Text, Float, DateTime, Boolean, Date, JSON,
     LargeBinary, ForeignKey, create_engine, text, UniqueConstraint, Index,
-    DDL, event
+    DDL, event, Numeric
 )
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import DeclarativeBase, Session, relationship, sessionmaker
@@ -1223,6 +1223,38 @@ class VideoRefreshLog(Base):
     )
 
 
+class ApiUsage(Base):
+    """One row per Claude API call: tokens, cost, and which job made it.
+
+    Exists because ``message.usage`` was discarded on every call, so the only
+    answer to "where does the money go" was a guess — and the guess in the
+    design spec turned out to be wrong twice over (see
+    docs/superpowers/plans/2026-08-24-api-spend-visibility.md).
+
+    Rows are cheap: a few hundred a day at roughly 100 bytes each.
+    """
+
+    __tablename__ = "api_usage"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    occurred_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    model = Column(String, nullable=False)
+    # "summarize" | "ocr" | "cafr_extract" | "insights:monthly" | ...
+    operation = Column(String, nullable=False)
+    run_id = Column(String)          # fetch_runs.id, a period start, a doc id
+    input_tokens = Column(Integer, nullable=False, default=0)
+    output_tokens = Column(Integer, nullable=False, default=0)
+    cache_write_tokens = Column(Integer, nullable=False, default=0)
+    cache_read_tokens = Column(Integer, nullable=False, default=0)
+    # Numeric, not Float: this is money and it gets summed.
+    cost_usd = Column(Numeric(12, 6), nullable=False)
+
+    __table_args__ = (
+        Index("ix_api_usage_occurred", "occurred_at"),
+        Index("ix_api_usage_operation", "operation", "occurred_at"),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Init / helpers
 # ---------------------------------------------------------------------------
@@ -1274,6 +1306,48 @@ _FTS_TRIGGER_SQL = [
 
 
 logger = logging.getLogger(__name__)
+
+
+def record_api_usage(model: str, usage) -> Optional["ApiUsage"]:
+    """Record one Claude call. Never raises.
+
+    Measurement is subordinate to the work. A lost row costs a data point; an
+    exception here would cost the summary, the CAFR extraction, or the day's
+    briefing — all of which are expensive to redo and none of which care what
+    they cost. Returns None on any failure, having logged it.
+
+    Its own session, opened and closed immediately, because callers hold theirs
+    across minutes of network I/O and Neon terminates a transaction left idle
+    for five.
+    """
+    import costs
+    try:
+        cost = costs.cost_usd(model, usage)
+        operation, run_id = costs.current_attribution()
+        session = get_session()
+        try:
+            row = ApiUsage(
+                model=model,
+                operation=operation,
+                run_id=run_id,
+                input_tokens=getattr(usage, "input_tokens", 0) or 0,
+                output_tokens=getattr(usage, "output_tokens", 0) or 0,
+                cache_write_tokens=getattr(
+                    usage, "cache_creation_input_tokens", 0) or 0,
+                cache_read_tokens=getattr(
+                    usage, "cache_read_input_tokens", 0) or 0,
+                cost_usd=cost,
+            )
+            session.add(row)
+            session.commit()
+            session.refresh(row)
+            session.expunge(row)
+            return row
+        finally:
+            session.close()
+    except Exception as exc:                     # noqa: BLE001 — see docstring
+        logger.warning("API usage not recorded (%s): %s", model, exc)
+        return None
 
 
 def _fts_dialect_supported(bind) -> bool:
