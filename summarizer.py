@@ -16,6 +16,8 @@ import re
 from datetime import datetime
 
 import anthropic
+
+import costs
 from dotenv import load_dotenv
 from rich.console import Console
 from tenacity import (
@@ -202,30 +204,40 @@ DOCUMENT TEXT:
 _client: anthropic.Anthropic | None = None
 
 
-def _get_client() -> anthropic.Anthropic:
+def _build_client() -> anthropic.Anthropic:
+    """A raw client. Credential logic only — see _get_client for the wrapper."""
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        load_dotenv(_ENV_PATH, override=True)
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+
+    # Fall back to Claude Code session ingress token (OAuth bearer auth)
+    if not api_key:
+        token_file = os.environ.get("CLAUDE_SESSION_INGRESS_TOKEN_FILE")
+        if token_file and os.path.exists(token_file):
+            with open(token_file) as f:
+                auth_token = f.read().strip()
+            if auth_token:
+                return anthropic.Anthropic(auth_token=auth_token)
+
+    if not api_key:
+        raise RuntimeError(f"ANTHROPIC_API_KEY not set. Check {_ENV_PATH}")
+    # Use the real Anthropic API endpoint, bypassing any local proxy
+    # (e.g. Claude Code sets ANTHROPIC_BASE_URL=http://127.0.0.1:... which
+    # rejects direct API keys).
+    return anthropic.Anthropic(api_key=api_key,
+                               base_url="https://api.anthropic.com")
+
+
+def _get_client():
+    """The shared client, instrumented so every call records what it cost.
+
+    Most modules import this one. The three CAFR/IPS extractors build their own
+    and wrap it the same way — see costs.instrument.
+    """
     global _client
     if _client is None:
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
-        if not api_key:
-            load_dotenv(_ENV_PATH, override=True)
-            api_key = os.environ.get("ANTHROPIC_API_KEY")
-
-        # Fall back to Claude Code session ingress token (OAuth bearer auth)
-        if not api_key:
-            token_file = os.environ.get("CLAUDE_SESSION_INGRESS_TOKEN_FILE")
-            if token_file and os.path.exists(token_file):
-                with open(token_file) as f:
-                    auth_token = f.read().strip()
-                if auth_token:
-                    _client = anthropic.Anthropic(auth_token=auth_token)
-                    return _client
-
-        if not api_key:
-            raise RuntimeError(f"ANTHROPIC_API_KEY not set. Check {_ENV_PATH}")
-        # Use the real Anthropic API endpoint, bypassing any local proxy
-        # (e.g. Claude Code sets ANTHROPIC_BASE_URL=http://127.0.0.1:... which
-        # rejects direct API keys).
-        _client = anthropic.Anthropic(api_key=api_key, base_url="https://api.anthropic.com")
+        _client = costs.instrument(_build_client())
     return _client
 
 

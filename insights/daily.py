@@ -308,10 +308,12 @@ def _synthesize_via_anthropic(
     summaries_by_doc: dict[int, Optional[Summary]],
 ) -> str:
     """Live-mode Anthropic call. Imported lazily so mock tests stay light."""
-    from anthropic import Anthropic
-    from summarizer import MODEL_SONNET
+    # The shared factory rather than a directly constructed client: it
+    # returns an instrumented one, so this call's spend is recorded like
+    # every other. Built here directly, it was invisible.
+    from summarizer import MODEL_SONNET, _get_client
 
-    client = Anthropic()
+    client = _get_client()
     doc_blocks = "\n".join(_format_doc_block(d, summaries_by_doc.get(d.id)) for d in docs)
     user = (
         f"Plan: {plan_name}\n"

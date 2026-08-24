@@ -33,6 +33,8 @@ import sys
 from pathlib import Path
 
 import anthropic
+
+import costs
 import fitz  # PyMuPDF
 from dotenv import load_dotenv
 from rich.console import Console
@@ -336,10 +338,12 @@ def _get_client() -> anthropic.Anthropic:
             with open(token_file) as f:
                 auth_token = f.read().strip()
             if auth_token:
-                _client = anthropic.Anthropic(auth_token=auth_token)
+                _client = costs.instrument(
+                        anthropic.Anthropic(auth_token=auth_token))
                 return _client
         raise RuntimeError(f"ANTHROPIC_API_KEY not set. Check {_ENV_PATH}")
-    _client = anthropic.Anthropic(api_key=api_key, base_url="https://api.anthropic.com")
+    _client = costs.instrument(anthropic.Anthropic(
+        api_key=api_key, base_url="https://api.anthropic.com"))
     return _client
 
 

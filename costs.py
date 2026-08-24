@@ -114,10 +114,18 @@ def current_attribution() -> tuple[str, Optional[str]]:
 # ---------------------------------------------------------------------------
 
 def mock_mode() -> bool:
-    """True when this run must not touch the API, so has no spend to record."""
+    """True when this run must not touch the API, so has no spend to record.
+
+    Only the two broad flags. IPS_MODE is deliberately excluded: it short-
+    circuits one verification call, so honouring it here would silently
+    suppress recording for a run that was summarising documents for real.
+
+    Belt-and-braces in any case — a mock path returns before it reaches the
+    client, so the wrapper is never called. This catches a mock branch that
+    forgets to.
+    """
     return "mock" in (os.environ.get("LLM_MODE", ""),
-                      os.environ.get("INSIGHTS_MODE", ""),
-                      os.environ.get("IPS_MODE", ""))
+                      os.environ.get("INSIGHTS_MODE", ""))
 
 
 class _RecordingMessages:
