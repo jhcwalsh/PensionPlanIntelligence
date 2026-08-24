@@ -117,6 +117,10 @@ CASES = {
     "meeting_recordings": {"args": (None,)},
     "publications_by_status": {"args": (("published",),)},
     "drafts_awaiting_approval": {"args": ()},
+    # A wide window so the comparison is not vacuous on a fresh table.
+    "api_spend_by_operation": {"args": (3650,)},
+    "api_spend_by_model": {"args": (3650,)},
+    "api_spend_total": {"args": (3650,)},
 }
 
 

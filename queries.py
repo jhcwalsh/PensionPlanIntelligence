@@ -32,6 +32,7 @@ from database import (
     CafrAllocation,
     CafrExtract,
     CafrPerformance,
+    ApiUsage,
     CafrRefreshLog,
     Document,
     DocumentSkip,
@@ -632,3 +633,56 @@ def drafts_awaiting_approval(session) -> list[Publication]:
         .order_by(Publication.composed_at.desc())
         .all()
     )
+
+
+# ---------------------------------------------------------------------------
+# API spend
+# ---------------------------------------------------------------------------
+
+def api_spend_by_operation(session, days: int = 30) -> list[tuple]:
+    """(operation, calls, input_tokens, output_tokens, cost) over a window.
+
+    Ordered by cost so the answer to "what should I optimise" is the first row
+    rather than something to scan for.
+    """
+    cutoff = utcnow() - timedelta(days=days)
+    return (
+        session.query(
+            ApiUsage.operation,
+            func.count(ApiUsage.id),
+            func.sum(ApiUsage.input_tokens),
+            func.sum(ApiUsage.output_tokens),
+            func.sum(ApiUsage.cost_usd),
+        )
+        .filter(ApiUsage.occurred_at >= cutoff)
+        .group_by(ApiUsage.operation)
+        .order_by(func.sum(ApiUsage.cost_usd).desc(), ApiUsage.operation)
+        .all()
+    )
+
+
+def api_spend_by_model(session, days: int = 30) -> list[tuple]:
+    """(model, calls, cost) over a window. The other axis of the same data."""
+    cutoff = utcnow() - timedelta(days=days)
+    return (
+        session.query(
+            ApiUsage.model,
+            func.count(ApiUsage.id),
+            func.sum(ApiUsage.cost_usd),
+        )
+        .filter(ApiUsage.occurred_at >= cutoff)
+        .group_by(ApiUsage.model)
+        .order_by(func.sum(ApiUsage.cost_usd).desc(), ApiUsage.model)
+        .all()
+    )
+
+
+def api_spend_total(session, days: int = 30):
+    """Total cost over a window, or 0 when nothing has been recorded yet."""
+    cutoff = utcnow() - timedelta(days=days)
+    total = (
+        session.query(func.sum(ApiUsage.cost_usd))
+        .filter(ApiUsage.occurred_at >= cutoff)
+        .scalar()
+    )
+    return total or 0

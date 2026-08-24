@@ -11,8 +11,9 @@ from datetime import datetime, timedelta
 
 import pytest
 
+import database
 import queries
-from database import Document, Plan, Summary, get_session
+from database import Document, Plan, Summary, get_session, utcnow
 
 
 @pytest.fixture()
@@ -294,3 +295,68 @@ def test_descending_meeting_date_is_nulls_last(name):
     assert "meeting_date.desc().nullslast()" in clause, (
         f"{name} sorts by meeting_date DESC without nullslast(); on Postgres "
         "undated rows sort first and dated ones fall off the limit")
+
+
+# ---------------------------------------------------------------------------
+# API spend
+# ---------------------------------------------------------------------------
+
+def test_spend_is_zero_before_anything_is_recorded(tmp_db):
+    """A fresh table must read as $0.00, not None — the Admin tab formats it."""
+    s = get_session()
+    try:
+        assert queries.api_spend_total(s) == 0
+        assert queries.api_spend_by_operation(s) == []
+    finally:
+        s.close()
+
+
+def _record(session, operation, model, cost, days_ago=0):
+    from decimal import Decimal
+    row = database.ApiUsage(
+        occurred_at=utcnow() - timedelta(days=days_ago),
+        model=model, operation=operation,
+        input_tokens=1000, output_tokens=100,
+        cost_usd=Decimal(cost))
+    session.add(row)
+    session.commit()
+
+
+def test_spend_groups_by_job_costliest_first(tmp_db):
+    """The first row is meant to be the answer to 'what should I optimise'."""
+    s = get_session()
+    try:
+        _record(s, "summarize", "claude-haiku-4-5-20251001", "0.01")
+        _record(s, "ocr", "claude-sonnet-4-6", "5.00")
+        _record(s, "cafr_extract", "claude-sonnet-4-6", "1.00")
+
+        rows = queries.api_spend_by_operation(s)
+        assert [r[0] for r in rows] == ["ocr", "cafr_extract", "summarize"]
+        assert float(queries.api_spend_total(s)) == 6.01
+    finally:
+        s.close()
+
+
+def test_the_window_excludes_older_rows(tmp_db):
+    """Otherwise 'last 7 days' silently reports all time."""
+    s = get_session()
+    try:
+        _record(s, "ocr", "claude-sonnet-4-6", "5.00", days_ago=40)
+        _record(s, "summarize", "claude-haiku-4-5-20251001", "0.01", days_ago=1)
+
+        assert float(queries.api_spend_total(s, days=7)) == 0.01
+        assert float(queries.api_spend_total(s, days=90)) == 5.01
+    finally:
+        s.close()
+
+
+def test_spend_groups_by_model_too(tmp_db):
+    s = get_session()
+    try:
+        _record(s, "ocr", "claude-sonnet-4-6", "5.00")
+        _record(s, "summarize", "claude-haiku-4-5-20251001", "0.01")
+        rows = queries.api_spend_by_model(s)
+        assert [r[0] for r in rows] == ["claude-sonnet-4-6",
+                                        "claude-haiku-4-5-20251001"]
+    finally:
+        s.close()

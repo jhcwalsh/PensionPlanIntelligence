@@ -2721,10 +2721,10 @@ def page_admin():
     """Admin views: pipeline / data-quality diagnostics for the site owner."""
     st.title("Admin")
     (tab_runs, tab_coverage, tab_backlog, tab_failed,
-     tab_cafr, tab_cafr_refreshes, tab_subscribers) = st.tabs(
+     tab_cafr, tab_cafr_refreshes, tab_subscribers, tab_spend) = st.tabs(
         ["Recent Runs", "Plan Coverage", "Pipeline Backlog",
          "Failed Docs", "CAFR Coverage", "CAFR Refreshes",
-         "Subscribers"]
+         "Subscribers", "Spend"]
     )
 
     with tab_runs:
@@ -2826,6 +2826,60 @@ def page_admin():
 
     with tab_subscribers:
         _render_admin_subscribers()
+
+    with tab_spend:
+        _render_admin_spend()
+
+
+def _render_admin_spend() -> None:
+    """What Claude actually costs, by job and by model.
+
+    Exists because message.usage was discarded on every call, so the design
+    spec's cost section was reasoning from assumption — and two of its four
+    proposed controls turned out to be already done or a no-op. The table
+    below is the correction: it says where the money goes rather than where it
+    was expected to go.
+
+    Empty until a real (non-mock) run has happened; nothing backfills, because
+    the token counts were never recorded and cannot be reconstructed.
+    """
+    session = get_db_session()
+    days = st.selectbox("Window", [7, 30, 90], index=1,
+                        format_func=lambda d: f"last {d} days",
+                        key="spend_window")
+
+    total = queries.api_spend_total(session, days)
+    st.metric(f"Claude API spend, last {days} days", f"${float(total):,.2f}")
+
+    by_op = queries.api_spend_by_operation(session, days)
+    if not by_op:
+        st.info(
+            "No usage recorded yet. Rows appear after the first live run — "
+            "mock runs deliberately record nothing."
+        )
+        return
+
+    st.subheader("By job")
+    st.dataframe(
+        [{"job": op,
+          "calls": calls,
+          "input tokens": int(tin or 0),
+          "output tokens": int(tout or 0),
+          "cost": f"${float(cost or 0):,.4f}"}
+         for op, calls, tin, tout, cost in by_op],
+        use_container_width=True, hide_index=True)
+
+    st.subheader("By model")
+    st.dataframe(
+        [{"model": model, "calls": calls, "cost": f"${float(cost or 0):,.4f}"}
+         for model, calls, cost in queries.api_spend_by_model(session, days)],
+        use_container_width=True, hide_index=True)
+
+    st.caption(
+        "Ordered by cost, so the first row is the answer to what to optimise. "
+        "Prices are USD per million tokens as published on 2026-08-24; "
+        "cache reads and writes are priced separately from base input."
+    )
 
 
 def _render_admin_subscribers() -> None:
