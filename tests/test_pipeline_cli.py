@@ -75,3 +75,74 @@ def test_parse_args_is_actually_called():
     assert "parser.parse_args()" in src, (
         "pipeline.main() builds an ArgumentParser but never calls "
         "parse_args() — every reference to `args` below it is unbound")
+
+
+# ---------------------------------------------------------------------------
+# The same defect, in a second module, found four days later
+#
+# Commit 67c842b removed the --local-only flag from pipeline.py and
+# refresh_cafrs.py, and took `args = parser.parse_args()` with it in BOTH. The
+# pipeline half was fixed on 2026-08-21 (PR #27) and nobody checked the other,
+# so the monthly CAFR refresh went on failing: 2026-08-01 died with the same
+# NameError while June and July had succeeded.
+#
+# Fixing the instance and not the class is what cost the extra three weeks, so
+# this test enumerates every entry point rather than naming one.
+# ---------------------------------------------------------------------------
+
+import ast
+
+
+def _modules_with_a_parser() -> list[pathlib.Path]:
+    root = pathlib.Path(__file__).resolve().parents[1]
+    out = []
+    for path in sorted(root.rglob("*.py")):
+        rel = path.relative_to(root).as_posix()
+        if any(rel.startswith(s) for s in
+               (".venv/", ".claude/", "build/", "tests/")):
+            continue
+        if "ArgumentParser(" in path.read_text(encoding="utf-8", errors="replace"):
+            out.append(path)
+    return out
+
+
+def test_the_sweep_finds_the_known_entry_points():
+    """Guard on the guard: if the discovery breaks, the test below passes on
+    an empty list and proves nothing."""
+    names = {p.name for p in _modules_with_a_parser()}
+    assert {"pipeline.py", "refresh_cafrs.py"} <= names, names
+
+
+@pytest.mark.parametrize(
+    "path", _modules_with_a_parser(),
+    ids=lambda p: p.name)
+def test_every_parser_is_actually_parsed(path):
+    """A module that builds a parser and never parses it references `args`
+    unbound — a NameError on the first real run, and green in every test that
+    does not invoke main()."""
+    src = path.read_text(encoding="utf-8")
+    if "parse_args" in src:
+        return
+    tree = ast.parse(src)
+    uses_args = any(isinstance(n, ast.Name) and n.id == "args"
+                    for n in ast.walk(tree))
+    assert not uses_args, (
+        "%s builds an ArgumentParser, references `args`, and never calls "
+        "parse_args() — every reference below it is unbound" % path.name)
+
+
+def test_refresh_cafrs_main_does_not_raise_nameerror(monkeypatch):
+    """The specific regression, exercised the way the monthly cron does."""
+    import refresh_cafrs
+
+    called = {}
+    monkeypatch.setattr(refresh_cafrs, "_resolve_plan_ids",
+                        lambda ids: called.setdefault("ids", ids) or ["x"])
+    monkeypatch.setattr(refresh_cafrs, "run_refresh",
+                        lambda **kw: called.update(kw) or {"error": 0})
+    monkeypatch.setattr("sys.argv", ["refresh_cafrs.py", "--year", "2025"])
+
+    with pytest.raises(SystemExit) as exc:
+        refresh_cafrs.main()
+    assert exc.value.code == 0
+    assert called.get("force_year") == 2025, called

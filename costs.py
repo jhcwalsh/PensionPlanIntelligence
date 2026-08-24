@@ -105,6 +105,19 @@ def track(operation: str, run_id: Optional[str] = None):
         _RUN_ID.reset(run_token)
 
 
+def label_process(operation: str, run_id: Optional[str] = None) -> None:
+    """Label every subsequent Claude call in this process. No reset.
+
+    For CLI entry points, where the alternative — wrapping main()'s body in a
+    `with` — means re-indenting a long try/except for no behavioural gain. The
+    process exits at the end of main(), so there is nothing to restore.
+
+    Use track() anywhere the label must be scoped and unwound.
+    """
+    _OPERATION.set(operation)
+    _RUN_ID.set(run_id)
+
+
 def current_attribution() -> tuple[str, Optional[str]]:
     return _OPERATION.get(), _RUN_ID.get()
 

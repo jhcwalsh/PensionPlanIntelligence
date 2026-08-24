@@ -22,6 +22,7 @@ from pathlib import Path
 
 from rich.console import Console
 
+import costs
 from database import (
     as_utc,
     utcnow,
@@ -133,7 +134,19 @@ def extract_pdf_ocr(path: str) -> tuple[str, int, OcrInfo]:
     contribute. The function returns whatever was successfully
     transcribed; an empty result causes ``extract_document`` to mark
     the row ``failed`` as before.
+
+    Every Claude call inside is labelled ``ocr``: vision is billed per page as
+    image input, which makes this the leading suspect for the largest line
+    item on the bill. Labelling it is what lets the Spend tab confirm or clear
+    that, rather than leaving it a guess. Applied to the whole function rather
+    than the one call, so the per-page loop needs no re-indenting and a second
+    call added later is labelled automatically.
     """
+    with costs.track("ocr"):
+        return _extract_pdf_ocr(path)
+
+
+def _extract_pdf_ocr(path: str) -> tuple[str, int, OcrInfo]:
     try:
         import fitz  # pymupdf
     except ImportError as e:

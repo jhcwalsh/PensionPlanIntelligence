@@ -190,3 +190,54 @@ def test_the_summariser_factory_returns_the_wrapper(monkeypatch):
     monkeypatch.setattr(summarizer, "_client", None)
     monkeypatch.setattr(summarizer, "_build_client", lambda: _FakeClient())
     assert isinstance(summarizer._get_client(), costs._RecordingClient)
+
+
+# ---------------------------------------------------------------------------
+# Attribution coverage
+#
+# Unlabelled spend answers "how much" but not "on what", and "on what" is the
+# question this whole exercise exists to answer.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("module,label", [
+    ("pipeline.py", "summarize"),
+    ("extractor.py", "ocr"),
+    ("refresh_cafrs.py", "cafr_extract"),
+    ("insights/scheduler.py", "insights:"),
+])
+def test_each_spending_entry_point_labels_its_calls(module, label):
+    src = (ROOT / module).read_text(encoding="utf-8")
+    assert "import costs" in src, "%s does not import costs" % module
+    assert ("costs.track(" in src or "costs.label_process(" in src), \
+        "%s labels nothing" % module
+    assert label in src, "%s does not use the %r label" % (module, label)
+
+
+def test_label_process_sets_without_needing_a_reset():
+    """Used by CLI entry points, where the process exits at the end of main()."""
+    costs.label_process("insights:monthly", run_id="2026-08")
+    try:
+        assert costs.current_attribution() == ("insights:monthly", "2026-08")
+    finally:
+        costs.label_process("unattributed", None)
+
+
+def test_ocr_calls_are_labelled_through_the_real_function(tmp_db, live_mode,
+                                                          monkeypatch):
+    """Behavioural, not just textual: the label has to reach the recorder.
+
+    extract_pdf_ocr wraps a private worker so the per-page loop needed no
+    re-indenting; that indirection is exactly the kind of thing a source-only
+    assertion would miss if it were wired up wrong.
+    """
+    import extractor
+
+    seen = {}
+
+    def fake_worker(path):
+        seen["attribution"] = costs.current_attribution()
+        return "", 0, extractor.OcrInfo()
+
+    monkeypatch.setattr(extractor, "_extract_pdf_ocr", fake_worker)
+    extractor.extract_pdf_ocr("irrelevant.pdf")
+    assert seen["attribution"][0] == "ocr"

@@ -36,6 +36,7 @@ from pathlib import Path
 from rich.console import Console
 
 from cafr_year_check import fiscal_year_from_pdf
+import costs
 from database import (
     utcnow,
     CafrRefreshLog,
@@ -360,8 +361,13 @@ def main():
                         help="Force a specific target fiscal year (default: "
                              "computed from each plan's fiscal_year_end).")
 
+    args = parser.parse_args()
+
     plan_ids = _resolve_plan_ids(args.plan_ids or None)
-    counts = run_refresh(plan_ids=plan_ids, force_year=args.year)
+    # Sonnet over 100+ page PDFs, and bursty: 115 extractions in April
+    # against 1 in July. Labelled so a spike is attributable.
+    with costs.track("cafr_extract", run_id=str(args.year or "auto")):
+        counts = run_refresh(plan_ids=plan_ids, force_year=args.year)
     sys.exit(0 if counts.get("error", 0) == 0 else 1)
 
 

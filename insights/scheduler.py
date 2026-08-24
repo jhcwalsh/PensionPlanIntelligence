@@ -21,6 +21,7 @@ import logging
 import sys
 from datetime import date
 
+import costs
 from database import init_db
 
 
@@ -72,6 +73,13 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     init_db()
+
+    # One label for all five cadences: they differ only in which
+    # run_*_cycle is called, and each uses a different model mix.
+    # label_process rather than a with-block — this is main(), the
+    # process exits at the end of it, and wrapping the try/except below
+    # would mean re-indenting it for no behavioural gain.
+    costs.label_process("insights:" + args.cycle)
 
     try:
         if args.cycle == "weekly":

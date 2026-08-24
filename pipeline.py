@@ -34,6 +34,8 @@ from dotenv import load_dotenv
 from rich.console import Console
 from rich.table import Table
 
+import costs
+
 from database import utcnow, Document, FetchRun, Plan, Summary, get_session, init_db
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
@@ -156,7 +158,10 @@ def run_pipeline(
         if do_summarize:
             console.rule("[bold]Step 3: Summarize with Claude[/bold]")
             from summarizer import run_summarizer
-            run_summarizer()
+            # Labels every Claude call made inside, so the Spend tab can
+            # separate summarisation from OCR and CAFR extraction.
+            with costs.track("summarize", run_id=str(fetch_run_id)):
+                run_summarizer()
     except Exception as exc:
         log_session = get_session()
         run = log_session.get(FetchRun, fetch_run_id)
