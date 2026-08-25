@@ -108,11 +108,41 @@ added ~20.5 MB to a 68 MB file 11 MB from GitHub's hard limit; against Postgres
 that constraint does not exist. What still gates it is the source PDFs, which
 are never kept — see the portal spec §2.3 on the R2 PDF store.
 
-### `documents.extracted_text` is gzipped on disk
+### `documents.extracted_text` is gzipped on disk — and deferred
 The full extracted PDF text is the bulk of the database by 10× over everything else. `Document.extracted_text` uses a `GzippedText` `TypeDecorator` (`database.py`): callers see plain `str` both ways, but stored values are gzipped UTF-8 bytes (`impl=LargeBinary`, which is `BYTEA` on Postgres). It was introduced to stay under GitHub's file-size limit; that reason is gone, but it still cuts storage and transfer roughly tenfold over the network, so it stays. Legacy uncompressed `str` rows are returned as-is, so the model change was safe to land before the data migration. Implications:
 - Don't run raw SQL like `SELECT extracted_text FROM documents` — you'll get gzip bytes. Always go through the SQLAlchemy ORM, or `gzip.decompress(row[0])` yourself.
 - Aggregate queries like `LENGTH(extracted_text)` measure compressed bytes, not text length.
 - `scripts/migrate_compress_extracted_text.py` is the one-shot migration; idempotent on the gzip magic header. Re-running it is safe.
+
+**The column is mapper-level `deferred()`.** It is half the database (33.7 MB
+gzipped over 4,257 rows) and most callers never read it, so an ordinary
+`session.query(Document)` no longer fetches it. This is not a micro-optimisation:
+on 2026-08-25, four days after the Postgres cutover, the project exhausted Neon's
+5 GB monthly transfer quota, Neon suspended compute, and *everything* went down at
+once — the Streamlit service, all eight GHA crons, and local shells, all with
+`ERROR: Your project has exceeded the data transfer quota`. The single biggest
+contributor was `queries.cafr_coverage_rows()`, which loaded 140 CAFR documents
+(5.2 MB of blob) purely to count fiscal years and allocation rows, on a 300-second
+Streamlit cache TTL — up to 1.5 GB/day from one function that never reads the text.
+
+What this means when you touch document code:
+- Reading `doc.extracted_text` still works and returns the same `str`. It emits an
+  extra `SELECT` on first access per instance, and requires the object still be
+  bound to a session — a detached `Document` raises `DetachedInstanceError` where
+  it used to return text. `app.py` is safe: its session is a long-lived
+  `@st.cache_resource`.
+- **If you loop over many documents reading the text, add
+  `.options(undefer(Document.extracted_text))`** or you turn one query into N+1.
+  `fetch_cafr`, `fetch_ips`, `discover_video_sources`, `summarizer.run_summarizer`
+  and `database.get_unsummarized_documents` all do this already.
+- Writing is unaffected — assigning to a deferred column does not load it first,
+  so `extractor.py` needed no change.
+- `tests/test_deferred_extracted_text.py` asserts the emitted SQL, not just the
+  mapper state, because the bytes on the wire are what cost money. The N+1 is
+  invisible on SQLite, which is how it would otherwise reach production unnoticed.
+
+`IpsDocument.extracted_text` is deliberately left eager: 37 rows, 0.64 MB, read
+by a monthly job. Not worth the N+1 risk.
 
 ### Layered packages, one DB, idempotent schema
 `database.py` defines all 15 tables in one module. There is no migration framework. `init_db()` calls `Base.metadata.create_all(engine)` — adding a new model class and re-running `init_db()` on an existing DB just creates the missing tables. **Never write SQL ALTER TABLE migrations**; just add the SQLAlchemy class and call `init_db()`. Existing-row backfill is a one-off script.

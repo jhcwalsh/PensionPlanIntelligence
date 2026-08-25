@@ -16,6 +16,7 @@ import re
 from datetime import datetime
 
 import anthropic
+from sqlalchemy.orm import undefer
 
 import costs
 from dotenv import load_dotenv
@@ -416,6 +417,7 @@ def run_summarizer(doc_ids: list[int] = None):
         if doc_ids:
             docs = (
                 session.query(Document)
+                .options(undefer(Document.extracted_text))
                 .filter(Document.id.in_(doc_ids), Document.extraction_status == "done")
                 .all()
             )

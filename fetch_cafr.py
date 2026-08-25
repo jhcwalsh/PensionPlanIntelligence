@@ -33,6 +33,7 @@ from urllib.parse import quote_plus, unquote, urljoin, urlparse
 import requests
 from bs4 import BeautifulSoup
 from rich.console import Console
+from sqlalchemy.orm import undefer
 
 from database import utcnow, Document, document_exists, get_session, init_db
 from fetcher import (
@@ -235,6 +236,7 @@ def strategy_mine_existing(plan_id: str, session) -> list[str]:
     """Scan this plan's already-extracted documents for CAFR PDF URLs."""
     docs = (
         session.query(Document)
+        .options(undefer(Document.extracted_text))
         .filter(Document.plan_id == plan_id)
         .filter(Document.extracted_text.isnot(None))
         .all()
