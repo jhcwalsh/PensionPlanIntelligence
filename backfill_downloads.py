@@ -31,7 +31,7 @@ import requests
 from database import utcnow, Document, get_session, init_db
 
 DOWNLOADS_DIR = Path(os.environ.get("DOWNLOADS_DIR") or (Path(__file__).parent / "downloads"))
-HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; PensionPlanIntelligence/1.0)"}
+HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; PensionGraph/1.0)"}
 
 
 def fetch_one(doc, delay: float) -> tuple[Path | None, int, str]:

@@ -122,7 +122,7 @@ def run_pipeline(
     init_db()
     start = utcnow()
     source = "gha" if os.environ.get("GITHUB_ACTIONS") == "true" else "local"
-    console.rule("[bold blue]Pension Plan Intelligence Pipeline[/bold blue]")
+    console.rule("[bold blue]PensionGraph Pipeline[/bold blue]")
 
     # Open one row in fetch_runs so the Admin tab (and the eventual email
     # digest) can show what this invocation did. Status starts as 'running'
@@ -197,7 +197,7 @@ def run_pipeline(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Pension Plan Intelligence Pipeline")
+    parser = argparse.ArgumentParser(description="PensionGraph Pipeline")
     parser.add_argument("plan_ids", nargs="*", help="Plan IDs to process (default: all)")
     parser.add_argument("--fetch-only", action="store_true")
     parser.add_argument("--extract-only", action="store_true")

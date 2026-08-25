@@ -1,19 +1,25 @@
-# Pension Plan Intelligence
+# PensionGraph
 
 A data platform that aggregates board materials and CAFRs from U.S. public
 pension plans, summarizes them with Claude, and publishes a searchable
 Streamlit site plus scheduled Insights briefings.
 
+The repository is still named `PensionPlanIntelligence`, which was the original
+working title. Renaming it would break every clone, checkout path and Actions
+URL for a name no reader sees, so only the product name moved.
+
 ## Architecture in one paragraph
 
-The **pipeline** (run locally) scrapes plan websites with Playwright,
-extracts text from PDFs/Word docs, and asks Claude to produce per-document
-summaries. The **Streamlit app** ([app.py](app.py)) serves a public site at
-[pensionplanintelligence.onrender.com](https://pensionplanintelligence.onrender.com)
-backed by the SQLite DB at `db/pension.db`. The **insights/** package
-([DECISIONS.md](DECISIONS.md), [insights/scheduler.py](insights/scheduler.py))
-runs scheduled Insights publications — weekly digest, monthly synthesis,
-annual year-in-review — gated on a magic-link approval email to the founder.
+The **pipeline** ([pipeline.py](pipeline.py), run from GitHub Actions) scrapes
+plan websites with Playwright, extracts text from PDFs/Word docs, and asks
+Claude for per-document summaries — Haiku by default, Sonnet only for large
+investment packs. The **Streamlit app** ([app.py](app.py)) serves the site on
+Render. Both read the same **Neon Postgres** database over the network; the
+SQLite file that used to be committed to git left the repository on
+2026-08-21. The **insights/** package
+([insights/scheduler.py](insights/scheduler.py)) composes the daily digest and
+the weekly / monthly / quarterly / annual briefings, each auto-published and
+emailed — there is no approval gate.
 
 ## Two workflows you need to understand
 

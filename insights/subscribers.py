@@ -395,7 +395,7 @@ def render_confirmation_email(subscriber: Subscriber, raw_token: str) -> Approva
     confirm_url = _link("confirm", raw_token)
     cadence_labels = [c for c in CADENCES if getattr(subscriber, c)]
     cadences_str = ", ".join(cadence_labels) or "no cadence"
-    subject = "Confirm your Pension Plan Intelligence subscription"
+    subject = "Confirm your PensionGraph subscription"
     html = f"""\
 <!DOCTYPE html>
 <html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;
@@ -403,7 +403,7 @@ def render_confirmation_email(subscriber: Subscriber, raw_token: str) -> Approva
 <h2 style="color:#003366;">Confirm your subscription</h2>
 <p>Thanks for signing up. Click the button below to confirm your email
 address and start receiving the <strong>{cadences_str}</strong> briefing(s)
-from Pension Plan Intelligence.</p>
+from PensionGraph.</p>
 <p style="margin:20px 0;">
   <a href="{confirm_url}"
      style="display:inline-block;padding:12px 24px;background:#0066cc;color:#fff;
@@ -434,14 +434,14 @@ def render_welcome_email(subscriber: Subscriber) -> ApprovalEmail:
     """Sent immediately after the confirm link is clicked."""
     cadence_labels = [c for c in CADENCES if getattr(subscriber, c)]
     cadences_str = ", ".join(cadence_labels) or "no cadence"
-    subject = "You're subscribed to Pension Plan Intelligence"
+    subject = "You're subscribed to PensionGraph"
     html = f"""\
 <!DOCTYPE html>
 <html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;
                   max-width:640px;margin:auto;padding:24px;color:#222;">
 <h2 style="color:#003366;">You're in</h2>
 <p>Welcome. You'll receive the <strong>{cadences_str}</strong> briefing(s)
-from Pension Plan Intelligence as soon as each one is approved for release.</p>
+from PensionGraph as soon as each one is approved for release.</p>
 <p>Every email includes a one-click unsubscribe link in the footer if you
 ever want to opt out.</p>
 </body></html>"""
@@ -472,7 +472,7 @@ def render_digest_email(publication: Publication,
 <hr style="border:none;border-top:1px solid #ddd;margin:32px 0 12px 0;">
 <p style="font-size:0.8em;color:#888;">
   You're receiving this because you subscribed to the {publication.cadence}
-  Pension Plan Intelligence briefing.
+  PensionGraph briefing.
   <a href="{unsub_url}">Unsubscribe</a>
   &middot;
   <a href="{prefs_url}">Update preferences</a>

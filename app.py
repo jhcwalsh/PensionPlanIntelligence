@@ -40,7 +40,7 @@ load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 # ---------------------------------------------------------------------------
 
 st.set_page_config(
-    page_title="Pension Plan Intelligence",
+    page_title="PensionGraph",
     page_icon="🏛️",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -204,7 +204,7 @@ def _retrieve_source_file(url: str, plan_id: str, filename: str) -> tuple[Path |
         return dest, dest.stat().st_size, ""
 
     try:
-        headers = {"User-Agent": "Mozilla/5.0 (compatible; PensionPlanIntelligence/1.0)"}
+        headers = {"User-Agent": "Mozilla/5.0 (compatible; PensionGraph/1.0)"}
         resp = requests.get(url, headers=headers, timeout=60, stream=True)
         resp.raise_for_status()
 
@@ -230,7 +230,7 @@ def render_sidebar():
     st.sidebar.markdown(
         "<h1 style='font-size:1.75rem;margin:0 0 1rem 0;font-weight:600;'>"
         "<a href='?' target='_self' style='color:inherit;text-decoration:none;'>"
-        "🏛️ Pension Intelligence</a></h1>",
+        "🏛️ PensionGraph</a></h1>",
         unsafe_allow_html=True,
     )
     st.sidebar.markdown("---")
@@ -2962,7 +2962,7 @@ def page_subscribe() -> None:
     """Public sign-up form for the digest mailing list."""
     from insights import subscribers as _subs
 
-    st.title("Subscribe to Pension Plan Intelligence")
+    st.title("Subscribe to PensionGraph")
     st.caption(
         "Get the weekly, monthly, or quarterly briefing as soon as it's "
         "published. Double opt-in: we'll email you a confirmation link to "
