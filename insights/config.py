@@ -24,7 +24,7 @@ load_dotenv(_ENV_PATH, override=False)
 # ---------------------------------------------------------------------------
 
 APPROVAL_BASE_URL = os.environ.get(
-    "APPROVAL_BASE_URL", "https://pensionplanintelligence.onrender.com"
+    "APPROVAL_BASE_URL", "https://pensiongraph.com"
 ).rstrip("/")
 APPROVAL_TOKEN_TTL_DAYS = int(os.environ.get("APPROVAL_TOKEN_TTL_DAYS", "7"))
 APPROVAL_REMINDER_HOURS = int(os.environ.get("APPROVAL_REMINDER_HOURS", "72"))

@@ -28,7 +28,7 @@ services:
       - key: DATABASE_URL
         sync: false
       - key: APP_BASE_URL
-        value: https://pensionplanintelligence.onrender.com
+        value: https://pensiongraph.com
       # Email sending — subscriber confirmation, welcome, digest fan-out and
       # approval-link clicks all send mail from the Streamlit process. Values
       # live in the Render dashboard; declared here so a missing var fails the

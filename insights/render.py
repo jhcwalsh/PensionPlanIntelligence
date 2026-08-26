@@ -16,7 +16,7 @@ import re
 from pathlib import Path
 
 
-DEFAULT_APP_BASE_URL = "https://pensionplanintelligence.onrender.com"
+DEFAULT_APP_BASE_URL = "https://pensiongraph.com"
 
 
 def absolute_url(href: str) -> str:
