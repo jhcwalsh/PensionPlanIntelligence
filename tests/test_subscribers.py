@@ -95,6 +95,86 @@ def test_signup_rejects_invalid_email():
         _signup(email="not-an-email")
 
 
+def test_signup_rolls_back_when_send_callback_raises():
+    """A failing email send must not leave a stale pending row + token.
+
+    The whole point: if Render is misconfigured (no RESEND_API_KEY) or
+    Resend hits a transient 5xx, the subscriber form errors out and the
+    user can re-try without burning a rate-limit slot.
+    """
+    def boom(sub, raw):
+        raise RuntimeError("Simulated send failure")
+
+    with pytest.raises(RuntimeError, match="Simulated send failure"):
+        subs.create_pending_subscriber(
+            "alice@example.com", weekly=True, send_callback=boom,
+        )
+
+    s = get_session()
+    try:
+        # No subscriber row was committed.
+        assert s.query(Subscriber).count() == 0
+        # No confirm token either — the rate limiter sees a clean slate.
+        assert s.query(SubscriberToken).count() == 0
+    finally:
+        s.close()
+    assert subs.recent_signup_count("alice@example.com") == 0
+
+
+def test_signup_rollback_preserves_existing_row():
+    """Re-signup with a failing send must not mutate the existing subscriber.
+
+    If a confirmed user re-submits the form (different cadences) and the
+    confirmation email fails, their original cadence flags should be
+    intact — the failed retry shouldn't silently change their prefs.
+    """
+    sub, raw = _signup(email="alice@example.com", weekly=True, monthly=False)
+    subs.consume_confirm_token(raw)  # alice is confirmed, weekly=True
+
+    def boom(sub, raw):
+        raise RuntimeError("Simulated send failure")
+
+    with pytest.raises(RuntimeError):
+        subs.create_pending_subscriber(
+            "alice@example.com",
+            weekly=False, monthly=True,  # would-be new prefs
+            send_callback=boom,
+        )
+
+    s = get_session()
+    try:
+        reloaded = s.query(Subscriber).filter_by(email="alice@example.com").one()
+        assert reloaded.status == "confirmed"
+        assert reloaded.weekly is True   # original pref preserved
+        assert reloaded.monthly is False
+        # The original confirm token is still there (consumed); no second one.
+        tokens = s.query(SubscriberToken).filter_by(subscriber_id=reloaded.id).all()
+        assert len(tokens) == 1
+        assert tokens[0].consumed_at is not None
+    finally:
+        s.close()
+
+
+def test_signup_callback_success_persists_normally():
+    """Sanity check: a successful callback commits as before."""
+    calls = []
+
+    def ok(sub, raw):
+        calls.append((sub.email, raw))
+
+    sub, raw = subs.create_pending_subscriber(
+        "alice@example.com", weekly=True, send_callback=ok,
+    )
+    assert calls == [("alice@example.com", raw)]
+    assert sub.status == "pending"
+    s = get_session()
+    try:
+        assert s.query(Subscriber).count() == 1
+        assert s.query(SubscriberToken).count() == 1
+    finally:
+        s.close()
+
+
 def test_signup_repeat_for_same_email_refreshes_prefs():
     sub1, raw1 = _signup(weekly=True, monthly=False)
     sub2, raw2 = _signup(weekly=False, monthly=True)
