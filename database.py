@@ -36,7 +36,8 @@ from sqlalchemy import (
     DDL, event, Numeric
 )
 from sqlalchemy.exc import OperationalError
-from sqlalchemy.orm import DeclarativeBase, Session, relationship, sessionmaker
+from sqlalchemy.orm import (DeclarativeBase, Session, deferred, relationship,
+                            sessionmaker, undefer)
 from sqlalchemy.types import TypeDecorator
 
 
@@ -260,7 +261,13 @@ class Document(Base):
     local_path = Column(String)         # path to downloaded file
     file_size_bytes = Column(Integer)
     downloaded_at = Column(DateTime(timezone=True))
-    extracted_text = Column(GzippedText)
+    # Deferred: this column is half the database (33.7 MB gzipped over 4,257
+    # rows) and most callers never read it. Loading it eagerly is what
+    # exhausted Neon's transfer quota four days after the Postgres cutover --
+    # queries.cafr_coverage_rows() alone moved 5.2 MB per call to count
+    # fiscal years. Access still works transparently; bulk readers that walk
+    # many documents should say .options(undefer(Document.extracted_text)).
+    extracted_text = deferred(Column(GzippedText))
     extraction_status = Column(String, default="pending")   # pending, done, failed
     page_count = Column(Integer)
     meeting_date = Column(DateTime(timezone=True))     # parsed from document or filename
@@ -1455,8 +1462,12 @@ def summary_exists_for_hash(session: Session, text_hash: str) -> Summary | None:
 
 
 def get_unsummarized_documents(session: Session) -> list[Document]:
+    # undefer: the summariser reads extracted_text for every document this
+    # returns, so leaving it lazy would trade one query for N+1 round trips
+    # against Neon. Same bytes either way -- this just fetches them once.
     return (
         session.query(Document)
+        .options(undefer(Document.extracted_text))
         .filter(Document.extraction_status == "done")
         .filter(~Document.id.in_(
             session.query(Summary.document_id)

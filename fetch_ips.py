@@ -26,6 +26,7 @@ from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
 from bs4 import BeautifulSoup
+from sqlalchemy.orm import undefer
 
 from database import Document, IpsDocument
 from fetcher import (
@@ -106,6 +107,7 @@ def mine_existing_for_ips_urls(plan_id: str, session) -> list[str]:
     """Scan this plan's extracted documents for IPS-shaped PDF URLs."""
     docs = (
         session.query(Document)
+        .options(undefer(Document.extracted_text))
         .filter(Document.plan_id == plan_id)
         .filter(Document.extracted_text.isnot(None))
         .all()

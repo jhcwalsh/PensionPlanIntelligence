@@ -33,6 +33,8 @@ from datetime import datetime
 from typing import Iterable
 from urllib.parse import urlparse
 
+from sqlalchemy.orm import undefer
+
 from database import (
     utcnow,
     Document,
@@ -215,6 +217,7 @@ def mine_plan(session, plan_id: str) -> dict[tuple[str, str], dict]:
     """
     docs = (
         session.query(Document)
+        .options(undefer(Document.extracted_text))
         .filter(Document.plan_id == plan_id)
         .filter(Document.extracted_text.isnot(None))
         .all()
