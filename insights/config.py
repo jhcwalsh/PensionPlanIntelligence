@@ -28,8 +28,14 @@ APPROVAL_BASE_URL = os.environ.get(
 ).rstrip("/")
 APPROVAL_TOKEN_TTL_DAYS = int(os.environ.get("APPROVAL_TOKEN_TTL_DAYS", "7"))
 APPROVAL_REMINDER_HOURS = int(os.environ.get("APPROVAL_REMINDER_HOURS", "72"))
+# The fallback is a domain we own, deliberately. This used to default to
+# founder@pensionintel.com -- a domain nobody here controls -- so a missing
+# APPROVAL_EMAIL_RECIPIENT would have mailed briefing content to a stranger
+# if that domain ever accepted mail. A wrong *sender* just fails at Resend;
+# a wrong *recipient* delivers. "unset@" is not a real mailbox: it is meant
+# to bounce visibly rather than silently succeed.
 APPROVAL_EMAIL_RECIPIENT = os.environ.get(
-    "APPROVAL_EMAIL_RECIPIENT", "founder@pensionintel.com"
+    "APPROVAL_EMAIL_RECIPIENT", "unset@pensiongraph.com"
 )
 # Comma-separated recipient list parsed once at import. Every approval /
 # notice / reminder email sent through ``insights.approval.send_email``
@@ -39,8 +45,11 @@ APPROVAL_EMAIL_RECIPIENTS: list[str] = [
     addr.strip() for addr in APPROVAL_EMAIL_RECIPIENT.split(",")
     if addr.strip()
 ]
+# Must be an address at a Resend-verified domain. Production sets this in
+# three places (.env, Render, the APPROVAL_EMAIL_FROM repo secret); the
+# default only fires in local dev or a misconfiguration.
 APPROVAL_EMAIL_FROM = os.environ.get(
-    "APPROVAL_EMAIL_FROM", "insights@pensionintel.com"
+    "APPROVAL_EMAIL_FROM", "insights@mail.pensiongraph.com"
 )
 
 # ---------------------------------------------------------------------------
