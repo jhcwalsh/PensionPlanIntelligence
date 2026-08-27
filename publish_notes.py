@@ -131,7 +131,7 @@ def main():
     console.rule("[bold green]Published[/bold green]")
     if branch == "master":
         console.print("Render auto-deploy should kick off shortly at:")
-        console.print("  https://pensionplanintelligence.onrender.com")
+        console.print("  https://pensiongraph.com")
     else:
         console.print(f"Pushed to branch '{branch}'. Merge to master to deploy.")
 
