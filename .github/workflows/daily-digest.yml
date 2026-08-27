@@ -26,7 +26,7 @@ jobs:
       RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
       APPROVAL_EMAIL_FROM: ${{ secrets.APPROVAL_EMAIL_FROM }}
       APPROVAL_EMAIL_RECIPIENT: ${{ secrets.APPROVAL_EMAIL_RECIPIENT }}
-      APPROVAL_BASE_URL: https://pensionplanintelligence.onrender.com
+      APPROVAL_BASE_URL: https://pensiongraph.com
       # Declared at job level rather than per step so a new step cannot
       # silently fall back to SQLite: database.resolve_database_url() treats an
       # unset or empty DATABASE_URL as "use DB_PATH", which on a runner is an
