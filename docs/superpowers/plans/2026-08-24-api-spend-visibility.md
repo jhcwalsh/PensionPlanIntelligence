@@ -823,3 +823,55 @@ git commit -m "Surface API spend in the Admin tab"
 - **Add prompt caching to the summariser.** Measured at 62 tokens against a 2,048-token floor — it would create no cache entries. The spec should be corrected rather than implemented.
 - **Optimise anything.** The point is to find out what to optimise. My expectation is vision OCR, and the plan is worth running precisely because that is a guess.
 - **Backfill historical spend.** The token counts were never recorded and cannot be reconstructed.
+
+---
+
+## Outcome (2026-08-27) — measured, and the thread closed
+
+The instrumentation shipped and ran. First data covers two pipeline runs and
+one digest, 2026-08-26 to 2026-08-27:
+
+```
+total: $0.5643 across 44 calls
+
+by model
+  claude-sonnet-4-6            24 calls   $0.4862   86%
+  claude-haiku-4-5-20251001    20 calls   $0.0781   14%
+
+by operation
+  summarize                    26 calls   $0.4434
+  insights:daily               18 calls   $0.1209
+```
+
+**The plan's stated expectation was wrong, which is why it was worth running.**
+It said "My expectation is vision OCR". OCR recorded *zero* rows — no document
+in these runs needed it. The cost is Sonnet summarisation: 86% of spend from
+27% of calls.
+
+### Decision: do not pursue the Batch API or the Sonnet 5 switch
+
+Both were queued pending this data. The data says neither is worth it, because
+the absolute number is too small to optimise:
+
+- Extrapolated spend is roughly **$10–15/month**.
+- Batch API's 50% discount saves about **$5/month**, in exchange for an
+  asynchronous submit/poll path through the summariser.
+- The Sonnet 5 switch nets about **3.5%** — under a dollar. The headline "33%
+  cheaper" is real but the Claude 4.7+ tokenizer produces ~1.45x the tokens on
+  these documents (measured, not assumed), giving most of it back.
+
+Neither buys enough to justify the complexity it adds. Revisit only if the
+monthly figure moves by an order of magnitude.
+
+### What stays open
+
+- **CAFR extraction is still unmeasured.** It runs monthly (1st, 15:00 UTC)
+  and is the one remaining spend category with no data. It is also the most
+  expensive-looking on paper — Sonnet over 100+ page PDFs — so the first
+  month-end run is worth a look before treating the figure above as the
+  whole picture.
+- **Control 2, the per-run cap**, still wants a week of data to size.
+
+The instrumentation itself stays. Its value was never the one-off answer; it
+is that the answer is now cheap to re-check, and that a future regression in
+spend becomes visible instead of arriving on a bill.
