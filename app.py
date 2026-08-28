@@ -2520,6 +2520,7 @@ def page_cafr():
     if not fy_rows:
         st.caption("No fiscal-year-tagged CAFRs yet.")
     else:
+        import pandas as pd
         fy_df = pd.DataFrame(fy_rows)
         st.dataframe(
             fy_df, width="stretch", hide_index=True,
@@ -3333,6 +3334,8 @@ def page_performance():
     come back as dicts so charts, per-class rankings and time series can be
     built on the same query without re-deriving anything.
     """
+    import pandas as pd
+
     st.title("Performance Reports")
 
     rows = _performance_rows()
