@@ -121,6 +121,15 @@ CASES = {
     "api_spend_by_operation": {"args": (3650,)},
     "api_spend_by_model": {"args": (3650,)},
     "api_spend_total": {"args": (3650,)},
+    # Default status filter, so this compares the same set the Weekly
+    # archive tab shows and the monthly cascade gathers.
+    "weekly_briefings": {"args": ()},
+    # The asset-class map is loaded from disk by the caller, so pass an
+    # empty one: the comparison is about backend parity in the SQL, and an
+    # empty map still exercises every query and the total_fund path.
+    "performance_report_rows": {"args": ({},)},
+    # Default 30-day window, matching the CAFR page.
+    "cafr_fiscal_year_counts": {"args": ()},
 }
 
 
