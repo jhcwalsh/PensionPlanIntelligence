@@ -378,6 +378,59 @@ class CafrPerformance(Base):
     )
 
 
+class PerformanceReportExtract(Base):
+    """One row per ``doc_type='performance'`` document we've structured.
+
+    Unlike ``CafrExtract``, this is not fiscal-year keyed: these are periodic
+    (monthly/quarterly) investment-performance reports, so the natural key is
+    the report's own as-of date. ``fund_scope`` carries the sub-fund name for
+    plans (e.g. NYC Retirement Systems) whose comptroller publishes one PDF
+    per constituent system rather than one plan-wide report — most plans
+    leave it null.
+    """
+    __tablename__ = "performance_report_extract"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    plan_id = Column(String, ForeignKey("plans.id"), nullable=False)
+    document_id = Column(Integer, ForeignKey("documents.id"), unique=True, nullable=False)
+    fund_scope = Column(String)          # e.g. "NYCERS", "TRS", "POLICE" — null if not multi-fund
+    as_of_date = Column(String(10))      # YYYY-MM-DD, the report's own reporting date
+    extracted_at = Column(DateTime(timezone=True))
+    model_used = Column(String)
+    text_hash = Column(String)
+    notes = Column(Text)
+
+    plan = relationship("Plan")
+    document = relationship("Document")
+    returns = relationship("PerformanceReportReturn", back_populates="extract",
+                           cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index("ix_perf_report_extract_plan", "plan_id"),
+    )
+
+
+class PerformanceReportReturn(Base):
+    """Long-form periodic return row: one per (extract, scope, period)."""
+    __tablename__ = "performance_report_return"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    extract_id = Column(Integer, ForeignKey("performance_report_extract.id"), nullable=False)
+    scope = Column(String, nullable=False)   # "total_fund" or asset class name
+    period = Column(String, nullable=False)  # "1mo" | "3mo" | "fytd" | "fy_prior" | ...
+    return_pct = Column(Float)
+    benchmark_return_pct = Column(Float)
+    benchmark_name = Column(String)
+    notes = Column(String)
+
+    extract = relationship("PerformanceReportExtract", back_populates="returns")
+
+    __table_args__ = (
+        Index("ix_perf_report_return_extract", "extract_id"),
+        Index("ix_perf_report_return_lookup", "extract_id", "scope", "period"),
+    )
+
+
 class IpsExtract(Base):
     """Extracted allocation and governance data from an Investment Policy Statement (IPS).
 

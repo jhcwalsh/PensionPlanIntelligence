@@ -40,6 +40,8 @@ from database import (
     ExtractionDetail,
     FetchRun,
     MeetingRecording,
+    PerformanceReportExtract,
+    PerformanceReportReturn,
     Plan,
     PlanVideoSource,
     Publication,
@@ -827,6 +829,63 @@ def _latest_cafr_extract_per_plan(session):
                                     or current[2].fiscal_year or 0):
             best[plan.id] = (plan, extract, document)
     return list(best.values())
+
+
+def quarterly_performance_rows(session) -> list[dict]:
+    """One row per (plan, fund) latest periodic performance report.
+
+    Sourced from ``performance_report_extract`` / ``_return`` — see
+    ``extract_performance_reports.py``'s module docstring for why this is
+    currently only ever populated for ``nycrs_comptroller``, and why it is
+    one row per constituent fund rather than one row per plan: a single
+    "New York City Retirement Systems" plan row would have to pick one of
+    NYCERS/TRS/POLICE/FIRE/BERS's returns and label it as the plan's, which
+    is not a real number. Kept as a separate table from
+    ``performance_report_rows`` for the same reason — merging fund-level
+    quarterly rows into the one-row-per-plan CAFR table would silently
+    misattribute a sub-fund's return to the whole plan.
+    """
+    joined = (
+        session.query(PerformanceReportExtract, Document, Plan)
+        .join(Document, PerformanceReportExtract.document_id == Document.id)
+        .join(Plan, Plan.id == PerformanceReportExtract.plan_id)
+        .all()
+    )
+
+    best: dict[tuple[str, str | None], tuple] = {}
+    for extract, document, plan in joined:
+        key = (plan.id, extract.fund_scope)
+        current = best.get(key)
+        current_key = (current[0].as_of_date or "", current[1].downloaded_at) if current else None
+        candidate_key = (extract.as_of_date or "", document.downloaded_at)
+        if current is None or candidate_key > current_key:
+            best[key] = (extract, document, plan)
+
+    rows: list[dict] = []
+    for extract, document, plan in best.values():
+        returns = (
+            session.query(PerformanceReportReturn)
+            .filter(PerformanceReportReturn.extract_id == extract.id)
+            .filter(PerformanceReportReturn.scope == "total_fund")
+            .all()
+        )
+        by_period = {r.period: r.return_pct for r in returns if r.return_pct is not None}
+        if not by_period:
+            continue
+        rows.append({
+            "Plan": plan.abbreviation or plan.name,
+            "plan_id": plan.id,
+            "Fund": extract.fund_scope or "—",
+            "As of": extract.as_of_date,
+            "1 month": by_period.get("1mo"),
+            "3 months": by_period.get("3mo"),
+            "FYTD": by_period.get("fytd"),
+            "Source": document.url,
+            "Source date": document.downloaded_at,
+        })
+
+    rows.sort(key=lambda r: (r["Plan"] or "", r["Fund"] or ""))
+    return rows
 
 
 def cafr_fiscal_year_counts(session, prior_days: int = 30) -> list[dict]:

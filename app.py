@@ -3341,11 +3341,12 @@ def page_performance():
         return
 
     # Say what the numbers are. The source is the CAFR, so these are
-    # fiscal-year returns, not the latest quarter -- the 48 doc_type=
-    # 'performance' documents that hold true quarterly reports have no
-    # structured extraction yet. Labelling this precisely matters more than
-    # the column being short: a reader comparing plans needs to know that
-    # "2025" and "2023" rows are different fiscal years, not stale data.
+    # fiscal-year returns, not the latest quarter. A true quarterly source
+    # exists for one plan (see the section below) -- extract_performance_
+    # reports.py's docstring explains why the other 48-document plans don't
+    # qualify. Labelling this precisely matters more than the column being
+    # short: a reader comparing plans needs to know that "2025" and "2023"
+    # rows are different fiscal years, not stale data.
     st.caption(
         "Fiscal-year returns from each plan's most recent CAFR — not "
         "calendar quarters. The Period column shows whether a plan reported "
@@ -3385,6 +3386,35 @@ def page_performance():
         file_name="pensiongraph_performance.csv",
         mime="text/csv",
     )
+
+    quarterly_rows = queries.quarterly_performance_rows(get_db_session())
+    if quarterly_rows:
+        st.divider()
+        st.subheader("Quarterly performance (where available)")
+        st.caption(
+            "True periodic total-fund returns, sourced from monthly "
+            "performance-review reports rather than the annual CAFR. "
+            "Currently only New York City's comptroller-published reports "
+            "qualify — one row per constituent system, since the reports "
+            "cover NYCERS/TRS/POLICE/FIRE/BERS separately rather than one "
+            "combined fund. '3 months' is the closest figure to a calendar "
+            "quarter these reports state."
+        )
+        qdf = pd.DataFrame(quarterly_rows)
+        qdf = qdf[[c for c in
+                   ["Plan", "Fund", "As of", "1 month", "3 months", "FYTD",
+                    "Source", "Source date"]
+                   if c in qdf.columns]]
+        st.dataframe(
+            qdf,
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "Source": st.column_config.LinkColumn("Source", display_text="Report"),
+                "Source date": st.column_config.DatetimeColumn(
+                    "Source date", format="YYYY-MM-DD"),
+            },
+        )
 
 
 def main():
