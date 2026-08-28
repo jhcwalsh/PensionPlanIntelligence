@@ -141,10 +141,70 @@ def _apply_column_migrations() -> None:
 
 
 @st.cache_resource
-def get_db_session():
+def _db_session_singleton():
     init_db()
     _apply_column_migrations()
     return get_session()
+
+
+def get_db_session():
+    """The app's shared Session, guaranteed not to be mid-transaction.
+
+    The rollback is defensive: it heals a session left dirty by an earlier
+    rerun that raised between its first query and _release_db_session().
+    Without it, one traceback poisons the cached session for the life of
+    the process.
+    """
+    session = _db_session_singleton()
+    if session.in_transaction():
+        try:
+            session.rollback()
+        except Exception:                      # noqa: BLE001
+            # A rollback on a connection the server already terminated
+            # raises. Discarding it is the point -- the next query then
+            # checks out a fresh, pre-pinged connection from the pool.
+            session.close()
+    return session
+
+
+# get_db_session() used to be the @st.cache_resource'd function itself, so
+# callers (tests/test_twin_page_data.py) reach for .clear() on it to drop the
+# cached Session. Keep that contract pointing at whatever now holds the cache.
+get_db_session.clear = _db_session_singleton.clear
+
+
+def _release_db_session() -> None:
+    """End the transaction at the end of a Streamlit rerun.
+
+    A SQLAlchemy Session opens a transaction on its first query and holds
+    it -- together with its connection -- until commit or rollback. This
+    app caches one Session for the life of the process, so between reruns
+    that connection sat *idle inside a transaction*. Neon terminates those
+    after five minutes, and the next rerun died on the first query of
+    render_sidebar() with IdleInTransactionSessionTimeout.
+
+    pool_pre_ping and pool_recycle=300 were already set on the engine and
+    could not help: both act when a connection is checked out of the pool,
+    and a Session mid-transaction never returns its connection to the pool
+    at all. Rolling back is what hands it back, so those two settings
+    finally apply.
+
+    database.py's create_app_engine() comment already said short sessions
+    were the requirement rather than a courtesy. pipeline.py was fixed for
+    this at the cutover; the Streamlit app was not.
+    """
+    try:
+        session = _db_session_singleton()
+    except Exception:                          # noqa: BLE001
+        return                                 # never built one; nothing to end
+    try:
+        if session.in_transaction():
+            session.rollback()
+    except Exception:                          # noqa: BLE001
+        try:
+            session.close()
+        except Exception:                      # noqa: BLE001
+            pass
 
 
 def load_plans():
@@ -3269,4 +3329,10 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # Streamlit re-executes this module top-to-bottom on every interaction,
+    # so the finally runs once per rerun -- which is exactly the boundary
+    # the shared Session's transaction must not outlive.
+    try:
+        main()
+    finally:
+        _release_db_session()
