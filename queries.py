@@ -27,6 +27,7 @@ from pathlib import Path
 from sqlalchemy import case, desc, distinct, func, or_
 
 from database import (
+    as_utc,
     utcnow,
     sort_key,
     CafrAllocation,
@@ -686,3 +687,196 @@ def api_spend_total(session, days: int = 30):
         .scalar()
     )
     return total or 0
+
+
+def weekly_briefings(session, statuses: tuple = ("approved", "published")):
+    """Weekly briefings for the archive tab, newest first.
+
+    Reads the database rather than ``notes/``. Weekly composition sets
+    ``archive=False`` (insights/weekly.py) because it exists to feed monthly,
+    so no ``7day_highlights_*.md`` file has been written since 2026-05-24 --
+    while 17 weekly publications with full ``draft_markdown`` accumulated in
+    the table. The tab was globbing a filename nothing writes any more.
+
+    Defaults to ``approved``/``published`` to match
+    ``monthly._gather_approved_weeklies``: those are the weeks that actually
+    feed the monthly, so the archive shows the same set the cascade counts.
+    Pass a wider tuple to include the ones stranded by the removed approval
+    gate.
+    """
+    return (
+        session.query(Publication)
+        .filter(Publication.cadence == "weekly")
+        .filter(Publication.status.in_(statuses))
+        .order_by(Publication.period_start.desc(), Publication.id.desc())
+        .all()
+    )
+
+
+# Canonical asset classes surfaced by the performance table, in display order.
+# These are the keys produced by data/asset_class_mappings.json, so the scope
+# strings in cafr_performance ("Private Equity", "Private Equity Composite",
+# "Real Assets"...) normalise through the same map the allocation views use
+# rather than a second, drifting list of synonyms.
+PERFORMANCE_CLASSES = (
+    ("total", "Total plan"),
+    ("private_equity", "Private equity"),
+    ("private_credit", "Private credit"),
+    ("real_assets_infrastructure", "Real assets"),
+    ("real_estate", "Real estate"),
+)
+
+# Preference order for "the" headline return. ``fy`` is the fiscal-year figure
+# the CAFR itself leads with; ``1y`` is the trailing-twelve-month equivalent
+# some plans report instead. Longer windows are deliberately not substituted --
+# showing a 3-year annualised return in a column labelled as the latest period
+# would be wrong rather than merely incomplete.
+PERFORMANCE_PERIODS = ("fy", "1y")
+
+
+def performance_report_rows(session, class_map: dict) -> list[dict]:
+    """One row per plan: latest CAFR's headline return by asset class.
+
+    ``class_map`` is data/asset_class_mappings.json — ``{source_name:
+    {"canonical": ...}}``. Scopes that map to ``unmapped``, or that are absent
+    from the map entirely, are skipped rather than guessed at.
+
+    Sourced from CAFRs, so the period is a **fiscal year, not a quarter**.
+    The 48 ``doc_type='performance'`` documents hold true quarterly reports
+    but have no structured extraction yet; when they do, this function is
+    where a quarterly source would be merged in. The returned ``Period``
+    column names what each row actually is so the distinction stays visible
+    in the UI rather than living only here.
+    """
+    latest = _latest_cafr_extract_per_plan(session)
+
+    rows: list[dict] = []
+    for plan, extract, document in latest:
+        perf = (
+            session.query(CafrPerformance)
+            .filter(CafrPerformance.cafr_extract_id == extract.id)
+            .all()
+        )
+        if not perf:
+            continue
+
+        # Pick one period for the whole row so the columns are comparable.
+        available = {p.period for p in perf}
+        period = next((p for p in PERFORMANCE_PERIODS if p in available), None)
+        if period is None:
+            continue
+
+        by_class: dict[str, float] = {}
+        for p in perf:
+            if p.period != period or p.return_pct is None:
+                continue
+            if p.scope == "total_fund":
+                canonical = "total"
+            else:
+                # Entries are either {"canonical": ...} (the raw JSON) or a
+                # plain string (twin_builder.load_asset_class_mappings
+                # normalises them). Accept both rather than forcing callers
+                # to agree on one — the same tolerance twin_builder has.
+                entry = class_map.get(p.scope)
+                if isinstance(entry, dict):
+                    canonical = entry.get("canonical")
+                else:
+                    canonical = entry or None
+            if not canonical or canonical == "unmapped":
+                continue
+            # First value wins: a plan reporting both "Private Equity" and
+            # "Private Equity Composite" would otherwise overwrite one with
+            # the other in whatever order the rows happen to come back.
+            by_class.setdefault(canonical, p.return_pct)
+
+        row = {
+            "Plan": plan.abbreviation or plan.name,
+            "plan_id": plan.id,
+            "Fiscal year": extract.fiscal_year or document.fiscal_year,
+            "Period": period,
+        }
+        for key, label in PERFORMANCE_CLASSES:
+            row[label] = by_class.get(key)
+        row["Source"] = document.url
+        row["Source date"] = document.downloaded_at
+        rows.append(row)
+
+    rows.sort(key=lambda r: r["Plan"] or "")
+    return rows
+
+
+def _latest_cafr_extract_per_plan(session):
+    """(Plan, CafrExtract, Document) for each plan's newest extracted CAFR.
+
+    The reduction happens in Python for the same reason cafr_coverage_rows
+    does it: picking the max fiscal_year with a NULL-safe tiebreak is a
+    portability problem in SQL and a two-line loop here.
+    """
+    joined = (
+        session.query(Plan, CafrExtract, Document)
+        .join(CafrExtract, CafrExtract.document_id == Document.id)
+        .join(Plan, Plan.id == Document.plan_id)
+        .filter(Document.doc_type == "cafr")
+        .all()
+    )
+    best: dict[str, tuple] = {}
+    for plan, extract, document in joined:
+        fy = extract.fiscal_year or document.fiscal_year or 0
+        current = best.get(plan.id)
+        if current is None or fy > (current[1].fiscal_year
+                                    or current[2].fiscal_year or 0):
+            best[plan.id] = (plan, extract, document)
+    return list(best.values())
+
+
+def cafr_fiscal_year_counts(session, prior_days: int = 30) -> list[dict]:
+    """How many plans' latest CAFR is from each fiscal year, and the change.
+
+    The "change since a month ago" is derived rather than stored: the same
+    reduction is run twice, once over all CAFRs and once over only those
+    downloaded more than ``prior_days`` ago. No snapshot table is needed
+    because ``documents.downloaded_at`` already records when each CAFR
+    entered the corpus.
+
+    A caveat that matters when reading the deltas: this reconstructs what the
+    *latest-CAFR-per-plan* picture looked like a month ago from today's rows.
+    It cannot see CAFRs that were deleted since, and a plan whose FY2024 CAFR
+    was superseded by FY2025 shows as -1 for 2024 and +1 for 2025 — the plan
+    moved between buckets rather than anything being lost.
+
+    Returns newest fiscal year first, so the most recent reporting year leads.
+    """
+    cutoff = utcnow() - timedelta(days=prior_days)
+
+    docs = (
+        session.query(Document.plan_id, Document.fiscal_year,
+                      Document.downloaded_at)
+        .filter(Document.doc_type == "cafr")
+        .filter(Document.fiscal_year.isnot(None))
+        .all()
+    )
+
+    def _latest_per_plan(rows):
+        best: dict[str, int] = {}
+        for plan_id, fy, _ in rows:
+            if fy is None:
+                continue
+            if plan_id not in best or fy > best[plan_id]:
+                best[plan_id] = fy
+        counts: dict[int, int] = {}
+        for fy in best.values():
+            counts[fy] = counts.get(fy, 0) + 1
+        return counts
+
+    now_counts = _latest_per_plan(docs)
+    prior_counts = _latest_per_plan(
+        [d for d in docs if d[2] is not None and as_utc(d[2]) <= cutoff])
+
+    return [
+        {
+            "Fiscal year": fy,
+            "Plans": now_counts[fy],
+            "Change (30d)": now_counts[fy] - prior_counts.get(fy, 0),
+        }
+        for fy in sorted(now_counts, reverse=True)
+    ]

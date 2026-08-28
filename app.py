@@ -300,8 +300,15 @@ def render_sidebar():
     plan_map = {"All": None}
     plan_map.update({(p.abbreviation or p.name): p.id for p in plans})
 
+    # Only four tabs consume the returned plan_id — main() passes it to
+    # Activity, Search, Investment Actions and Meeting Recordings. The other
+    # five ignore it, so without this caption the control looks broken on
+    # more than half the app: you pick a plan, nothing changes, and there is
+    # no way to tell whether the filter failed or the tab has no data.
     selected_label = st.sidebar.selectbox("Filter by Plan", plan_options)
     selected_plan_id = plan_map.get(selected_label)
+    st.sidebar.caption(
+        "Filters Activity, Search, Investment Actions and Meeting Recordings.")
 
     st.sidebar.markdown("---")
     plans_count, docs_count, extracted_count, summarized_count = get_stats()
@@ -1040,30 +1047,36 @@ def page_insights():
 
     with tab_week:
         st.title("Weekly Insights")
-        all_highlights = _find_all_highlights()
-        if not all_highlights:
-            st.info("No highlights found. Run `python generate_notes.py` to generate.")
-        elif len(all_highlights) == 1:
-            path, title, gen_date = all_highlights[0]
-            _render_note_page(
-                md_path=path,
-                title=title,
-                generated_date=gen_date,
-                pdf_filename=path.stem + ".pdf",
-            )
+        # Read the database, not notes/. Weekly composition sets
+        # archive=False, so the last 7day_highlights_*.md file was written on
+        # 2026-05-24 while the briefings themselves kept accumulating as
+        # Publication rows. Globbing the old filename left this tab three
+        # months stale with no error to show for it.
+        weeklies = queries.weekly_briefings(get_db_session())
+        if not weeklies:
+            st.info("No weekly briefings published yet.")
         else:
-            labels = [title for _, title, _ in all_highlights]
-            selected_idx = st.selectbox(
-                "Select week", range(len(labels)),
-                format_func=lambda i: labels[i],
-            )
-            path, title, gen_date = all_highlights[selected_idx]
-            _render_note_page(
-                md_path=path,
-                title=title,
-                generated_date=gen_date,
-                pdf_filename=path.stem + ".pdf",
-            )
+            def _label(pub):
+                return "Week of %s – %s" % (
+                    pub.period_start.strftime("%b %d"),
+                    pub.period_end.strftime("%b %d, %Y"))
+
+            if len(weeklies) == 1:
+                chosen = weeklies[0]
+            else:
+                idx = st.selectbox(
+                    "Select week", range(len(weeklies)),
+                    format_func=lambda i: _label(weeklies[i]),
+                )
+                chosen = weeklies[idx]
+
+            published = chosen.published_at or chosen.composed_at
+            st.caption("Generated: %s" % (
+                published.strftime("%B %d, %Y") if published else "unknown"))
+            st.warning(
+                "AI-generated summary — figures and attributions may be wrong; "
+                "verify against the linked source documents.")
+            st.markdown(chosen.draft_markdown or "_No content._")
 
 
 _DEPLOYMENT_ACTIONS = {"hire", "fire", "commitment"}
@@ -1892,6 +1905,11 @@ def _cafr_coverage_df():
     return pd.DataFrame(queries.cafr_coverage_rows(get_db_session()))
 
 @st.cache_data(ttl=300)
+def _cafr_fiscal_year_counts() -> list[dict]:
+    return queries.cafr_fiscal_year_counts(get_db_session())
+
+
+@st.cache_data(ttl=300)
 def _cafr_plan_detail_data(plan_id: str) -> dict:
     """Latest CAFR extract for a plan, with allocations and performance."""
     return queries.cafr_plan_detail(get_db_session(), plan_id)
@@ -2490,6 +2508,31 @@ def page_cafr():
               help="System-of-systems CAFRs that don't map to a single plan; "
                    "skipped by design.")
     c5.metric("Missing CAFR", missing)
+
+    # Reporting-year coverage. The headline metrics above say how many plans
+    # have a CAFR; this says how *current* those CAFRs are, which is the
+    # question that actually matters when reading any figure derived from
+    # them. A corpus where most plans' newest CAFR is FY2023 is a different
+    # dataset from one where most are FY2025, and the counts above cannot
+    # distinguish the two.
+    st.subheader("Coverage by reporting year")
+    fy_rows = _cafr_fiscal_year_counts()
+    if not fy_rows:
+        st.caption("No fiscal-year-tagged CAFRs yet.")
+    else:
+        fy_df = pd.DataFrame(fy_rows)
+        st.dataframe(
+            fy_df, width="stretch", hide_index=True,
+            column_config={
+                "Fiscal year": st.column_config.NumberColumn(format="%d"),
+                "Change (30d)": st.column_config.NumberColumn(
+                    "Change (30d)", format="%+d",
+                    help="Movement in the last 30 days, derived from "
+                         "downloaded_at. A plan whose FY2024 CAFR was "
+                         "superseded by FY2025 shows -1 against 2024 and "
+                         "+1 against 2025 — it moved bucket, nothing was lost."),
+            },
+        )
 
     status_filter = st.multiselect(
         "Filter by status",
@@ -3261,6 +3304,89 @@ def page_archive():
                 )
 
 
+@st.cache_data(ttl=300)
+def _load_asset_class_mappings() -> dict:
+    """data/asset_class_mappings.json, or {} if absent.
+
+    Read directly rather than through twin_builder.load_asset_class_mappings
+    so the app does not import the twin builder just for a JSON file.
+    Missing file is not an error: the performance table simply shows fewer
+    asset-class columns filled in.
+    """
+    path = Path(__file__).resolve().parent / "data" / "asset_class_mappings.json"
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+@st.cache_data(ttl=300)
+def _performance_rows() -> list[dict]:
+    return queries.performance_report_rows(
+        get_db_session(), _load_asset_class_mappings())
+
+
+def page_performance():
+    """Headline returns by asset class, one row per plan.
+
+    Deliberately a table over a data structure rather than prose: the rows
+    come back as dicts so charts, per-class rankings and time series can be
+    built on the same query without re-deriving anything.
+    """
+    st.title("Performance Reports")
+
+    rows = _performance_rows()
+    if not rows:
+        st.info("No extracted performance data yet.")
+        return
+
+    # Say what the numbers are. The source is the CAFR, so these are
+    # fiscal-year returns, not the latest quarter -- the 48 doc_type=
+    # 'performance' documents that hold true quarterly reports have no
+    # structured extraction yet. Labelling this precisely matters more than
+    # the column being short: a reader comparing plans needs to know that
+    # "2025" and "2023" rows are different fiscal years, not stale data.
+    st.caption(
+        "Fiscal-year returns from each plan's most recent CAFR — not "
+        "calendar quarters. The Period column shows whether a plan reported "
+        "a fiscal-year (`fy`) or trailing-twelve-month (`1y`) figure. "
+        "Fiscal years differ between plans, so rows are not directly "
+        "comparable without checking the Fiscal year column."
+    )
+
+    df = pd.DataFrame(rows)
+    display_cols = (["Plan", "Fiscal year", "Period"]
+                    + [label for _, label in queries.PERFORMANCE_CLASSES]
+                    + ["Source", "Source date"])
+    df = df[[c for c in display_cols if c in df.columns]]
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Plans with performance data", len(df))
+    have_pe = int(df["Private equity"].notna().sum()) if "Private equity" in df else 0
+    c2.metric("With private equity", have_pe)
+    latest_fy = df["Fiscal year"].dropna()
+    c3.metric("Most recent fiscal year",
+              int(latest_fy.max()) if not latest_fy.empty else "—")
+
+    st.dataframe(
+        df,
+        width="stretch",
+        hide_index=True,
+        column_config={
+            "Source": st.column_config.LinkColumn("Source", display_text="CAFR"),
+            "Source date": st.column_config.DatetimeColumn(
+                "Source date", format="YYYY-MM-DD"),
+        },
+    )
+
+    st.download_button(
+        "Download CSV",
+        df.to_csv(index=False).encode("utf-8"),
+        file_name="pensiongraph_performance.csv",
+        mime="text/csv",
+    )
+
+
 def main():
     plan_id, plan_label = render_sidebar()
 
@@ -3313,6 +3439,7 @@ def main():
         ("Managers",            lambda: page_managers()),
         ("CAFR",                lambda: page_cafr()),
         ("Asset Allocation",    lambda: page_asset_allocation()),
+        ("Performance",         lambda: page_performance()),
         ("Meeting Recordings",  lambda: page_meeting_recordings(plan_id, plan_label)),
         ("Plans",               lambda: page_plans()),
         ("Subscribe",           lambda: page_subscribe()),
