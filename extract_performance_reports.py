@@ -59,7 +59,11 @@ from rich.console import Console
 from sqlalchemy.orm import undefer
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
-import costs
+# Reuses extract_cafr_investments's instrumented client factory rather than
+# building a fifth copy of the same api_key/token-file boilerplate — see
+# tests/test_usage_instrumentation.py's docstring for why a new module
+# should join an existing factory rather than add another one.
+from extract_cafr_investments import _get_client
 from database import (
     utcnow,
     Document,
@@ -154,31 +158,6 @@ MOCK_PAYLOAD = {
     ],
     "notes": "mock",
 }
-
-
-_client: anthropic.Anthropic | None = None
-
-
-def _get_client() -> anthropic.Anthropic:
-    global _client
-    if _client is not None:
-        return _client
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        load_dotenv(_ENV_PATH, override=True)
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        token_file = os.environ.get("CLAUDE_SESSION_INGRESS_TOKEN_FILE")
-        if token_file and os.path.exists(token_file):
-            with open(token_file) as f:
-                auth_token = f.read().strip()
-            if auth_token:
-                _client = costs.instrument(anthropic.Anthropic(auth_token=auth_token))
-                return _client
-        raise RuntimeError(f"ANTHROPIC_API_KEY not set. Check {_ENV_PATH}")
-    _client = costs.instrument(anthropic.Anthropic(
-        api_key=api_key, base_url="https://api.anthropic.com"))
-    return _client
 
 
 @retry(
