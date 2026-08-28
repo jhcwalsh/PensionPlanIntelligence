@@ -28,21 +28,17 @@ Specs: `docs/superpowers/specs/2026-08-16-low-maintenance-app-design.md`,
 
 ## A. Needs a decision from James
 
-### A1. July monthly backfill — **DONE 2026-08-28** (publication 125)
+### A1. July monthly backfill — **DONE 2026-08-28**
 
-Must exist before the **2026-10-01** quarterly run, or Q3 composes from
-August alone. Two things to approve together:
+Publication 125, published and emailed (delivery `4f4c9217`). Weeklies `id=80`
+and `id=88` were released from the removed approval gate first.
 
-- **Prerequisite:** flip weeklies `id=80` (07-12, `expired`, 7,472 chars) and
-  `id=88` (07-19, `awaiting_approval`, 9,217 chars) to `published`. Both hold
-  real content; both are stranded by the removed approval gate. Reversible.
-- **Side effect:** `insights.scheduler monthly` has no `--no-email` flag, so
-  it composes (~$0.10–0.30), writes `notes/`, **emails the briefing**, and
-  publishes.
+Q3's quarterly (due 2026-10-01) now gathers 1 monthly, up from 0. It reaches 2
+once August composes — see D2.
 
-July will be thin regardless: the `07-05` week never composed (that cron
-failed), and `07-26..08-01` spans the month boundary so the date filter
-excludes it from **both** July and August.
+Thin by necessity: the `07-05` week never composed because that cron failed,
+and `07-26..08-01` spans the month boundary so the date filter excludes it
+from both July and August.
 
 ### A2. Auth0 — plan written, not started
 
@@ -66,15 +62,11 @@ is $10–75/month.
 
 ### B1. Weekly Insights tab — **DONE** (PR #35)
 
-It globs `notes/7day_highlights_*.md`. Nothing writes those any more —
-`insights/weekly.py:206` sets `archive=False` because weekly composes silently
-to feed monthly. Newest file is `2026-05-24`; meanwhile **17 weekly
-publications sit in the database** with full `draft_markdown`.
-
-Fix: read `publications` where `cadence='weekly'`, newest first. Open
-question: show all 17, or only `approved`/`published`? Monthly's gather counts
-only the latter, so matching it keeps the tab honest about what actually feeds
-downstream — but hides four composed weeks.
+Was frozen on 2026-05-24 for three months: it globbed
+`notes/7day_highlights_*.md`, and `insights/weekly.py:206` sets
+`archive=False` so nothing writes those any more. Now reads `publications`,
+defaulting to `approved`/`published` to match what monthly gathers. Opens on
+the newest week.
 
 Not to be confused with `notes/weekly_consultant_rfps_*.md` — a different,
 dead product from the RFP subsystem removed on 2026-08-16.
@@ -100,13 +92,12 @@ a second contributor cannot be ruled out. **Only James can see this.**
 
 ### D1. "Filter by Plan" dropdown — **DONE** (PR #35)
 
-**Not dead — partially wired.** `main()` passes `plan_id` to 4 of 9 tabs:
-Activity, Search, Investment Actions, Meeting Recordings. The other five
-(Insights, Managers, CAFR, Asset Allocation, Plans, Subscribe) ignore it while
-the control stays visible in the sidebar, so it reads as broken.
+**Not dead — partially wired.** `main()` passes `plan_id` to Activity, Search,
+Investment Actions and Meeting Recordings; the other five tabs ignore it while
+the control stays visible, so it read as broken on more than half the app.
 
-Decide: hide it on tabs that ignore it, or wire the remaining tabs up. Removing
-it outright would lose working behaviour on four tabs.
+Captioned with the tabs it drives rather than removed — removing it would have
+destroyed working behaviour on four tabs.
 
 ### D2. Monthly for August + Year-to-date for August
 
@@ -140,13 +131,18 @@ The other two are genuine per-document problems and want individual attention.
 
 ### D4. Performance Reports tab — **DONE, annual** (PR #35)
 
-New tab, table shaped like the CAFR one:
+83 plans, headline return by asset class, CSV download, backed by a data
+structure so charts can be built on the same query.
 
-| Plan | Latest performance quarter | Total plan | Private equity | Private credit | Real assets | Real estate | Source link | Source date |
+**Open question.** These are **fiscal-year** returns, not the calendar
+quarters requested — CAFRs are annual, and `cafr_performance` already held
+2,690 rows covering exactly the classes asked for. True quarterly data lives
+in the 48 `doc_type='performance'` documents, which have no structured
+extraction at all: a new model plus a new Claude extractor, larger than the
+tab itself, with recurring API cost.
 
-Must be backed by a **data table**, not assembled ad hoc, so charts and other
-views can be built on it later. Needs a schema decision first — likely a new
-model in `database.py` plus an extractor, following the `CafrExtract` pattern.
+Decide: keep the annual view, or build the quarterly extractor.
+`performance_report_rows()` is documented as where a quarterly source merges in.
 
 ### D5. Download recordings behind the Admin login
 
@@ -171,12 +167,10 @@ not one bug but the common cause of at least three:
 The fix is the R2 PDF store in portal spec §2.3. Worth treating as one piece
 of work rather than repeatedly re-diagnosing its symptoms.
 
+### Others
 
 - **The Drafts tab is vestigial.** Nothing can enter `awaiting_approval` now
   that every cadence auto-publishes; it shows historical rows only.
-- **450 documents truncated at the old 150k cap.** `MAX_STORED_CHARS` is now
-  2,000,000 and Postgres removes the size constraint, but re-extraction needs
-  the source PDFs, which are never kept. See portal spec §2.3 on the R2 store.
 - **`or_pers` reads GASB-basis figures** because its Actuarial Section is
   scanned images. Labelled in `notes`; OCR is the real fix. Applies to any
   image-only CAFR.
