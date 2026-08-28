@@ -128,6 +128,9 @@ CASES = {
     # empty one: the comparison is about backend parity in the SQL, and an
     # empty map still exercises every query and the total_fund path.
     "performance_report_rows": {"args": ({},)},
+    # No asset-class map needed — unlike performance_report_rows this reads
+    # scope only to filter to "total_fund", not to canonicalise classes.
+    "quarterly_performance_rows": {"args": ()},
     # Default 30-day window, matching the CAFR page.
     "cafr_fiscal_year_counts": {"args": ()},
 }

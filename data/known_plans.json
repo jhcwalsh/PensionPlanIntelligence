@@ -848,6 +848,7 @@
       "minutes"
     ],
     "cafr_url_template": "https://nic.nebraska.gov/sites/default/files/doc/Annual%20Report%20{year}.pdf",
+    "cafr_format": "standalone",
     "fiscal_year_end": "06-30"
   },
   {

@@ -85,8 +85,15 @@ INV_END_PATTERNS = [
 INV_TOC_PATTERNS = (re.compile(r"\binvestment(?:s|\s+section)?\b", re.IGNORECASE),)
 
 
+def _normalize_for_match(s: str) -> str:
+    """Lowercase, alphanumeric-only. Makes name comparisons immune to PDF
+    text-extraction quirks (curly apostrophes mangled to '�', stray
+    whitespace/newlines inside a wrapped title, etc.)."""
+    return re.sub(r"[^a-z0-9]", "", s.lower())
+
+
 def _locate_via_toc(doc: fitz.Document, start_patterns=None,
-                    end_patterns=None) -> tuple[int, int] | None:
+                    end_patterns=None, plan_name: str | None = None) -> tuple[int, int] | None:
     """Try to find a section's page range via the PDF outline (TOC).
 
     `start_patterns` (each tried with `.search()` against a TOC entry's
@@ -96,15 +103,31 @@ def _locate_via_toc(doc: fitz.Document, start_patterns=None,
     `locate_investment_section` but unused here — the section end is
     derived from TOC hierarchy (next entry at the same or higher level),
     not from text matching.
+
+    `plan_name`, when given, excludes any TOC entry whose title contains the
+    plan's own name. Several plans (Washington State *Investment* Board,
+    West Virginia *Investment* Management Board, Illinois Police Officers'
+    Pension *Investment* Fund...) put the word "investment" in their own
+    name, which the title-page TOC entry then matches. Since the level-
+    preference rule below only ever swaps a candidate for one at a
+    *strictly* lower level, that false match — almost always level 1, the
+    same level a genuine "Investment Section" entry also uses — wins
+    permanently over the real one and is never displaced. A section titled
+    "Investments" never repeats the fund's own full name, so this exclusion
+    costs nothing on a document that doesn't have the collision.
     """
     patterns = start_patterns if start_patterns is not None else INV_TOC_PATTERNS
     toc = doc.get_toc()
     if not toc:
         return None
 
+    plan_name_norm = _normalize_for_match(plan_name) if plan_name else None
+
     inv_idx = None
     inv_level = None
     for i, (level, title, page) in enumerate(toc):
+        if plan_name_norm and plan_name_norm in _normalize_for_match(title):
+            continue
         if any(pat.search(title) for pat in patterns):
             # Skip subheaders like "investment policy" if we already found a top-level "investments"
             if inv_idx is None or level < inv_level:
@@ -160,7 +183,7 @@ def _locate_via_text_search(doc: fitz.Document, start_patterns=None,
 
 
 def locate_investment_section(pdf_path: str, start_patterns=None,
-                              end_patterns=None) -> tuple[int, int] | None:
+                              end_patterns=None, plan_name: str | None = None) -> tuple[int, int] | None:
     """Return (start_page, end_page) 1-indexed for a CAFR section.
 
     Defaults locate the Investment Section (existing behavior, unchanged).
@@ -169,10 +192,15 @@ def locate_investment_section(pdf_path: str, start_patterns=None,
     strategy; both are forwarded to `_locate_via_toc` and
     `_locate_via_text_search`, each of which falls back to its own
     Investment-Section-specific default when not given.
+
+    `plan_name`, when given, is forwarded to `_locate_via_toc` to exclude
+    the plan's own name from matching (see its docstring) — only meaningful
+    for the Investment Section search, so pass it only when locating that.
     """
     doc = fitz.open(pdf_path)
     try:
-        rng = (_locate_via_toc(doc, start_patterns=start_patterns, end_patterns=end_patterns)
+        rng = (_locate_via_toc(doc, start_patterns=start_patterns, end_patterns=end_patterns,
+                               plan_name=plan_name)
               or _locate_via_text_search(doc, start_patterns=start_patterns, end_patterns=end_patterns))
         return rng
     finally:
@@ -443,11 +471,22 @@ def extract_one(session, doc: Document, plan: Plan, *,
         console.print(f"  [yellow]{label}: missing local file[/yellow]")
         return "missing_file"
 
-    rng = locate_investment_section(doc.local_path)
-    if rng is None:
-        console.print(f"  [yellow]{label}: Investment Section not found[/yellow]")
-        return "no_section"
-    start, end = rng
+    # cafr_format="standalone" marks a plan whose "CAFR" is actually a short
+    # standalone investment-council annual report (e.g. Nebraska Investment
+    # Council: 33 pages, no GASB Intro/Financial/Investment/Actuarial/
+    # Statistical structure and no TOC at all). Locating an "Investment
+    # Section" inside it is the wrong model — the whole document already is
+    # investment content — so feed all of it rather than searching for a
+    # section header that doesn't exist.
+    if plan_meta and plan_meta.get("cafr_format") == "standalone":
+        with fitz.open(doc.local_path) as pdf:
+            start, end = 1, pdf.page_count
+    else:
+        rng = locate_investment_section(doc.local_path, plan_name=plan.name)
+        if rng is None:
+            console.print(f"  [yellow]{label}: Investment Section not found[/yellow]")
+            return "no_section"
+        start, end = rng
 
     section_text = extract_section_text(doc.local_path, start, end)
     if len(section_text) < 1000:
