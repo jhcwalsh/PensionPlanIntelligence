@@ -84,3 +84,62 @@ def test_fetcher_continues_when_retention_fails(tmp_db, tmp_path, monkeypatch):
         assert doc.extraction_status == "pending"   # still extractable
     finally:
         session.close()
+
+
+def test_fetcher_survives_real_store_document_failure(tmp_db, tmp_path, monkeypatch):
+    """The invariant that makes retention safe: the fetcher commits each
+    document row BEFORE calling store_document, so a real
+    session.rollback() inside store_document -- triggered by a genuine
+    upload failure -- has nothing left in the transaction to discard. The
+    document's insert is already durable by the time retention is even
+    attempted.
+
+    Unlike test_fetcher_continues_when_retention_fails above, this does not
+    stub pdf_store.store_document out. It runs the real function, on the
+    real session the fetcher used, and forces the failure inside R2's put()
+    (the same seam Task 4's own failure test uses) so the real rollback
+    path actually executes. This exists so a future edit that reorders the
+    commit and the retention call -- in either fetcher.py or
+    pdf_store.store_document -- cannot silently turn "an R2 outage costs a
+    day of retention" into "an R2 outage costs a day of documents."
+    """
+    pdf = tmp_path / "board.pdf"
+    pdf.write_bytes(b"%PDF-1.4 fetched")
+
+    # Give store_document a config that passes its "R2 configured?" check,
+    # so it reaches the real upload path instead of short-circuiting.
+    monkeypatch.setenv("R2_ACCOUNT_ID", "acct")
+    monkeypatch.setenv("R2_ACCESS_KEY_ID", "key")
+    monkeypatch.setenv("R2_SECRET_ACCESS_KEY", "secret")
+    monkeypatch.setenv("R2_BUCKET", "pension-documents")
+
+    def explode(*a, **k):
+        raise RuntimeError("R2 is down")
+
+    monkeypatch.setattr(pdf_store, "put", explode)
+
+    monkeypatch.setattr(fetcher, "download_document",
+                        lambda url, d, f: (pdf, pdf.stat().st_size))
+    monkeypatch.setattr(fetcher, "discover_document_links", lambda p: [
+        {"url": "https://x/board.pdf", "filename": "board.pdf",
+         "doc_type": "board_pack", "meeting_date": None},
+    ])
+    monkeypatch.setattr(fetcher, "load_plans", lambda: [
+        {"id": "p1", "abbreviation": "P1", "name": "Plan One"},
+    ])
+
+    session = get_session()
+    session.add(Plan(id="p1", name="Plan One", abbreviation="P1", state="CA"))
+    session.commit()
+    session.close()
+
+    fetcher.run_fetcher()   # must not raise even though store_document
+                            # hits a real exception and a real rollback
+
+    session = get_session()
+    try:
+        doc = session.query(Document).filter_by(url="https://x/board.pdf").one()
+        assert doc.extraction_status == "pending"   # row survives the rollback
+        assert doc.content_sha256 is None            # retention genuinely failed
+    finally:
+        session.close()

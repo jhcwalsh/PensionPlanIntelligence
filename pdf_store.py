@@ -148,6 +148,16 @@ def store_document(session, document, path, cfg: R2Config | None = None):
     an R2 outage must not fail a run whose real job is fetching and
     extracting -- a null content_sha256 simply means the backfill sweeps it
     up later.
+
+    Ordering inside the try block is load-bearing, not incidental:
+    `document.content_sha256` / `r2_uploaded_at` are only assigned AFTER
+    `put()` succeeds. The caller (fetcher.py) commits the document row
+    before ever calling this function, so the `session.rollback()` in the
+    except branch below only ever discards this function's own uncommitted
+    mutations -- never the document's insert. If this function were ever
+    changed to assign those fields before the upload, a failed upload's
+    rollback could discard more than intended, on whatever the caller
+    happened to have pending on the same session at that point.
     """
     cfg = cfg or config_from_env()
     if cfg is None:
