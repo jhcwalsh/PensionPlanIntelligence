@@ -57,6 +57,28 @@ def test_every_db_job_receives_the_dsn(name):
         assert "secrets.DATABASE_URL" in str(env["DATABASE_URL"]), env
 
 
+R2_WORKFLOWS = ["daily-pipeline.yml"]
+R2_VARS = ("R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID",
+           "R2_SECRET_ACCESS_KEY", "R2_BUCKET")
+
+
+@pytest.mark.parametrize("name", R2_WORKFLOWS)
+def test_r2_credentials_declared_at_job_level(name):
+    """Same rationale as the DSN: declared once for the job so a step added
+    later cannot silently skip retention.
+
+    pdf_store.config_from_env() returns None when any var is missing, and
+    store_document treats None as "skip quietly" -- correct for local dev,
+    invisible on a runner. Asserting the config directly is the only place
+    that distinction gets caught.
+    """
+    for job_name, job in _jobs(name):
+        env = job.get("env") or {}
+        for var in R2_VARS:
+            assert var in env, f"{name}:{job_name} has no job-level {var}"
+            assert f"secrets.{var}" in str(env[var]), env
+
+
 @pytest.mark.parametrize("name", DB_WORKFLOWS)
 def test_no_workflow_commits_the_database(name):
     """db/pension.db left git in the cutover.
@@ -75,7 +97,6 @@ def test_no_workflow_still_calls_db_sync(name):
     """scripts/db_sync.py is deleted; a leftover call is an instant failure."""
     text = (WORKFLOWS / name).read_text(encoding="utf-8")
     assert "db_sync" not in text, f"{name} still calls db_sync"
-    assert "R2_" not in text, f"{name} still passes R2 credentials"
 
 
 @pytest.mark.parametrize("name", DB_WORKFLOWS)
