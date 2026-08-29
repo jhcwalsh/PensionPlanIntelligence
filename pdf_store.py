@@ -77,14 +77,29 @@ def client(cfg: R2Config):
     )
 
 
+_NOT_FOUND_CODES = {"404", "NoSuchKey", "NotFound"}
+
+
 def exists(cfg: R2Config, sha: str) -> bool:
-    """True if an object is already stored under `sha`."""
+    """True if an object is already stored under `sha`.
+
+    Returns `False` only when the object is genuinely absent (S3/R2 report
+    this as a 404, NoSuchKey, or NotFound error code depending on the call).
+    Any other `ClientError` -- a 403 from bad or misconfigured credentials, a
+    500, throttling -- propagates instead of being folded into `False`. That
+    matters most for a first-time credentials setup: swallowing a 403 here
+    would report it as "object not present", and `put()` would then attempt
+    an unguarded upload that fails with a misleading error.
+    """
     from botocore.exceptions import ClientError
     try:
         client(cfg).head_object(Bucket=cfg.bucket, Key=key_for(sha))
         return True
-    except ClientError:
-        return False
+    except ClientError as e:
+        code = e.response.get("Error", {}).get("Code", "")
+        if code in _NOT_FOUND_CODES:
+            return False
+        raise
 
 
 def put(cfg: R2Config, data: bytes) -> str:

@@ -90,3 +90,25 @@ def test_get_raises_on_digest_mismatch(r2):
 
 def test_exists_is_false_for_absent_key(r2):
     assert not pdf_store.exists(r2, "0" * 64)
+
+
+def test_exists_reraises_non_404_client_errors(r2, monkeypatch):
+    """A credentials error must not masquerade as "object missing".
+
+    If exists() swallowed a 403 the same way it swallows a 404, put() would
+    proceed on a false premise -- treating "access denied" as "not yet
+    uploaded" -- and fail later with a misleading error, right at the moment
+    (first-time R2 credential setup) an operator most needs the real cause.
+    """
+    from botocore.exceptions import ClientError
+
+    class _DeniedClient:
+        def head_object(self, **kwargs):
+            raise ClientError(
+                {"Error": {"Code": "403", "Message": "Forbidden"}},
+                "HeadObject",
+            )
+
+    monkeypatch.setattr(pdf_store, "client", lambda cfg: _DeniedClient())
+    with pytest.raises(ClientError):
+        pdf_store.exists(r2, "0" * 64)
