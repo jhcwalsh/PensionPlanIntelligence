@@ -84,12 +84,21 @@ def client(cfg: R2Config):
     them.
     """
     import boto3
+    from botocore.config import Config
     return boto3.client(
         "s3",
         endpoint_url=cfg.endpoint_url,
         aws_access_key_id=cfg.access_key_id,
         aws_secret_access_key=cfg.secret_access_key,
         region_name="auto",          # R2 ignores region but boto3 wants one
+        # The corpus's largest document is 89.8 MB and the backfill runs from
+        # a home connection: botocore's default 60s read timeout would fail
+        # the biggest uploads on upstream speed alone.
+        config=Config(
+            retries={"max_attempts": 5, "mode": "standard"},
+            read_timeout=300,
+            connect_timeout=30,
+        ),
     )
 
 
@@ -103,8 +112,20 @@ def preflight(cfg: R2Config) -> None:
     operator downloads gigabytes, stores nothing, and finds out hours later.
     Callers that are about to do bulk work should call this first and stop
     on failure.
+
+    `head_bucket` is the clearest check, but an R2 API token scoped to
+    "Object Read & Write" on a single bucket can be denied it while still
+    being able to do everything the backfill needs. So a 403 there falls
+    back to `exists()`, which exercises `head_object` -- the exact call
+    `put()` makes. Credentials that pass the fallback are good enough.
     """
-    client(cfg).head_bucket(Bucket=cfg.bucket)
+    from botocore.exceptions import ClientError
+    try:
+        client(cfg).head_bucket(Bucket=cfg.bucket)
+    except ClientError as e:
+        if e.response.get("Error", {}).get("Code") not in ("403", "AccessDenied"):
+            raise
+        exists(cfg, "0" * 64)
 
 
 _NOT_FOUND_CODES = {"404", "NoSuchKey", "NotFound"}

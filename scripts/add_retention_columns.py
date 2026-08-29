@@ -37,9 +37,14 @@ COLUMNS = (
 def main() -> int:
     dialect = database.engine.dialect.name
     if dialect != "postgresql":
+        # Non-zero on purpose. An unset DATABASE_URL silently resolves to
+        # SQLite (see CLAUDE.md), and this script's whole job is to touch the
+        # live Postgres database -- exiting 0 there would report success for
+        # a run that did nothing to the database the operator meant.
         print(f"Backend is {dialect!r}, not postgresql -- nothing to do. "
-              "create_all() already covers SQLite and fresh databases.")
-        return 0
+              "create_all() already covers SQLite and fresh databases. "
+              "If you meant to reach Neon, DATABASE_URL is not set.")
+        return 1
 
     with database.engine.begin() as conn:
         for name, ddl_type in COLUMNS:

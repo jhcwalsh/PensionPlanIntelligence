@@ -290,6 +290,10 @@ class Document(Base):
     #   "transient"     re-fetch failed for a reason that may resolve later
     #                   (timeout, connection reset, 5xx, 408, 429, anything
     #                   unclassified). The backfill retries these.
+    # A row can carry both a marker and a hash: a document marked dead by URL
+    # is still stored if its bytes later turn up on disk. So the permanent
+    # floor is  retention_status = 'unrecoverable' AND content_sha256 IS NULL,
+    # never the marker alone.
     retention_status = Column(String(32))
 
     plan = relationship("Plan", back_populates="documents")

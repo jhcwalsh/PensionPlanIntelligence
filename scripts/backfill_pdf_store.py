@@ -194,9 +194,17 @@ def run(limit: int | None = None, refetch: bool = True, cfg=None,
             if data is None:
                 # Recorded, not merely counted: null content_sha256 alone
                 # cannot tell "not yet stored" from "gone forever".
-                doc.retention_status = reason
-                session.commit()
-                bump(reason)
+                # Guarded like the two upload commits: this runs for hours on
+                # one connection, and a Neon blip here would otherwise end the
+                # run as a traceback rather than a counted failure.
+                try:
+                    doc.retention_status = reason
+                    session.commit()
+                    bump(reason)
+                except Exception as e:           # noqa: BLE001
+                    console.print(f"  [red]{doc.url}: recording {reason}: {e}[/red]")
+                    session.rollback()
+                    bump("failed")
                 continue
             try:
                 sha = pdf_store.put(cfg, data)
