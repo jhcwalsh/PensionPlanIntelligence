@@ -172,6 +172,17 @@ def open_local_or_remote(document, cfg: R2Config | None = None) -> pathlib.Path:
     Prefers a present local file (free); otherwise pulls the retained object
     to a temp file. This is the call extractors use so they stop caring
     whether the PDF survived on disk.
+
+    The returned `Path` is one of two different things depending on which
+    branch was taken, and the return value alone does not tell you which:
+    when the local file was present, this is that permanent file and must
+    not be deleted; when it fell back to R2, this is a freshly written
+    temporary file (`tempfile.NamedTemporaryFile(delete=False)`) that
+    nothing else will clean up -- the caller owns removing it. There is no
+    flag or wrapper type distinguishing the two cases yet; a caller that
+    cares must compare the returned path against `document.local_path`
+    itself, or a future revision of this function needs to make the
+    distinction explicit.
     """
     if document.local_path:
         local = pathlib.Path(document.local_path)

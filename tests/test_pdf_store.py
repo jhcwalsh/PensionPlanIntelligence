@@ -167,6 +167,27 @@ def test_store_document_is_non_fatal_on_upload_failure(r2, tmp_db, tmp_path,
         session.close()
 
 
+def test_store_document_is_non_fatal_on_missing_file(r2, tmp_db, tmp_path):
+    """'Never raises' must hold for every statement in the try block, not
+    just the R2 call.
+
+    The entire daily pipeline depends on store_document never raising. The
+    existing upload-failure test only exercises a failure inside put(); this
+    covers a failure earlier in the same try block, before any network call
+    is made, by pointing at a path that does not exist so read_bytes()
+    raises FileNotFoundError first.
+    """
+    missing = tmp_path / "does_not_exist.pdf"
+    session = get_session()
+    try:
+        doc = _seed_doc(session, local_path=str(missing))
+        result = pdf_store.store_document(session, doc, missing, cfg=r2)
+        assert result is None
+        assert doc.content_sha256 is None      # row still usable
+    finally:
+        session.close()
+
+
 def test_store_document_skips_when_r2_unconfigured(tmp_db, tmp_path,
                                                    monkeypatch):
     """No credentials (local dev) -> skip quietly, don't raise."""
