@@ -6,3 +6,5 @@ reportlab
 requests
 yt-dlp
 psycopg[binary]>=3.1  # Postgres driver: Neon migration + the tests/postgres CI job
+boto3  # R2 object store (pdf_store.py); removed in the Postgres cutover, back for the PDF store
+moto[s3]  # test-only: mocks R2's S3-compatible API in tests/test_pdf_store.py
