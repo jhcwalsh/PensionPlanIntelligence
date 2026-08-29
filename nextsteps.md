@@ -75,10 +75,15 @@ the newest week.
 Not to be confused with `notes/weekly_consultant_rfps_*.md` — a different,
 dead product from the RFP subsystem removed on 2026-08-16.
 
-### B2. `www.pensiongraph.com` still points at the retired host
+### B2. `www.pensiongraph.com` still points at the retired host — **DONE 2026-08-29**
 
-`CNAME www -> pensionplanintelligence.onrender.com`. Works today; it is the
-same dependency PR #32 removed from the code.
+Was a real risk, not just cosmetic: Render routes by verified custom domain
+(`www.pensiongraph.com` was already verified on the right service), so it
+worked today regardless of the CNAME's literal target — but pointing at a
+retired, unhyphenated `pensionplanintelligence.onrender.com` slug is a
+dangling-CNAME subdomain-takeover risk if that name ever got released.
+James repointed it (Namecheap, `dns1/dns2.registrar-servers.com`) to
+`pension-plan-intelligence.onrender.com`; verified resolving correctly.
 
 ---
 
@@ -212,20 +217,24 @@ of work rather than repeatedly re-diagnosing its symptoms.
 
 ## Suggested order
 
-Everything in sections A1, B1, D1-D4 above is done as of 2026-08-29. What's
-left:
+Everything in sections A1, B1, B2, D1-D4 above is done as of 2026-08-29.
+The D3 TOC-collision bug was also checked against `extract_ips.py` (not
+exposed — no TOC/section search at all, sends the whole already-short
+document) and `extract_cafr_actuarial.py` (shares `_locate_via_toc` but
+uses a strict `\bactuarial\s+section\b` pattern; no plan name contains
+"actuarial section", confirmed against the DB) — neither is vulnerable.
+What's left:
 
 1. **C1 transfer meter** — one dashboard glance, closes the last unverified
    claim. **Only James can see this.**
-2. **B2 www CNAME** — small, one DNS record, no code.
-3. **D5 recordings download** — small, diagnosed shape (check what the
+2. **D5 recordings download** — small, diagnosed shape (check what the
    `--no-downloads` recordings job actually stores first).
-4. **E1 PDF retention (R2 PDF store)** — the root cause behind the 5
+3. **E1 PDF retention (R2 PDF store)** — the root cause behind the 5
    `missing_file` CAFRs and the 450 truncated-at-150k documents. Worth
    doing once rather than re-diagnosing its symptoms again next time a
    PDF ages off disk.
-5. **wsib's missing performance data** (new, D3) — low priority, needs a
+4. **wsib's missing performance data** (new, D3) — low priority, needs a
    second section search or a cross-section merge, not urgent since it
    fails safe (fewer rows, not wrong ones).
-6. **A2 Auth0**, **A3 public repo**, **A4 WAF proxy** — decisions only
+5. **A2 Auth0**, **A3 public repo**, **A4 WAF proxy** — decisions only
    James can make, no urgency on any of them.
