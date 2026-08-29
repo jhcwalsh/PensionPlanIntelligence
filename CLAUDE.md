@@ -75,8 +75,14 @@ Three consequences worth holding on to:
   locally, and preserved in history: `git show e0d6f45:db/pension.db > db/pension.db`
   recovers the exact file the migration was taken from. The 100 MB single-file
   ceiling, the pack bloat, and the multi-writer commit contention all went with
-  it — as did `scripts/db_sync.py`, every DB-commit workflow step, and the
-  `boto3`/`moto` dependencies that existed only for the abandoned R2 route.
+  it — as did `scripts/db_sync.py` and every DB-commit workflow step. The
+  `boto3`/`moto` dependencies went with them too, then came back on
+  2026-08-29 for an unrelated reason: R2 as a content-addressed *PDF object
+  store* (`pdf_store.py`), not as the database-sync bus that was rejected.
+  `boto3` is a runtime dependency and sits in `requirements.txt`; `moto[s3]`
+  is test-only and sits in `requirements-pipeline.txt`, which is what CI
+  installs — `requirements.txt` is what Render builds the public web
+  service from.
 - **`database.py` loads `.env` itself**, before resolving the URL, with
   `override=False`. Every entry point calls `load_dotenv()` *after* importing
   `database`, so a `DATABASE_URL` living only in `.env` used to be invisible —
@@ -105,8 +111,12 @@ anything, which is what removed its conflict-avoidance time slot.
 **Re-extraction is no longer size-gated.** `MAX_STORED_CHARS` is 2,000,000 and
 450 documents were truncated at the old 150k cap. Re-extracting them would have
 added ~20.5 MB to a 68 MB file 11 MB from GitHub's hard limit; against Postgres
-that constraint does not exist. What still gates it is the source PDFs, which
-are never kept — see the portal spec §2.3 on the R2 PDF store.
+that constraint does not exist. What gated it was the source PDFs, which used
+to be discarded after extraction; since 2026-08-29 the daily pipeline retains
+every PDF it fetches in R2 (`pdf_store.py`, `documents.content_sha256`), and
+`scripts/backfill_pdf_store.py` sweeps up the existing corpus. Re-extraction
+is unblocked for anything the store actually holds — see
+`docs/superpowers/specs/2026-08-29-pdf-retention-design.md`.
 
 ### `documents.extracted_text` is gzipped on disk — and deferred
 The full extracted PDF text is the bulk of the database by 10× over everything else. `Document.extracted_text` uses a `GzippedText` `TypeDecorator` (`database.py`): callers see plain `str` both ways, but stored values are gzipped UTF-8 bytes (`impl=LargeBinary`, which is `BYTEA` on Postgres). It was introduced to stay under GitHub's file-size limit; that reason is gone, but it still cuts storage and transfer roughly tenfold over the network, so it stays. Legacy uncompressed `str` rows are returned as-is, so the model change was safe to land before the data migration. Implications:
@@ -219,7 +229,7 @@ Render hosts one web service: Streamlit (`pension-plan-intelligence`), reading N
 | Quarterly insights composition + auto-publish | cron 1st of Jan/Apr/Jul/Oct 19:00 UTC | GHA | `.github/workflows/quarterly-insights.yml` |
 | Annual insights composition + auto-publish | cron Jan 5 19:00 UTC | GHA | `.github/workflows/annual-insights.yml` |
 
-GHA secrets that must exist for the cron entries to work: `DATABASE_URL`, `ANTHROPIC_API_KEY`, `RESEND_API_KEY`, `APPROVAL_EMAIL_RECIPIENT`, `APPROVAL_EMAIL_FROM`. Local runs read the same names from `.env`. Schedules are UTC; ET drifts one hour between EDT and EST. The 1st-of-month sequence is still deliberate — CAFR refresh @ 15:00 UTC, IPS @ 16:00, monthly-insights @ 18:00 — but now only so monthly composes from fresh CAFRs, not because one job's commit has to reach another. They share a database.
+GHA secrets that must exist for the cron entries to work: `DATABASE_URL`, `ANTHROPIC_API_KEY`, `RESEND_API_KEY`, `APPROVAL_EMAIL_RECIPIENT`, `APPROVAL_EMAIL_FROM`, plus `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` and `R2_BUCKET` on `daily-pipeline.yml` only. **If any one of the four `R2_*` values is missing, PDF retention is a silent no-op** — the pipeline still fetches, extracts and goes green, and nothing is retained. `fetcher.py` prints one line at the start of each run saying whether retention is on, and one at the end with retained/failed counts; that line is the thing to check. Local runs read the same names from `.env`. Schedules are UTC; ET drifts one hour between EDT and EST. The 1st-of-month sequence is still deliberate — CAFR refresh @ 15:00 UTC, IPS @ 16:00, monthly-insights @ 18:00 — but now only so monthly composes from fresh CAFRs, not because one job's commit has to reach another. They share a database.
 
 ### `!cancelled()` on the derived-data and file-commit steps
 
