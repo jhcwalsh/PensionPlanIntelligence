@@ -17,9 +17,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-import boto3
 import pytest
-from moto import mock_aws
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -113,10 +111,24 @@ def r2(monkeypatch):
     retention plan's brief originally placed it) because a later task adds
     tests/test_backfill_pdf_store.py, which also needs it -- pytest fixtures
     don't cross files.
+
+    boto3 and moto are imported here rather than at module level on purpose:
+    moto[s3] lives in requirements-pipeline.txt (test/CI only), not in
+    requirements.txt, so a module-level import would make the whole suite
+    fail to *collect* anywhere moto is absent -- not just the R2 tests.
     """
+    import boto3
+    from moto import mock_aws
+
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", "test")
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "test")
     monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
+    # pdf_store.client is lru_cached on the (frozen, hashable) config, so a
+    # client built inside one test's moto context would otherwise be reused
+    # by the next one. Clear on the way in -- not on the way out, where a
+    # test that monkeypatched pdf_store.client itself has not been unwound
+    # yet and the attribute is a plain function with no cache_clear.
+    pdf_store.client.cache_clear()
     with mock_aws():
         cfg = pdf_store.R2Config("acct", "test", "test", "pension-documents")
         # moto only intercepts requests to endpoints it recognizes as AWS;

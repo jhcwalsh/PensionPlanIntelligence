@@ -163,15 +163,25 @@ def test_r2_dependencies_are_present_for_the_pdf_store():
     only a database-sync bus (scripts/db_sync.py) and Postgres replaced that
     role outright. They're back for a second, unrelated reason: R2 as a
     content-addressed PDF object store (pdf_store.py), per
-    docs/superpowers/specs/2026-08-29-pdf-retention-design.md §3.3. boto3 is
-    a runtime dependency of pdf_store.py, so it belongs in requirements.txt;
-    requirements-pipeline.txt starts with `-r requirements.txt`, so the daily
-    pipeline gets it transitively without a second, redundant pin here.
+    docs/superpowers/specs/2026-08-29-pdf-retention-design.md §3.3.
 
-    CI installs requirements-pipeline.txt, which now carries moto[s3]
-    transitively too -- that's what lets tests/test_pdf_store.py mock R2 in
-    CI, so there's no separate "moto is installed in test.yml" assertion to
-    make; requirements.txt is the one place that decision is pinned.
+    The two split across the two requirements files, and the split matters:
+
+    - boto3 is a *runtime* dependency of pdf_store.py, so it belongs in
+      requirements.txt. requirements-pipeline.txt starts with
+      `-r requirements.txt`, so the daily pipeline gets it transitively
+      without a second, redundant pin.
+    - moto[s3] is a test-only mock and must stay OUT of requirements.txt,
+      because render.yaml builds the public Streamlit service from that file
+      -- moto would put werkzeug, Jinja2, cryptography, responses, xmltodict
+      and py-partiql-parser into a production web service that never calls
+      S3. It lives in requirements-pipeline.txt, which is what CI installs
+      (.github/workflows/test.yml) and which already carries pytest and
+      freezegun.
+
+    tests/conftest.py imports boto3 and moto inside the `r2` fixture rather
+    than at module level for the same reason: a module-level import would
+    make the entire suite fail to collect wherever moto is absent.
 
     The db_sync invariant this test used to also carry is unaffected by any
     of this and is still covered elsewhere: test_no_workflow_still_calls_db_sync
@@ -179,8 +189,14 @@ def test_r2_dependencies_are_present_for_the_pdf_store():
     test_the_local_recordings_job_does_not_push's "db_sync" not in bat check
     below. This test now guards only the dependency decision itself.
     """
-    text = (ROOT / "requirements.txt").read_text(encoding="utf-8")
-    assert "boto3" in text, "requirements.txt should pin boto3 for pdf_store.py"
+    runtime = (ROOT / "requirements.txt").read_text(encoding="utf-8")
+    pipeline = (ROOT / "requirements-pipeline.txt").read_text(encoding="utf-8")
+    assert "boto3" in runtime, \
+        "requirements.txt should pin boto3 for pdf_store.py"
+    assert "moto" not in runtime, \
+        "moto is test-only; requirements.txt builds the Render web service"
+    assert "moto[s3]" in pipeline, \
+        "requirements-pipeline.txt is what CI installs; moto must be there"
     assert not (ROOT / "scripts" / "db_sync.py").exists(), \
         "scripts/db_sync.py should still be gone -- R2 is back as an object " \
         "store, not as the database-sync bus that script implemented"
