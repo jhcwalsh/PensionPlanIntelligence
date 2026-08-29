@@ -273,6 +273,14 @@ class Document(Base):
     meeting_date = Column(DateTime(timezone=True))     # parsed from document or filename
     fiscal_year = Column(Integer)       # CAFR/ACFR fiscal year (e.g. 2024); null for non-CAFR docs
 
+    # PDF retention (docs/superpowers/specs/2026-08-29-pdf-retention-design.md).
+    # content_sha256 is the R2 object key; null means "not stored" -- either
+    # not yet backfilled, or unrecoverable because the source URL is dead.
+    # local_path stays meaningful: it is no longer the only copy, but a
+    # machine that happens to have the file should still use it.
+    content_sha256 = Column(String(64))
+    r2_uploaded_at = Column(DateTime(timezone=True))
+
     plan = relationship("Plan", back_populates="documents")
     meeting = relationship("Meeting", back_populates="documents")
     summary = relationship("Summary", back_populates="document", uselist=False,
