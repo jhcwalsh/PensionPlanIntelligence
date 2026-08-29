@@ -17,12 +17,16 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+import boto3
 import pytest
+from moto import mock_aws
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 # Ensure repo root is on sys.path for imports like `from database import ...`
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+import pdf_store
 
 
 @pytest.fixture(autouse=True)
@@ -47,6 +51,14 @@ def _isolated_environment(tmp_path, monkeypatch):
     # would reach the live database. Tests must not depend on whose machine
     # they run on.
     monkeypatch.delenv("DATABASE_URL", raising=False)
+    # Same reasoning for R2: every test in the pdf-retention plan passes
+    # `cfg=` explicitly, so nothing today reaches live R2 -- this just stops
+    # a *future* test that forgets and would otherwise write to the real
+    # bucket if credentials happened to be sitting in the environment.
+    monkeypatch.delenv("R2_ACCOUNT_ID", raising=False)
+    monkeypatch.delenv("R2_ACCESS_KEY_ID", raising=False)
+    monkeypatch.delenv("R2_SECRET_ACCESS_KEY", raising=False)
+    monkeypatch.delenv("R2_BUCKET", raising=False)
     monkeypatch.setenv("DB_PATH", str(db_path))
     monkeypatch.setenv("INSIGHTS_MODE", "mock")
     monkeypatch.setenv("APPROVAL_BASE_URL", "https://test.local")
@@ -87,6 +99,37 @@ def _isolated_environment(tmp_path, monkeypatch):
     yield
 
     # tmp_path is purged by pytest; nothing else to clean.
+
+
+@pytest.fixture()
+def r2(monkeypatch):
+    """A mocked R2 bucket plus matching config.
+
+    moto mocks the S3 API, which is what R2 exposes. Credentials are set to
+    dummy values so boto3 never reaches for real ones on the developer's
+    machine.
+
+    Shared here (rather than in tests/test_pdf_store.py, where the pdf-
+    retention plan's brief originally placed it) because a later task adds
+    tests/test_backfill_pdf_store.py, which also needs it -- pytest fixtures
+    don't cross files.
+    """
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "test")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "test")
+    monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
+    with mock_aws():
+        cfg = pdf_store.R2Config("acct", "test", "test", "pension-documents")
+        # moto only intercepts requests to endpoints it recognizes as AWS;
+        # a custom S3-compatible endpoint (R2's account-scoped hostname)
+        # must be registered explicitly or boto3 tries a real network call.
+        # See moto.core.utils.get_equivalent_url_in_aws_domain /
+        # moto.settings.get_s3_custom_endpoints.
+        monkeypatch.setenv(
+            "MOTO_S3_CUSTOM_ENDPOINTS",
+            cfg.endpoint_url.removeprefix("https://"),
+        )
+        boto3.client("s3").create_bucket(Bucket=cfg.bucket)
+        yield cfg
 
 
 @pytest.fixture()

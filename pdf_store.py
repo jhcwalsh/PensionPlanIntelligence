@@ -59,3 +59,61 @@ def config_from_env() -> R2Config | None:
     if not all([account_id, access_key_id, secret_access_key, bucket]):
         return None
     return R2Config(account_id, access_key_id, secret_access_key, bucket)
+
+
+class DigestMismatch(Exception):
+    """Stored bytes did not hash to the key they were stored under."""
+
+
+def client(cfg: R2Config):
+    """A boto3 S3 client pointed at R2's S3-compatible endpoint."""
+    import boto3
+    return boto3.client(
+        "s3",
+        endpoint_url=cfg.endpoint_url,
+        aws_access_key_id=cfg.access_key_id,
+        aws_secret_access_key=cfg.secret_access_key,
+        region_name="auto",          # R2 ignores region but boto3 wants one
+    )
+
+
+def exists(cfg: R2Config, sha: str) -> bool:
+    """True if an object is already stored under `sha`."""
+    from botocore.exceptions import ClientError
+    try:
+        client(cfg).head_object(Bucket=cfg.bucket, Key=key_for(sha))
+        return True
+    except ClientError:
+        return False
+
+
+def put(cfg: R2Config, data: bytes) -> str:
+    """Store `data`, returning its digest. No-op if already present.
+
+    The existence check is what makes re-uploads free: backfill can be
+    interrupted and restarted without re-sending gigabytes.
+    """
+    sha = sha256_bytes(data)
+    if exists(cfg, sha):
+        return sha
+    client(cfg).put_object(
+        Bucket=cfg.bucket, Key=key_for(sha), Body=data,
+        ContentType="application/pdf",
+    )
+    return sha
+
+
+def get(cfg: R2Config, sha: str) -> bytes:
+    """Fetch the object stored under `sha`, verifying it on the way out.
+
+    Verification is not paranoia: the digest is the key, so a mismatch means
+    the object was replaced out of band. Returning it silently would feed
+    wrong bytes to an extractor that records the result as real data.
+    """
+    body = client(cfg).get_object(
+        Bucket=cfg.bucket, Key=key_for(sha))["Body"].read()
+    actual = sha256_bytes(body)
+    if actual != sha:
+        raise DigestMismatch(
+            f"object {key_for(sha)} hashes to {actual}, not {sha}")
+    return body
