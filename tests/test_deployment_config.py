@@ -94,9 +94,17 @@ def test_no_workflow_commits_the_database(name):
 
 @pytest.mark.parametrize("name", DB_WORKFLOWS)
 def test_no_workflow_still_calls_db_sync(name):
-    """scripts/db_sync.py is deleted; a leftover call is an instant failure."""
+    """scripts/db_sync.py is deleted; a leftover call is an instant failure.
+
+    R2 credentials belong only in workflows that fetch PDFs. daily-pipeline.yml
+    needs them for PDF retention (asserted positively by
+    test_r2_credentials_declared_at_job_level); other workflows should not
+    carry credentials they don't use.
+    """
     text = (WORKFLOWS / name).read_text(encoding="utf-8")
     assert "db_sync" not in text, f"{name} still calls db_sync"
+    if name not in R2_WORKFLOWS:
+        assert "R2_" not in text, f"{name} has R2 credentials but doesn't need them"
 
 
 @pytest.mark.parametrize("name", DB_WORKFLOWS)
