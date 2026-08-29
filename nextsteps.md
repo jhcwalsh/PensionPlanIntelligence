@@ -1,6 +1,6 @@
 # Next steps
 
-**As of 2026-08-28.** Working doc. Supersedes the 2026-08-19 migration
+**As of 2026-08-29.** Working doc. Supersedes the 2026-08-19 migration
 edition (in git history at `e66d56d`) — that migration is complete.
 
 Specs: `docs/superpowers/specs/2026-08-16-low-maintenance-app-design.md`,
@@ -23,6 +23,10 @@ Specs: `docs/superpowers/specs/2026-08-16-low-maintenance-app-design.md`,
 | Resend on `mail.pensiongraph.com` | real delivery proven end to end |
 | Back-catalogue links | 98 publications + 1 note rewritten |
 | API spend instrumented | ~$10–15/month; Batch API thread closed as not worth it |
+| August monthly + YTD (D2) | Publication 126, published and emailed |
+| Quarterly performance extractor (D4) | scoped to the one plan with real data; see D4 |
+| CAFR locator bug (D3) | plan's-own-name TOC collision fixed; hit 4-5 plans, not 2 |
+| `NameError: 'pd' not defined` on CAFR Coverage + Performance tabs | PR #38 |
 
 ---
 
@@ -99,50 +103,70 @@ the control stays visible, so it read as broken on more than half the app.
 Captioned with the tabs it drives rather than removed — removing it would have
 destroyed working behaviour on four tabs.
 
-### D2. Monthly for August + Year-to-date for August
+### D2. Monthly for August + Year-to-date for August — **DONE 2026-08-28**
 
-August monthly currently gathers **3 weeklies** (`08-02`, `08-09`, `08-16`); a
-4th arrives when the `08-30` run auto-publishes `08-23..08-29`. So the
-scheduled 2026-09-01 run will work unaided — this item is about producing it
-now, plus the YTD view.
+Publication 126, published and emailed. The legacy YTD note
+(`notes/2026_cio_insights.md`, `generate_notes.py --insights-ytd-only`) was
+also regenerated and committed — 118 plans, ~$4.8T AUM, validated 97%+
+against the source corpus. It's a fallback only: the Year-to-date tab
+prefers the newest `quarterly_cio_insights_*.md`/`annual_cio_insights_*.md`
+(see `app.py::_find_latest_insights`), currently `quarterly_cio_insights_
+2026-04-01.md` — that won't refresh until Q3 closes (2026-10-01).
 
-### D3. CAFR — **answered**, and it is not a CAFR problem
+### D3. CAFR — **answered, and fixed** — bigger than the two flagged docs
 
-Coverage-by-reporting-year table shipped (PR #35).
+The original "7 pending" diagnostic (2026-08-28) found `no_section`
+(NIC FY2024) and `too_short` (WV IMB FY2024) as the two "genuine
+per-document problems." Investigating them turned up a real, general bug,
+not two isolated ones:
 
-The "7 pending" root cause, from a diagnostic run on 2026-08-28 that cost
-**$0.00** — none of the seven reached Claude:
+- **The TOC locator matched a plan's own name.** For plans whose own name
+  contains "Investment" (WSIB, WV IMB, IPOPIF, FPIF, Montana Board of
+  Investments), `_locate_via_toc`'s lenient "contains investment" pattern
+  matches the title-page TOC entry, and the level-preference tie-break
+  never displaces that false match with a later, correct one — the plan
+  silently gets a 1-7 page range and **zero data saved, no error raised**.
+  Fixed in `extract_cafr_investments.py` (PR #36) by excluding TOC entries
+  containing the plan's own name. Verified against the real PDFs for
+  `wv_imb` and `ipopif_il`. `mboi_mt`'s false match ("BOARD OF INVESTMENTS
+  STAFF") only shares a name *fragment*, not the full name — see below.
+- **NIC and `mboi_mt` aren't GASB CAFRs at all** — short standalone
+  investment-council annual reports with no TOC/section structure to
+  locate. Both given `cafr_format="standalone"` (PR #36, PR #39) to feed
+  the whole document instead. `mboi_mt`: 0 rows → 17 allocation + 8
+  performance rows, re-verified live 2026-08-29.
+- **`wsib` is not this bug.** Its "INVESTMENTS" section (pages 9-15) is
+  *correctly* located — the document is structured INTRODUCTION/
+  INVESTMENTS/FINANCIALS, and the returns table lives inside FINANCIALS →
+  Retirement Funds (pages 18-63), not co-located with the allocation
+  targets. Real, separate gap, unfixed: needs either a second section
+  search or a merge across two locations. Low priority — currently just
+  shows fewer rows (5 allocation, 0 performance), not wrong ones.
 
-```
-missing_file   5    the source PDF is gone from disk
-no_section     1    NIC FY2024 — Investment Section not found
-too_short      1    WV IMB FY2024 — 296 chars, likely scanned images
-```
+The 5 `missing_file` CAFRs (PDF gone from disk) are still the E1
+PDF-retention gap — unrelated, unfixed, will recur.
 
-**Five of seven are one known problem.** The structured extractor reads the
-local PDF, not the stored text, and only **45 of 140** CAFR PDFs still exist
-on disk. Those five cannot be fixed by re-running anything — they need the
-CAFR re-fetched (the URLs are still in the database) or a PDF store.
+### D4. Performance Reports tab — **DONE, both annual and quarterly** (PR #35, #36, #37)
 
-See E1: this is the PDF-retention gap surfacing, and it will keep producing
-new "pending" rows as more PDFs age off disk.
+83 plans, annual headline return by asset class (from CAFRs), CSV download.
 
-The other two are genuine per-document problems and want individual attention.
+**Quarterly decided: build it, scoped down.** Of the 48 `doc_type=
+'performance'` documents assumed to be "true quarterly reports with no
+extraction," only **30 (`nycrs_comptroller`)** actually are. `mn_msrs` and
+`pera_colorado` hold DC-plan investment-menu returns; `calpers` holds a
+governance-committee meeting transcript; `dcrb` holds a blank vendor form —
+all mistagged `doc_type='performance'`. Extracting the other four as if
+they were fund performance would have put wrong or DC-plan data into a
+table that claims to be the pension fund's return, so
+`extract_performance_reports.py` only ever processes `nycrs_comptroller`
+(`ALLOWED_PLAN_IDS`, deliberately not silent). Surfaced as a second table
+in the Performance tab, one row per constituent NYC system (NYCERS/TRS/
+POLICE/FIRE/BERS) since there's no single "total fund" figure across them.
 
-### D4. Performance Reports tab — **DONE, annual** (PR #35)
-
-83 plans, headline return by asset class, CSV download, backed by a data
-structure so charts can be built on the same query.
-
-**Open question.** These are **fiscal-year** returns, not the calendar
-quarters requested — CAFRs are annual, and `cafr_performance` already held
-2,690 rows covering exactly the classes asked for. True quarterly data lives
-in the 48 `doc_type='performance'` documents, which have no structured
-extraction at all: a new model plus a new Claude extractor, larger than the
-tab itself, with recurring API cost.
-
-Decide: keep the annual view, or build the quarterly extractor.
-`performance_report_rows()` is documented as where a quarterly source merges in.
+Shipped with a real bug of its own: `MAX_OUTPUT_TOKENS=4096` silently
+truncated every tool call before it reached the `returns` array — all 30
+documents "saved" with **zero rows**, no error. Fixed (16384, PR #37),
+re-ran live: all 30 now carry real per-fund quarterly returns.
 
 ### D5. Download recordings behind the Admin login
 
@@ -188,11 +212,20 @@ of work rather than repeatedly re-diagnosing its symptoms.
 
 ## Suggested order
 
-1. **A1 July backfill** — the only item with a real deadline.
-2. **C1 transfer meter** — one dashboard glance, closes the last unverified claim.
-3. **D2 August monthly + YTD** — small, and the inputs are already there.
-4. **D1 Filter by Plan** — small, visible, decide-then-do.
-5. **D3 CAFR** — investigation then a UI addition.
-6. **B1 Weekly tab** — restores three months of missing briefings.
-7. **D4 Performance Reports** — the largest; needs a schema decision first.
-8. **D5 recordings download**, **B2 www**, then **A2–A4** at leisure.
+Everything in sections A1, B1, D1-D4 above is done as of 2026-08-29. What's
+left:
+
+1. **C1 transfer meter** — one dashboard glance, closes the last unverified
+   claim. **Only James can see this.**
+2. **B2 www CNAME** — small, one DNS record, no code.
+3. **D5 recordings download** — small, diagnosed shape (check what the
+   `--no-downloads` recordings job actually stores first).
+4. **E1 PDF retention (R2 PDF store)** — the root cause behind the 5
+   `missing_file` CAFRs and the 450 truncated-at-150k documents. Worth
+   doing once rather than re-diagnosing its symptoms again next time a
+   PDF ages off disk.
+5. **wsib's missing performance data** (new, D3) — low priority, needs a
+   second section search or a cross-section merge, not urgent since it
+   fails safe (fewer rows, not wrong ones).
+6. **A2 Auth0**, **A3 public repo**, **A4 WAF proxy** — decisions only
+   James can make, no urgency on any of them.
