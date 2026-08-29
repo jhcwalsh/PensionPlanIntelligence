@@ -9,7 +9,9 @@ from __future__ import annotations
 import boto3
 import pytest
 
+import database
 import pdf_store
+from database import Document, Plan, get_session
 
 
 def test_sha256_bytes_is_lowercase_hex():
@@ -112,3 +114,107 @@ def test_exists_reraises_non_404_client_errors(r2, monkeypatch):
     monkeypatch.setattr(pdf_store, "client", lambda cfg: _DeniedClient())
     with pytest.raises(ClientError):
         pdf_store.exists(r2, "0" * 64)
+
+
+def _seed_doc(session, url="https://x/a.pdf", local_path=None):
+    if session.get(Plan, "p1") is None:
+        session.add(Plan(id="p1", name="P", abbreviation="P", state="CA"))
+        session.flush()
+    doc = Document(plan_id="p1", url=url, filename="a.pdf",
+                   doc_type="board_pack", local_path=local_path)
+    session.add(doc)
+    session.commit()
+    return doc
+
+
+def test_store_document_records_sha_and_timestamp(r2, tmp_db, tmp_path):
+    pdf = tmp_path / "a.pdf"
+    pdf.write_bytes(b"%PDF-1.4 stored")
+    session = get_session()
+    try:
+        doc = _seed_doc(session, local_path=str(pdf))
+        sha = pdf_store.store_document(session, doc, pdf, cfg=r2)
+        assert sha == pdf_store.sha256_bytes(b"%PDF-1.4 stored")
+        assert doc.content_sha256 == sha
+        assert doc.r2_uploaded_at is not None
+        assert pdf_store.exists(r2, sha)
+    finally:
+        session.close()
+
+
+def test_store_document_is_non_fatal_on_upload_failure(r2, tmp_db, tmp_path,
+                                                       monkeypatch):
+    """An R2 outage must not fail the caller.
+
+    This is the test that protects the daily pipeline: retention is additive
+    to fetching, and must never become a new way for the fetch to break.
+    """
+    pdf = tmp_path / "a.pdf"
+    pdf.write_bytes(b"%PDF-1.4 boom")
+
+    def explode(*a, **k):
+        raise RuntimeError("R2 is down")
+
+    monkeypatch.setattr(pdf_store, "put", explode)
+
+    session = get_session()
+    try:
+        doc = _seed_doc(session, local_path=str(pdf))
+        result = pdf_store.store_document(session, doc, pdf, cfg=r2)
+        assert result is None
+        assert doc.content_sha256 is None      # row still usable
+    finally:
+        session.close()
+
+
+def test_store_document_skips_when_r2_unconfigured(tmp_db, tmp_path,
+                                                   monkeypatch):
+    """No credentials (local dev) -> skip quietly, don't raise."""
+    for var in ("R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID",
+                "R2_SECRET_ACCESS_KEY", "R2_BUCKET"):
+        monkeypatch.delenv(var, raising=False)
+    pdf = tmp_path / "a.pdf"
+    pdf.write_bytes(b"%PDF-1.4 x")
+    session = get_session()
+    try:
+        doc = _seed_doc(session, local_path=str(pdf))
+        assert pdf_store.store_document(session, doc, pdf) is None
+    finally:
+        session.close()
+
+
+def test_open_local_or_remote_prefers_local(r2, tmp_db, tmp_path):
+    pdf = tmp_path / "local.pdf"
+    pdf.write_bytes(b"%PDF-1.4 local")
+    session = get_session()
+    try:
+        doc = _seed_doc(session, local_path=str(pdf))
+        got = pdf_store.open_local_or_remote(doc, cfg=r2)
+        assert got == pdf                       # the original, not a copy
+    finally:
+        session.close()
+
+
+def test_open_local_or_remote_falls_back_to_r2(r2, tmp_db, tmp_path):
+    """The case that matters: the local file is gone (2,633 documents are
+    already in this state) but the object is retained."""
+    sha = pdf_store.put(r2, b"%PDF-1.4 remote")
+    session = get_session()
+    try:
+        doc = _seed_doc(session, local_path=str(tmp_path / "missing.pdf"))
+        doc.content_sha256 = sha
+        session.commit()
+        got = pdf_store.open_local_or_remote(doc, cfg=r2)
+        assert got.read_bytes() == b"%PDF-1.4 remote"
+    finally:
+        session.close()
+
+
+def test_open_local_or_remote_raises_when_nowhere(r2, tmp_db, tmp_path):
+    session = get_session()
+    try:
+        doc = _seed_doc(session, local_path=str(tmp_path / "gone.pdf"))
+        with pytest.raises(FileNotFoundError):
+            pdf_store.open_local_or_remote(doc, cfg=r2)
+    finally:
+        session.close()

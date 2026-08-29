@@ -17,8 +17,15 @@ See docs/superpowers/specs/2026-08-29-pdf-retention-design.md.
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
+import pathlib
+import tempfile
 from dataclasses import dataclass
+
+from database import utcnow
+
+logger = logging.getLogger(__name__)
 
 KEY_PREFIX = "documents"
 
@@ -132,3 +139,56 @@ def get(cfg: R2Config, sha: str) -> bytes:
         raise DigestMismatch(
             f"object {key_for(sha)} hashes to {actual}, not {sha}")
     return body
+
+
+def store_document(session, document, path, cfg: R2Config | None = None):
+    """Upload `path` and record the key on `document`. Returns the sha or None.
+
+    Never raises. The daily pipeline calls this immediately after a fetch, and
+    an R2 outage must not fail a run whose real job is fetching and
+    extracting -- a null content_sha256 simply means the backfill sweeps it
+    up later.
+    """
+    cfg = cfg or config_from_env()
+    if cfg is None:
+        logger.debug("R2 not configured; skipping retention for %s", document.url)
+        return None
+    try:
+        data = pathlib.Path(path).read_bytes()
+        sha = put(cfg, data)
+        document.content_sha256 = sha
+        document.r2_uploaded_at = utcnow()
+        session.commit()
+        return sha
+    except Exception as e:                       # noqa: BLE001 - deliberate
+        logger.warning("R2 upload failed for %s: %s", document.url, e)
+        session.rollback()
+        return None
+
+
+def open_local_or_remote(document, cfg: R2Config | None = None) -> pathlib.Path:
+    """Return a readable path for `document`'s PDF.
+
+    Prefers a present local file (free); otherwise pulls the retained object
+    to a temp file. This is the call extractors use so they stop caring
+    whether the PDF survived on disk.
+    """
+    if document.local_path:
+        local = pathlib.Path(document.local_path)
+        if local.exists():
+            return local
+
+    if not document.content_sha256:
+        raise FileNotFoundError(
+            f"document {document.id} has no local file and no stored object")
+
+    cfg = cfg or config_from_env()
+    if cfg is None:
+        raise FileNotFoundError(
+            f"document {document.id} is not on disk and R2 is not configured")
+
+    data = get(cfg, document.content_sha256)
+    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+    tmp.write(data)
+    tmp.close()
+    return pathlib.Path(tmp.name)
