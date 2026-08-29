@@ -8,7 +8,7 @@ Specs: `docs/superpowers/specs/2026-08-16-low-maintenance-app-design.md`,
 
 ---
 
-## Done (2026-08-21 → 2026-08-28)
+## Done (2026-08-21 → 2026-08-29)
 
 | | |
 |---|---|
@@ -27,6 +27,9 @@ Specs: `docs/superpowers/specs/2026-08-16-low-maintenance-app-design.md`,
 | Quarterly performance extractor (D4) | scoped to the one plan with real data; see D4 |
 | CAFR locator bug (D3) | plan's-own-name TOC collision fixed; hit 4-5 plans, not 2 |
 | `NameError: 'pd' not defined` on CAFR Coverage + Performance tabs | PR #38 |
+| `mboi_mt` CAFR standalone-format fix (D3) | 0 rows → 17 alloc + 8 perf rows; PR #39 |
+| `www.pensiongraph.com` CNAME (B2) | repointed off retired Render slug |
+| Recordings download, admin-gated (D5) | PR #40, verified live end to end |
 
 ---
 
@@ -173,11 +176,17 @@ truncated every tool call before it reached the `returns` array — all 30
 documents "saved" with **zero rows**, no error. Fixed (16384, PR #37),
 re-ran live: all 30 now carry real per-fund quarterly returns.
 
-### D5. Download recordings behind the Admin login
+### D5. Download recordings behind the Admin login — **DONE 2026-08-29** (PR #40)
 
-Add a download option for meeting recordings, gated by `_admin_unlocked()`.
-Note the weekly recordings job runs with `--no-downloads` today, so the media
-may not exist locally — check what the job stores before designing this.
+The `--no-downloads` weekly job leaves `download_status='pending'` for
+almost everything (3402 of 3435), but 12 real files exist on this
+machine's D: drive from earlier manual runs — confirmed before designing
+anything. Added a selectbox + download button below the Recordings table,
+scoped to those 12, admin-gated. Use case confirmed with James first:
+grabbing a file from another device on the LAN while the app runs locally
+(never useful on Render — files "never go onto Render's persistent disk"
+by design). Verified live end to end: downloaded a real 2,080,074-byte
+file, matched the UI's displayed size exactly.
 
 ---
 
@@ -217,7 +226,7 @@ of work rather than repeatedly re-diagnosing its symptoms.
 
 ## Suggested order
 
-Everything in sections A1, B1, B2, D1-D4 above is done as of 2026-08-29.
+Everything in sections A1, B1, B2, D1-D5 above is done as of 2026-08-29.
 The D3 TOC-collision bug was also checked against `extract_ips.py` (not
 exposed — no TOC/section search at all, sends the whole already-short
 document) and `extract_cafr_actuarial.py` (shares `_locate_via_toc` but
@@ -227,14 +236,12 @@ What's left:
 
 1. **C1 transfer meter** — one dashboard glance, closes the last unverified
    claim. **Only James can see this.**
-2. **D5 recordings download** — small, diagnosed shape (check what the
-   `--no-downloads` recordings job actually stores first).
-3. **E1 PDF retention (R2 PDF store)** — the root cause behind the 5
+2. **E1 PDF retention (R2 PDF store)** — the root cause behind the 5
    `missing_file` CAFRs and the 450 truncated-at-150k documents. Worth
    doing once rather than re-diagnosing its symptoms again next time a
    PDF ages off disk.
-4. **wsib's missing performance data** (new, D3) — low priority, needs a
+3. **wsib's missing performance data** (new, D3) — low priority, needs a
    second section search or a cross-section merge, not urgent since it
    fails safe (fewer rows, not wrong ones).
-5. **A2 Auth0**, **A3 public repo**, **A4 WAF proxy** — decisions only
+4. **A2 Auth0**, **A3 public repo**, **A4 WAF proxy** — decisions only
    James can make, no urgency on any of them.
