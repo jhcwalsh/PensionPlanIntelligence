@@ -529,6 +529,21 @@ def run_fetcher(plan_ids: list[str] = None, max_docs_per_plan: int = 50):
     session = get_session()
     total_new = 0
 
+    # Say out loud whether PDFs are being retained. store_document's "R2 not
+    # configured" line is logger.debug and nothing here calls
+    # logging.basicConfig, so three of the four R2_* secrets set would leave
+    # the daily pipeline green forever while retention silently never
+    # happened. One line at the start and one at the end, outside the
+    # per-document loop.
+    r2_cfg = pdf_store.config_from_env()
+    if r2_cfg:
+        console.print(f"[dim]PDF retention: on (R2 bucket {r2_cfg.bucket})[/dim]")
+    else:
+        console.print("[yellow]PDF retention: OFF -- R2_ACCOUNT_ID / "
+                      "R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY / R2_BUCKET "
+                      "are not all set. PDFs will not be kept.[/yellow]")
+    retained = retention_failed = 0
+
     try:
         for plan_data in plans:
             upsert_plan(session, plan_data)
@@ -589,7 +604,10 @@ def run_fetcher(plan_ids: list[str] = None, max_docs_per_plan: int = 50):
                 # design: store_document swallows and logs, so an R2 outage
                 # costs retention for a day, not the fetch.
                 if local_path:
-                    pdf_store.store_document(session, doc, local_path)
+                    if pdf_store.store_document(session, doc, local_path):
+                        retained += 1
+                    else:
+                        retention_failed += 1
 
                 new_count += 1
                 total_new += 1
@@ -603,6 +621,10 @@ def run_fetcher(plan_ids: list[str] = None, max_docs_per_plan: int = 50):
         session.close()
 
     console.print(f"\n[bold green]Done. {total_new} new documents across all plans.[/bold green]")
+    if r2_cfg:
+        colour = "red" if retention_failed else "green"
+        console.print(f"[bold {colour}]PDF retention: {retained} retained, "
+                      f"{retention_failed} failed.[/bold {colour}]")
     return total_new
 
 
