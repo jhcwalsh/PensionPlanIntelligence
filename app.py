@@ -2749,6 +2749,45 @@ def page_meeting_recordings(plan_id, plan_label):
                     },
                 )
 
+            # Download control: independent of the status filter above (a
+            # downloaded file is always download_status='done', regardless
+            # of what the dropdown is currently showing). Admin-gated -- the
+            # catalogue metadata isn't sensitive, but pulling a video file
+            # off this machine's D: drive is only for James, e.g. when
+            # browsing the app from another device on the LAN.
+            if _admin_unlocked():
+                downloadable = [
+                    r for r in recordings
+                    if r.download_status == "done" and r.local_path
+                    and Path(r.local_path).exists()
+                ]
+                if downloadable:
+                    st.divider()
+                    st.subheader("Download a recording")
+
+                    def _rec_label(r):
+                        plan = all_plans.get(r.plan_id)
+                        plan_tag = plan.abbreviation if plan else r.plan_id
+                        when = r.meeting_date_inferred or r.published_at
+                        when_str = when.date().isoformat() if when else "undated"
+                        title = (r.title or r.video_id)[:60]
+                        return f"{plan_tag} — {when_str} — {title}"
+
+                    downloadable.sort(key=_rec_label)
+                    chosen = st.selectbox(
+                        "Recording", downloadable, format_func=_rec_label,
+                        key="mr_download_select",
+                    )
+                    file_path = Path(chosen.local_path)
+                    size_mb = round(file_path.stat().st_size / 1_048_576, 1)
+                    st.download_button(
+                        f"Download ({size_mb} MB)",
+                        data=open(file_path, "rb"),
+                        file_name=file_path.name,
+                        mime="video/mp4",
+                        key="mr_download_button",
+                    )
+
     # -----------------------------------------------------------------
     # Coverage: plans we still have no source for
     # -----------------------------------------------------------------
