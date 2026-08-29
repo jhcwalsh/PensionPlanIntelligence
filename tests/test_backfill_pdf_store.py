@@ -100,3 +100,16 @@ def test_waf_blocked_plans_are_not_refetched(r2, tmp_db, monkeypatch):
     counts = backfill_pdf_store.run(cfg=r2, refetch=True)
     assert counts["skipped_waf"] == 1
     assert called == []
+
+
+def test_no_refetch_reports_deferred_count(r2, tmp_db, tmp_path):
+    """A --no-refetch pass must say how many it left waiting, so the
+    operator's follow-up question ("how many are still pending?") is
+    answered by the summary rather than requiring a second query."""
+    session = get_session()
+    _seed(session, "https://x/pending.pdf", local_path=None)
+    session.close()
+
+    counts = backfill_pdf_store.run(cfg=r2, refetch=False)
+    assert counts["deferred_refetch"] == 1
+    assert counts["stored_refetch"] == 0

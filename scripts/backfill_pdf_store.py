@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import pathlib
 import sys
 import time
@@ -30,12 +29,12 @@ from rich.console import Console
 
 import pdf_store
 from database import Document, get_session, init_db, utcnow
+from fetcher import HEADERS
 
 console = Console(legacy_windows=False)
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 WAF_FILE = ROOT / "data" / "waf_blocked_plans.json"
-HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 REQUEST_DELAY_SECONDS = 0.5
 
 
@@ -75,8 +74,8 @@ def run(limit: int | None = None, refetch: bool = True, cfg=None) -> dict:
 
     blocked = _waf_blocked_plan_ids()
     counts: dict[str, int] = {key: 0 for key in (
-        "stored_local", "stored_refetch", "already",
-        "unrecoverable", "skipped_waf", "failed")}
+        "stored_local", "stored_refetch", "already", "unrecoverable",
+        "skipped_waf", "failed", "deferred_refetch")}
 
     def bump(key):
         counts[key] = counts.get(key, 0) + 1
@@ -113,6 +112,9 @@ def run(limit: int | None = None, refetch: bool = True, cfg=None) -> dict:
                 continue
 
             if not refetch:
+                # Deliberately deferred, not lost -- worth surfacing so a
+                # --no-refetch operator knows how many are still waiting.
+                bump("deferred_refetch")
                 continue
 
             if doc.plan_id in blocked:
@@ -140,8 +142,8 @@ def run(limit: int | None = None, refetch: bool = True, cfg=None) -> dict:
         session.close()
 
     console.rule("[bold green]Backfill complete[/bold green]")
-    for key in ("stored_local", "stored_refetch", "already",
-                "unrecoverable", "skipped_waf", "failed"):
+    for key in ("stored_local", "stored_refetch", "already", "unrecoverable",
+                "skipped_waf", "failed", "deferred_refetch"):
         if counts.get(key):
             console.print(f"  {key:16s} {counts[key]}")
     return counts
