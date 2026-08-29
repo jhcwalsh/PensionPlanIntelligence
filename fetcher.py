@@ -368,6 +368,47 @@ def extract_doc_links(soup: BeautifulSoup, base_url: str,
     return found
 
 
+_EMBEDDED_DOC_URL_RE = re.compile(
+    r'https?://[^\s"\'<>\\]+?\.(?:pdf|docx?|xlsx?)\b', re.IGNORECASE)
+
+
+def extract_embedded_doc_urls(soup: BeautifulSoup,
+                              investment_only: bool = True) -> list[dict]:
+    """Pull document URLs out of a page that never renders them as anchors.
+
+    Some sites hand the browser a JSON blob and build the links client-side,
+    so `<a href>` scraping sees a nav menu and nothing else. NM PERA is the
+    case this exists for: its meetings page carries 700+ PDF URLs inside
+    `npbmmaf_fileN_link` keys and not one `<a>` pointing at a document.
+
+    Opt-in per plan via `scan_embedded_urls`, never automatic. Running this
+    everywhere would sweep up stray PDFs from analytics payloads and footer
+    boilerplate on plans whose anchor scraping already works, and a plan that
+    genuinely publishes nothing would start reporting documents it does not
+    have. The link text that `extract_doc_links` uses for dates and doc types
+    is not available here, so filenames and dates come from the URL alone.
+    """
+    found = []
+    seen = set()
+    for full_url in _EMBEDDED_DOC_URL_RE.findall(str(soup)):
+        full_url = full_url.rstrip('\\"\'')
+        if full_url in seen:
+            continue
+        seen.add(full_url)
+        if not any(kw in full_url.lower() for kw in RELEVANT_KEYWORDS):
+            continue
+        if investment_only and not is_investment_related(full_url, "", ""):
+            continue
+        found.append({
+            "url": full_url,
+            "filename": make_filename(full_url, ""),
+            "doc_type": guess_doc_type(full_url, ""),
+            "link_text": "",
+            "meeting_date": parse_date_from_text(full_url),
+        })
+    return found
+
+
 def find_sub_pages(soup: BeautifulSoup, base_url: str, pattern: str,
                    max_sub_pages: int = 12,
                    skip_committee_filter: bool = False) -> list[str]:
@@ -412,6 +453,11 @@ def discover_document_links(plan: dict) -> list[dict]:
         return []
 
     found = extract_doc_links(soup, materials_url, investment_only=investment_only)
+
+    # Pages that build their document links in the browser (see
+    # extract_embedded_doc_urls). Opt-in: anchor scraping sees nothing here.
+    if plan.get("scan_embedded_urls"):
+        found.extend(extract_embedded_doc_urls(soup, investment_only=investment_only))
 
     # Two-level crawl: follow sub-pages matching a URL pattern before extracting docs
     sub_page_pattern = plan.get("sub_page_pattern")

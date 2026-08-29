@@ -147,7 +147,7 @@
       "minutes"
     ],
     "playwright_wait_selector": "a[href$=\".pdf\"]",
-    "notes": "IAC materials listing page returns 403 even with Playwright; PDFs use random slugs at sbafla.com/media/ — not indexable via standard scraping",
+    "notes": "Materials page (sbafla.com) returns 403 even from a residential IP, tested 2026-08-29 -- unlike the other WAF-blocked plans this is not a datacentre-IP problem and a local runner will not fix it. The myfrs.com homepage is reachable; the SBA materials path is not.",
     "cafr_url": "https://frs.fl.gov/forms/2023-24_ACFR.pdf",
     "fiscal_year_end": "06-30"
   },
@@ -373,7 +373,7 @@
     "state": "NM",
     "aum_billions": 20,
     "website": "https://www.nmpera.org",
-    "materials_url": "https://www.nmpera.org/board-of-trustees/meeting-information",
+    "materials_url": "https://www.nmpera.org/pera-board/meeting-minutes-audio",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
@@ -381,8 +381,9 @@
       "board_pack",
       "minutes"
     ],
-    "playwright_wait_selector": "a[href$=\".pdf\"]",
-    "fiscal_year_end": "06-30"
+    "fiscal_year_end": "06-30",
+    "scan_embedded_urls": true,
+    "notes": "Site restructured: /board-of-trustees/ is now /pera-board/, old URL 404s. The meetings page ships 700+ PDF URLs inside a JSON blob and builds the links in the browser, so anchor scraping sees only the nav -- hence scan_embedded_urls. Verified 2026-08-29."
   },
   {
     "id": "nmerb",
@@ -634,15 +635,15 @@
     "state": "LA",
     "aum_billions": 13,
     "website": "https://lasersonline.org",
-    "materials_url": "https://lasersonline.org/about/board-of-trustees/meeting-agendas-minutes/",
+    "materials_url": "https://lasersonline.org/about/board-of-trustees/board-meetings/",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
       "agenda",
       "minutes"
     ],
-    "playwright_wait_selector": "div.entry-content",
-    "notes": "Site returns 403 on all pages including homepage; PDFs at /wp-content/uploads/ are individually accessible but listing page is blocked",
+    "playwright_wait_selector": "a[href$=\".pdf\"]",
+    "notes": "Verified reachable from a residential IP 2026-08-29 (the old note claimed 403 on all pages, including the homepage -- that was a datacentre-IP symptom, not the site). Materials moved from /meeting-agendas-minutes/ to /board-meetings/; the old URL 404s.",
     "fiscal_year_end": "06-30",
     "cafr_url_template": "https://lasersonline.org/wp-content/uploads/{year}/10/LASERS_2025ACFR-web.pdf"
   },
@@ -859,7 +860,7 @@
     "state": "KS",
     "aum_billions": 26,
     "website": "https://www.kspers.gov",
-    "materials_url": "https://www.kspers.gov/BOT/Meetings",
+    "materials_url": "https://www.kspers.gov/about/board.html",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
@@ -868,7 +869,8 @@
     ],
     "playwright_wait_selector": "a[href*=\"/bot/\"]",
     "cafr_url_template": "https://www.kspers.gov/annualreport{year}.pdf",
-    "fiscal_year_end": "06-30"
+    "fiscal_year_end": "06-30",
+    "notes": "/BOT/Meetings 404s since a site rebuild; agendas now sit inline on /about/board.html. Verified 2026-08-29."
   },
   {
     "id": "nyscrf",
@@ -2251,7 +2253,8 @@
       "minutes"
     ],
     "fiscal_year_end": "06-30",
-    "cafr_url_template": "https://www.osc.ny.gov/files/retirement/resources/pdf/annual-comprehensive-financial-report-{year}.pdf"
+    "cafr_url_template": "https://www.osc.ny.gov/files/retirement/resources/pdf/annual-comprehensive-financial-report-{year}.pdf",
+    "notes": "Reachable, but publishes no board materials: /departments/retirement/board is a department directory with no agendas, minutes or packets (checked 2026-08-29). The 2 documents on file came from elsewhere. Nothing to scrape until Suffolk starts publishing; the ACFR still comes from osc.ny.gov."
   },
   {
     "id": "fwerf_tx",
@@ -2657,7 +2660,10 @@
       "board_pack",
       "minutes"
     ],
-    "notes": "California 1937 Act county fund. AUM ~$2.5B. Homepage returns 403 to bots; board packets publicly hosted at assets.marincounty.gov/mcera-prod/public/. Standalone Board of Retirement, meets 2nd Wednesday monthly.",
-    "fiscal_year_end": "06-30"
+    "notes": "California 1937 Act county fund. AUM ~$2.5B. Standalone Board of Retirement, meets 2nd Wednesday monthly. Board packets hosted at assets.marincounty.gov/mcera-prod/public/. The meetings page lists per-meeting pages rather than documents, hence sub_page_pattern. Verified reachable from a residential IP 2026-08-29.",
+    "fiscal_year_end": "06-30",
+    "sub_page_pattern": "/board/(agendas-minutes|board-retirement)/[a-z0-9-]+\\d",
+    "max_sub_pages": 20,
+    "sub_page_skip_committee_filter": true
   }
 ]
