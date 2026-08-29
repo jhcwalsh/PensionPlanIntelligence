@@ -6,6 +6,8 @@ the key, so these tests pin the exact format other code depends on.
 """
 from __future__ import annotations
 
+import tempfile
+
 import boto3
 import pytest
 
@@ -45,6 +47,19 @@ def test_config_from_env_reads_all_four(monkeypatch):
     assert cfg.access_key_id == "key"
     assert cfg.secret_access_key == "secret"
     assert cfg.bucket == "pension-documents"
+
+
+def test_endpoint_url_is_r2s_account_scoped_hostname():
+    """Pin the endpoint format -- nothing else can.
+
+    tests/conftest.py's `r2` fixture registers moto's custom endpoint from
+    cfg.endpoint_url itself, so every other test in this file would pass
+    against a wrong URL: the mock is configured from the same expression it
+    is meant to check. This is the one place the literal shape is asserted,
+    and getting it wrong only shows up against live R2.
+    """
+    cfg = pdf_store.R2Config("abc123", "k", "s", "pension-documents")
+    assert cfg.endpoint_url == "https://abc123.r2.cloudflarestorage.com"
 
 
 def test_put_returns_digest_and_stores_object(r2):
@@ -216,9 +231,16 @@ def test_open_local_or_remote_prefers_local(r2, tmp_db, tmp_path):
         session.close()
 
 
-def test_open_local_or_remote_falls_back_to_r2(r2, tmp_db, tmp_path):
+def test_open_local_or_remote_falls_back_to_r2(r2, tmp_db, tmp_path,
+                                               monkeypatch):
     """The case that matters: the local file is gone (2,633 documents are
-    already in this state) but the object is retained."""
+    already in this state) but the object is retained.
+
+    open_local_or_remote writes a NamedTemporaryFile(delete=False) that the
+    *caller* owns; point tempfile at tmp_path so pytest purges it rather
+    than leaving a stray .pdf in the system temp dir on every run.
+    """
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
     sha = pdf_store.put(r2, b"%PDF-1.4 remote")
     session = get_session()
     try:

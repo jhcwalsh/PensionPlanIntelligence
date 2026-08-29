@@ -16,6 +16,7 @@ See docs/superpowers/specs/2026-08-29-pdf-retention-design.md.
 """
 from __future__ import annotations
 
+import functools
 import hashlib
 import logging
 import os
@@ -72,8 +73,16 @@ class DigestMismatch(Exception):
     """Stored bytes did not hash to the key they were stored under."""
 
 
+@functools.lru_cache(maxsize=None)
 def client(cfg: R2Config):
-    """A boto3 S3 client pointed at R2's S3-compatible endpoint."""
+    """A boto3 S3 client pointed at R2's S3-compatible endpoint.
+
+    Cached on the config, which is a frozen dataclass and therefore
+    hashable. Without the cache every call built a fresh client and a fresh
+    TLS handshake: `put()` alone calls `exists()` then `put_object()`, so the
+    ~9,000-document backfill would open ~18,000 connections and close none of
+    them.
+    """
     import boto3
     return boto3.client(
         "s3",
@@ -82,6 +91,20 @@ def client(cfg: R2Config):
         aws_secret_access_key=cfg.secret_access_key,
         region_name="auto",          # R2 ignores region but boto3 wants one
     )
+
+
+def preflight(cfg: R2Config) -> None:
+    """One real round-trip against R2. Raises if it does not work.
+
+    `exists()` deliberately re-raises a 403, so a wrong secret key or a
+    mistyped bucket name turns every single upload into a logged failure
+    while the caller keeps going. For the daily pipeline that is the right
+    posture (retention is additive), but for the backfill it means an
+    operator downloads gigabytes, stores nothing, and finds out hours later.
+    Callers that are about to do bulk work should call this first and stop
+    on failure.
+    """
+    client(cfg).head_bucket(Bucket=cfg.bucket)
 
 
 _NOT_FOUND_CODES = {"404", "NoSuchKey", "NotFound"}
