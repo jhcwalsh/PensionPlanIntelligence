@@ -1,7 +1,12 @@
-"""The two retention columns on documents.
+"""The three retention columns on documents.
 
-Deliberately two columns on an existing table rather than a new table: a
+Deliberately columns on an existing table rather than a new table: a
 document has at most one stored object, so a join would buy nothing.
+
+content_sha256 and r2_uploaded_at record success. retention_status records
+why a null content_sha256 is still null -- without it the corpus cannot tell
+"not yet backfilled" from "gone forever", which is the distinction spec §5
+asks for.
 """
 from __future__ import annotations
 
@@ -43,5 +48,23 @@ def test_retention_columns_default_to_null(tmp_db):
         got = session.query(Document).one()
         assert got.content_sha256 is None
         assert got.r2_uploaded_at is None
+        assert got.retention_status is None
+    finally:
+        session.close()
+
+
+def test_retention_status_records_why_a_document_is_unstored(tmp_db):
+    """The marker spec §5 asks for: null content_sha256 alone cannot say
+    whether a document is merely un-backfilled or permanently lost."""
+    session = get_session()
+    try:
+        session.add(Plan(id="p3", name="P3", abbreviation="P3", state="CA"))
+        session.add(Document(plan_id="p3", url="https://x/c.pdf",
+                             filename="c.pdf", doc_type="agenda",
+                             retention_status="unrecoverable"))
+        session.commit()
+        got = session.query(Document).one()
+        assert got.retention_status == "unrecoverable"
+        assert got.content_sha256 is None
     finally:
         session.close()

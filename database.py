@@ -280,6 +280,17 @@ class Document(Base):
     # machine that happens to have the file should still use it.
     content_sha256 = Column(String(64))
     r2_uploaded_at = Column(DateTime(timezone=True))
+    # retention_status records *why* content_sha256 is still null, so the
+    # corpus distinguishes "not yet stored" from "gone forever" (spec §5):
+    #   None            never attempted, or stored successfully (success is
+    #                   signalled by content_sha256, not by this column)
+    #   "unrecoverable" re-fetch hit a definitive permanent failure (a 4xx
+    #                   other than 408/429, or a 200 that isn't a PDF).
+    #                   The backfill skips these on resume.
+    #   "transient"     re-fetch failed for a reason that may resolve later
+    #                   (timeout, connection reset, 5xx, 408, 429, anything
+    #                   unclassified). The backfill retries these.
+    retention_status = Column(String(32))
 
     plan = relationship("Plan", back_populates="documents")
     meeting = relationship("Meeting", back_populates="documents")
