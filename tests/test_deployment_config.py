@@ -127,13 +127,34 @@ def test_the_dsn_is_never_committed():
                 assert "value" not in entry, "a literal DSN in git: %s" % entry
 
 
-def test_r2_dependencies_are_gone():
-    """boto3 existed solely for db_sync's R2 client, moto solely to mock it."""
-    for name in ("requirements.txt", "requirements-pipeline.txt"):
-        text = (ROOT / name).read_text(encoding="utf-8")
-        assert "boto3" not in text, f"{name} still pins boto3"
-    ci = (WORKFLOWS / "test.yml").read_text(encoding="utf-8")
-    assert "moto" not in ci, "CI still installs moto"
+def test_r2_dependencies_are_present_for_the_pdf_store():
+    """boto3/moto's presence tracks a decision that reversed once already.
+
+    They were removed in the 2026-08-16 low-maintenance cutover, when R2 was
+    only a database-sync bus (scripts/db_sync.py) and Postgres replaced that
+    role outright. They're back for a second, unrelated reason: R2 as a
+    content-addressed PDF object store (pdf_store.py), per
+    docs/superpowers/specs/2026-08-29-pdf-retention-design.md §3.3. boto3 is
+    a runtime dependency of pdf_store.py, so it belongs in requirements.txt;
+    requirements-pipeline.txt starts with `-r requirements.txt`, so the daily
+    pipeline gets it transitively without a second, redundant pin here.
+
+    CI installs requirements-pipeline.txt, which now carries moto[s3]
+    transitively too -- that's what lets tests/test_pdf_store.py mock R2 in
+    CI, so there's no separate "moto is installed in test.yml" assertion to
+    make; requirements.txt is the one place that decision is pinned.
+
+    The db_sync invariant this test used to also carry is unaffected by any
+    of this and is still covered elsewhere: test_no_workflow_still_calls_db_sync
+    (this file) and the scripts/db_sync.py absence implied by
+    test_the_local_recordings_job_does_not_push's "db_sync" not in bat check
+    below. This test now guards only the dependency decision itself.
+    """
+    text = (ROOT / "requirements.txt").read_text(encoding="utf-8")
+    assert "boto3" in text, "requirements.txt should pin boto3 for pdf_store.py"
+    assert not (ROOT / "scripts" / "db_sync.py").exists(), \
+        "scripts/db_sync.py should still be gone -- R2 is back as an object " \
+        "store, not as the database-sync bus that script implemented"
 
 
 def test_the_local_recordings_job_does_not_push():
