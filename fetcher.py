@@ -22,6 +22,7 @@ from bs4 import BeautifulSoup
 from rich.console import Console
 
 from database import utcnow, Document, Plan, get_session, init_db, upsert_plan, document_exists, document_pruned
+import pdf_store
 
 console = Console(legacy_windows=False)
 
@@ -581,6 +582,15 @@ def run_fetcher(plan_ids: list[str] = None, max_docs_per_plan: int = 50):
                 # download, opened by the document_exists SELECT above. One
                 # file is comfortably inside the budget; a plan's worth is not.
                 session.commit()
+
+                # Retain the PDF while it still exists. The runner is
+                # destroyed at the end of the job, and 2,633 documents in the
+                # corpus already have no recoverable local file. Non-fatal by
+                # design: store_document swallows and logs, so an R2 outage
+                # costs retention for a day, not the fetch.
+                if local_path:
+                    pdf_store.store_document(session, doc, local_path)
+
                 new_count += 1
                 total_new += 1
 
