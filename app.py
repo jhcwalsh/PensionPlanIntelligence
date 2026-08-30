@@ -3432,6 +3432,11 @@ def _render_collated_performance():
               df["As of"].dropna().max() if "As of" in df and df["As of"].notna().any()
               else "—")
 
+    # Force numeric dtype so a column that happens to be all-missing for the
+    # current filter still formats as a number rather than rendering "None".
+    for c in class_cols:
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+
     st.dataframe(
         df, width="stretch", hide_index=True,
         column_config={
@@ -3439,9 +3444,14 @@ def _render_collated_performance():
             # extra digits the extractors happen to carry are false precision.
             **{c: st.column_config.NumberColumn(c, format="%.1f%%")
                for c in class_cols},
+            # Period labels run long and verbatim — "FY2025 (year ending June
+            # 30, 2025)" — and truncating them defeats the point of showing
+            # the period at all.
+            "Period": st.column_config.TextColumn("Period", width="medium"),
+            "Frequency": st.column_config.TextColumn("Frequency", width="small"),
             "Source": st.column_config.LinkColumn(
-                "Source", display_text="open", help="The document these "
-                "figures were read from"),
+                "Source", display_text="open", width="small",
+                help="The document these figures were read from"),
         })
     st.download_button(
         "Download CSV", df.to_csv(index=False).encode("utf-8"),
