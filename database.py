@@ -986,6 +986,44 @@ class FetchRun(Base):
     )
 
 
+class PlanAssetClassPerformance(Base):
+    """Latest asset-class return per plan, from whichever source is newest.
+
+    Derived data, rebuilt by ``scripts/build_performance_view.py``. Nothing
+    here is extracted fresh: it collates returns that already exist in
+    ``cafr_performance`` and in ``summaries.performance_data``, the latter a
+    by-product of ordinary summarising that nothing had ever surfaced --
+    4,233 data points across 925 documents in 2026 alone.
+
+    It is a table rather than a query because the source is not: the
+    ``performance_data`` JSON is 2.2 MB across 2,087 summaries, and parsing
+    it behind a 300-second Streamlit cache is the shape of the read that
+    exhausted Neon's transfer quota on 2026-08-25 (see CLAUDE.md). Building
+    it once per day and reading a few hundred small rows is the same answer
+    for a thousandth of the egress.
+
+    ``asset_class`` is canonical, via data/asset_class_mappings.json -- the
+    same map the allocation views use, so "US Equities", "Domestic Equity"
+    and "S&P 500" do not appear as three different things.
+    """
+
+    __tablename__ = "plan_asset_class_performance"
+
+    id = Column(Integer, primary_key=True)
+    plan_id = Column(String, ForeignKey("plans.id"), nullable=False, index=True)
+    asset_class = Column(String(64), nullable=False)     # canonical key
+    return_pct = Column(Float)
+    period_label = Column(String(64))                    # 'FY2025', 'Q1 2026'...
+    as_of_date = Column(Date)
+    source = Column(String(16), nullable=False)          # 'cafr' | 'board_doc'
+    document_id = Column(Integer, ForeignKey("documents.id"))
+    built_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("plan_id", "asset_class", name="uq_plan_asset_class"),
+    )
+
+
 class DocumentCatalogue(Base):
     """What a document contains — not what it says.
 

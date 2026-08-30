@@ -3366,6 +3366,70 @@ def _performance_rows() -> list[dict]:
         get_db_session(), _load_asset_class_mappings())
 
 
+@st.cache_data(ttl=900)
+def _collated_performance_rows() -> list[dict]:
+    """Reads the derived table, so this is a few hundred small rows.
+
+    Longer TTL than the CAFR view because the source is a nightly build, not
+    live extraction — re-reading it every five minutes would buy nothing and
+    cost egress, which is the mistake that took the site down in August.
+    """
+    return queries.collated_performance_rows(get_db_session())
+
+
+def _render_collated_performance():
+    """Latest asset-class return per plan, from CAFRs and board documents.
+
+    Sits above the CAFR-only table because it is both broader (126 plans
+    against 84) and more current (2026 board figures against FY2024-25
+    CAFRs). The CAFR table stays because it is internally consistent -- every
+    number in one of its rows comes from the same document and the same
+    fiscal year -- which this one deliberately trades away for recency.
+    """
+    import pandas as pd
+
+    rows = _collated_performance_rows()
+    if not rows:
+        st.info(
+            "No collated performance data yet. Build it with "
+            "`python -m scripts.build_performance_view`."
+        )
+        return
+
+    st.subheader("Latest return by asset class")
+    st.caption(
+        "The most recent figure held for each plan and asset class, drawn "
+        "from CAFRs and from returns the summariser already extracts out of "
+        "board documents. **Periods are not aligned**: a row can pair a 2026 "
+        "quarterly equity return with an FY2024 private-equity figure, so "
+        "read across a row with care and check the As-of and Sources "
+        "columns. Names are normalised, so 'US Equities', 'Domestic Equity' "
+        "and 'S&P 500' land in one column."
+    )
+
+    df = pd.DataFrame(rows)
+    ordered = (["Plan"] + [label for _, label in queries.COLLATED_CLASSES]
+               + ["As of", "Sources"])
+    df = df[[c for c in ordered if c in df.columns]]
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Plans covered", len(df))
+    non_total = [label for key, label in queries.COLLATED_CLASSES
+                 if key != "total" and label in df.columns]
+    c2.metric("With asset-class detail",
+              int(df[non_total].notna().any(axis=1).sum()) if non_total else 0)
+    c3.metric("Including 2026 figures",
+              int(df["Sources"].str.contains("Board doc").sum())
+              if "Sources" in df else 0)
+
+    st.dataframe(df, width="stretch", hide_index=True)
+    st.download_button(
+        "Download CSV", df.to_csv(index=False).encode("utf-8"),
+        "asset_class_performance.csv", "text/csv",
+        key="collated_perf_csv")
+    st.divider()
+
+
 def page_performance():
     """Headline returns by asset class, one row per plan.
 
@@ -3376,6 +3440,8 @@ def page_performance():
     import pandas as pd
 
     st.title("Performance Reports")
+
+    _render_collated_performance()
 
     rows = _performance_rows()
     if not rows:

@@ -939,3 +939,72 @@ def cafr_fiscal_year_counts(session, prior_days: int = 30) -> list[dict]:
         }
         for fy in sorted(now_counts, reverse=True)
     ]
+
+
+# Display order and labels for the collated asset-class view. Keys are the
+# canonical values data/asset_class_mappings.json produces, so this list and
+# the allocation views cannot drift apart.
+COLLATED_CLASSES = (
+    ("total", "Total plan"),
+    ("public_equity_us", "US equity"),
+    ("public_equity_non_us", "Non-US equity"),
+    ("public_equity_global", "Global equity"),
+    ("fixed_income_core", "Fixed income"),
+    ("fixed_income_credit", "Credit"),
+    ("private_equity", "Private equity"),
+    ("private_credit", "Private credit"),
+    ("real_estate", "Real estate"),
+    ("real_assets_infrastructure", "Real assets"),
+    ("hedge_funds_absolute_return", "Hedge funds"),
+    ("opportunistic_other", "Opportunistic"),
+    ("cash_short_term", "Cash"),
+)
+
+
+def collated_performance_rows(session) -> list[dict]:
+    """One row per plan: latest return per asset class, whatever the source.
+
+    Reads the derived ``plan_asset_class_performance`` table, which
+    ``scripts/build_performance_view.py`` rebuilds. It is deliberately not
+    computed here: half the underlying data lives in
+    ``summaries.performance_data``, 2.2 MB of JSON across 2,087 rows, and
+    parsing that behind a short Streamlit cache is the read shape that
+    exhausted Neon's transfer quota on 2026-08-25.
+
+    Distinct from ``performance_report_rows``, which is CAFR-only and reports
+    a fiscal year. This one merges CAFR and board-document returns and takes
+    the most recent per asset class, so a plan's row can mix a 2026 board
+    figure for equities with an FY2024 CAFR figure for private equity. The
+    per-plan ``As of`` and ``Sources`` columns say when and from what,
+    because a blended row that hides its provenance invites false comparison.
+    """
+    from database import Plan
+    from database import PlanAssetClassPerformance as P
+
+    rows = (session.query(P, Plan.name)
+            .join(Plan, Plan.id == P.plan_id)
+            .all())
+
+    labels = dict(COLLATED_CLASSES)
+    by_plan: dict[str, dict] = {}
+    for rec, plan_name in rows:
+        entry = by_plan.setdefault(rec.plan_id, {
+            "Plan": plan_name, "_dates": [], "_sources": set()})
+        label = labels.get(rec.asset_class)
+        if label:
+            entry[label] = rec.return_pct
+        if rec.as_of_date:
+            entry["_dates"].append(rec.as_of_date)
+        entry["_sources"].add(rec.source)
+
+    out = []
+    for entry in by_plan.values():
+        dates = entry.pop("_dates")
+        sources = entry.pop("_sources")
+        entry["As of"] = max(dates).isoformat() if dates else None
+        entry["Sources"] = ", ".join(sorted(
+            {"cafr": "CAFR", "board_doc": "Board doc"}.get(s, s) for s in sources))
+        out.append(entry)
+
+    out.sort(key=lambda r: (r["As of"] or "", r["Plan"]), reverse=True)
+    return out
