@@ -605,7 +605,9 @@ def run_fetcher(plan_ids: list[str] = None, max_docs_per_plan: int = 50):
             for doc_info in doc_links[:max_docs_per_plan]:
                 url = doc_info["url"]
 
-                # Skip documents dated before 2025 (date=None means unknown, keep it)
+                # Skip documents dated before MIN_DATE. date=None means the
+                # link carried no parseable date -- keep those, so a site that
+                # does not date its links is never silently truncated here.
                 doc_date = doc_info.get("meeting_date")
                 if doc_date and doc_date < MIN_DATE:
                     continue

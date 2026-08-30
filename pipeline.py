@@ -205,7 +205,12 @@ def main():
     parser.add_argument("--max-docs", type=int, default=50,
                         help="Max documents to download per plan (default: 50)")
     parser.add_argument("--min-year", type=int, default=2026,
-                        help="Only fetch documents from this year onward (default: 2025)")
+                        help="Only fetch documents whose link carries a date in "
+                             "this year or later (default: 2026). Documents "
+                             "whose date cannot be parsed are always kept, so "
+                             "on sites that do not date their links this filter "
+                             "does nothing -- --max-docs is the binding limit "
+                             "there.")
     parser.add_argument("--retry-failed", action="store_true",
                         help="Re-attempt failed extractions (with OCR fallback)")
     parser.add_argument("--status", action="store_true",

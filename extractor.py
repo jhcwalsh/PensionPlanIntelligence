@@ -467,6 +467,73 @@ def extract_document(doc: Document) -> ExtractOutcome:
                           reason=reason, pages_ocred=pages_ocred)
 
 
+def _apply_outcome(session, doc, outcome):
+    """Write one extraction result onto `doc`. Idempotent: safe to re-run
+    against a freshly-loaded copy after a rollback."""
+    # On failure, leave extracted_text alone: never store "" (the
+    # GzippedText wrapper would persist it as a non-NULL gzip blob),
+    # and never clobber text kept from an earlier successful pass.
+    if outcome.status == "done":
+        doc.extracted_text = outcome.text
+        doc.page_count = outcome.pages
+    doc.extraction_status = outcome.status
+
+    # Keep the extraction_details index in sync: any shortfall (failure or
+    # partial scan) is recorded so the doc can be found and re-processed
+    # later; a clean pass clears it.
+    if outcome.reason:
+        session.merge(ExtractionDetail(
+            document_id=doc.id, reason=outcome.reason,
+            pages_total=outcome.pages or None,
+            pages_ocred=outcome.pages_ocred,
+            detected_at=utcnow()))
+    else:
+        session.query(ExtractionDetail).filter(
+            ExtractionDetail.document_id == doc.id).delete()
+
+    # Try to infer meeting date from content if not already set
+    if outcome.text:
+        doc.meeting_date = infer_meeting_date(
+            outcome.text, doc.meeting_date,
+            filename=doc.filename,
+            downloaded_at=doc.downloaded_at,
+        )
+
+
+def _persist_outcome(session, doc, outcome):
+    """Commit one extraction result, reconnecting once if the link died.
+
+    Extraction happens between commits, so the connection sits idle for as
+    long as the parse takes -- minutes on a large board pack. Neon closes it
+    in that window and the write then lands on a dead socket:
+
+        psycopg.OperationalError: SSL connection has been closed unexpectedly
+
+    Found on a 2,596-page, 20.5 MB MCERA packet, which failed reproducibly
+    and took the whole plan's run down with it (the loop is unguarded, so one
+    document's failure stranded the nine queued behind it). The write itself
+    is not the problem -- the same payload commits in 0.1s on a live
+    connection -- so a rollback, a fresh load and one retry clears it.
+
+    `pool_pre_ping` does not help here: it validates at checkout, and this
+    connection is checked out and healthy before the parse begins.
+    """
+    from sqlalchemy.exc import OperationalError
+
+    try:
+        _apply_outcome(session, doc, outcome)
+        session.commit()
+        return doc
+    except OperationalError as e:
+        console.print(f"  [yellow]connection lost during extraction, "
+                      f"retrying commit: {str(e)[:90]}[/yellow]")
+        session.rollback()
+        doc = session.get(Document, doc.id)
+        _apply_outcome(session, doc, outcome)
+        session.commit()
+        return doc
+
+
 def run_extractor(doc_ids: list[int] = None, retry_failed: bool = False):
     """
     Extract text for all pending documents (or specific doc_ids).
@@ -496,37 +563,7 @@ def run_extractor(doc_ids: list[int] = None, retry_failed: bool = False):
 
         for doc in docs:
             outcome = extract_document(doc)
-
-            # On failure, leave extracted_text alone: never store "" (the
-            # GzippedText wrapper would persist it as a non-NULL gzip blob),
-            # and never clobber text kept from an earlier successful pass.
-            if outcome.status == "done":
-                doc.extracted_text = outcome.text
-                doc.page_count = outcome.pages
-            doc.extraction_status = outcome.status
-
-            # Keep the extraction_details index in sync: any shortfall
-            # (failure or partial scan) is recorded so the doc can be
-            # found and re-processed later; a clean pass clears it.
-            if outcome.reason:
-                session.merge(ExtractionDetail(
-                    document_id=doc.id, reason=outcome.reason,
-                    pages_total=outcome.pages or None,
-                    pages_ocred=outcome.pages_ocred,
-                    detected_at=utcnow()))
-            else:
-                session.query(ExtractionDetail).filter(
-                    ExtractionDetail.document_id == doc.id).delete()
-
-            # Try to infer meeting date from content if not already set
-            if outcome.text:
-                doc.meeting_date = infer_meeting_date(
-                    outcome.text, doc.meeting_date,
-                    filename=doc.filename,
-                    downloaded_at=doc.downloaded_at,
-                )
-
-            session.commit()
+            doc = _persist_outcome(session, doc, outcome)
             status_color = "green" if outcome.status == "done" else "red"
             note = f" [{outcome.reason}]" if outcome.reason else ""
             console.print(f"    [{status_color}]{outcome.status}[/{status_color}] "
