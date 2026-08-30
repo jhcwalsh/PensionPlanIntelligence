@@ -986,6 +986,42 @@ class FetchRun(Base):
     )
 
 
+class DocumentCatalogue(Base):
+    """What a document contains — not what it says.
+
+    OCR bills per page, so reading an image-only board pack end to end costs
+    the most for the documents least likely to repay it. This table holds the
+    cheap answer instead: which of the narrow categories (allocation,
+    performance, manager changes) appear, and roughly where. If something
+    later needs the allocation table, this says which document and which
+    pages, and only then is the rest read.
+
+    Purely additive. Nothing here overwrites ``documents.extracted_text`` or
+    any other stored material — a catalogue entry is built *from* that text
+    and stored beside it.
+
+    ``source`` records how the entry was built:
+
+    - ``existing_text``  from text already stored, no OCR, no new reading
+    - ``ocr_10pp``       image-only with no stored text: first 10 pages only
+
+    One row per document. ``page_hints`` is free text as the source gave it
+    ("Tab 7, pp. 340-372"); it is a pointer for a human or a later targeted
+    read, not a parsed range.
+    """
+
+    __tablename__ = "document_catalogue"
+
+    document_id = Column(Integer, ForeignKey("documents.id"), primary_key=True)
+    contains = Column(Text)             # JSON list of matched categories
+    sections = Column(Text)             # JSON list of contents/agenda entries
+    page_hints = Column(Text)
+    source = Column(String(32), nullable=False)
+    model = Column(String(64))
+    cost_usd = Column(Numeric(10, 6))
+    built_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+
+
 class DocumentSkip(Base):
     """Documents the summarizer should permanently skip.
 
