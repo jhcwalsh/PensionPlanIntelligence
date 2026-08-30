@@ -941,6 +941,19 @@ def cafr_fiscal_year_counts(session, prior_days: int = 30) -> list[dict]:
     ]
 
 
+# What a return covers, in words. The frequency is the first thing a reader
+# needs: a 2.1% quarter and a 2.1% year are not the same result, and the
+# number alone cannot say which it is.
+FREQUENCY_LABELS = {
+    "annual": "Annual",
+    "quarter": "Quarterly",
+    "month": "Monthly",
+    "partial": "Part-year",
+    "multi_year": "Multi-year annualised",
+    "inception": "Since inception",
+    "unclear": "Unclear",
+}
+
 # Display order and labels for the collated asset-class view. Keys are the
 # canonical values data/asset_class_mappings.json produces, so this list and
 # the allocation views cannot drift apart.
@@ -978,45 +991,41 @@ def collated_performance_rows(session) -> list[dict]:
     per-plan ``As of`` and ``Sources`` columns say when and from what,
     because a blended row that hides its provenance invites false comparison.
     """
-    from database import Plan
+    from database import Document, Plan
     from database import PlanAssetClassPerformance as P
 
-    rows = (session.query(P, Plan.name)
+    rows = (session.query(P, Plan.name, Document.url, Document.filename)
             .join(Plan, Plan.id == P.plan_id)
+            .outerjoin(Document, Document.id == P.document_id)
             .all())
 
     labels = dict(COLLATED_CLASSES)
-    by_plan: dict[str, dict] = {}
-    for rec, plan_name in rows:
-        entry = by_plan.setdefault(rec.plan_id, {
-            "Plan": plan_name, "_dates": [], "_sources": set(),
-            "_horizons": set()})
+    # Keyed on the document, not the plan: a plan can have two rows -- its
+    # latest annual figures and its latest figures of any kind. Keying on
+    # plan_id would silently merge them back into the incoherent single row
+    # this design exists to avoid.
+    by_source: dict[tuple[str, int | None, str], dict] = {}
+    for rec, plan_name, doc_url, doc_name in rows:
+        entry = by_source.setdefault(
+            (rec.plan_id, rec.document_id, rec.horizon or "unclear"), {
+            "Plan": plan_name,
+            # Every figure in the row comes from one document, so period,
+            # frequency and source are facts about the row rather than
+            # per-cell footnotes.
+            "Period": rec.period_label,
+            "Frequency": FREQUENCY_LABELS.get(rec.horizon or "unclear", "Unclear"),
+            "As of": rec.as_of_date.isoformat() if rec.as_of_date else None,
+            "Source": doc_url,
+            "Document": doc_name,
+        })
         label = labels.get(rec.asset_class)
         if label:
             entry[label] = rec.return_pct
-        if rec.as_of_date:
-            entry["_dates"].append(rec.as_of_date)
-        entry["_sources"].add(rec.source)
-        entry["_horizons"].add(rec.horizon or "unclear")
 
-    out = []
-    for entry in by_plan.values():
-        dates = entry.pop("_dates")
-        sources = entry.pop("_sources")
-        horizons = entry.pop("_horizons")
-        entry["As of"] = max(dates).isoformat() if dates else None
-        entry["Sources"] = ", ".join(sorted(
-            {"cafr": "CAFR", "board_doc": "Board doc"}.get(s, s) for s in sources))
-        # Says whether a row can be read across. "Annual" means every figure
-        # in it covers a year; anything else names what is mixed in, because
-        # a quarterly return beside an annual one is not a comparison.
-        others = sorted(horizons - {"annual"})
-        entry["Basis"] = "Annual" if not others else (
-            "Mixed: " + ", ".join(
-                {"quarter": "quarterly", "partial": "part-year",
-                 "multi_year": "3-10yr", "unclear": "unlabelled"}.get(h, h)
-                for h in others))
-        out.append(entry)
-
-    out.sort(key=lambda r: (r["As of"] or "", r["Plan"]), reverse=True)
+    out = list(by_source.values())
+    # Annual first within a plan, so the comparable row is the one a reader
+    # meets first; plans ordered by how recent their newest source is.
+    out.sort(key=lambda r: (r["As of"] or "", r["Frequency"] == "Annual"),
+             reverse=True)
+    out.sort(key=lambda r: r["Plan"])
     return out

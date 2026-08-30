@@ -3398,38 +3398,51 @@ def _render_collated_performance():
 
     st.subheader("Latest return by asset class")
     st.caption(
-        "The latest annual figure held for each plan and asset class, drawn "
-        "from CAFRs and from returns the summariser already extracts out of "
-        "board documents. An annual figure is preferred over a fresher "
-        "quarterly one, because a quarterly return beside an annual one is "
-        "not a comparison — **check the Basis column**, which says whether "
-        "every number in a row covers a year or something else is mixed in. "
-        "Fiscal years still differ between plans, so As of matters too. "
-        "Names are normalised: 'US Equities', 'Domestic Equity' and "
-        "'S&P 500' land in one column."
+        "Every figure in a row comes from **one document** — the plan's most "
+        "recent source carrying an asset-class breakdown — so a row can be "
+        "read across. Period and Frequency describe the whole row: a 2.1% "
+        "quarter and a 2.1% year are not the same result, and the number "
+        "alone cannot tell you which it is. Sourced from CAFRs and from "
+        "returns the summariser extracts out of board documents; class names "
+        "are normalised, so 'US Equities', 'Domestic Equity' and 'S&P 500' "
+        "land in one column."
     )
 
     df = pd.DataFrame(rows)
-    ordered = (["Plan"] + [label for _, label in queries.COLLATED_CLASSES]
-               + ["Basis", "As of", "Sources"])
+    class_cols = [label for _, label in queries.COLLATED_CLASSES
+                  if label in df.columns]
+    ordered = ["Plan", "Period", "Frequency"] + class_cols + ["As of", "Source"]
     df = df[[c for c in ordered if c in df.columns]]
 
-    if "Basis" in df.columns and st.checkbox(
-            "Only rows where every figure is annual", value=False,
-            help="Hides plans whose row mixes in a quarterly, part-year or "
-                 "multi-year figure — those cannot be read across."):
-        df = df[df["Basis"] == "Annual"]
+    freqs = sorted(df["Frequency"].dropna().unique()) if "Frequency" in df else []
+    chosen = st.multiselect(
+        "Frequency", freqs, default=[f for f in freqs if f == "Annual"] or freqs,
+        help="Annual figures are comparable across plans. Quarterly and "
+             "part-year ones are not, and are kept for plans that publish "
+             "nothing else.")
+    if chosen:
+        df = df[df["Frequency"].isin(chosen)]
 
     c1, c2, c3 = st.columns(3)
-    c1.metric("Plans covered", len(df))
-    non_total = [label for key, label in queries.COLLATED_CLASSES
-                 if key != "total" and label in df.columns]
+    c1.metric("Plans shown", len(df))
+    non_total = [c for c in class_cols if c != "Total plan"]
     c2.metric("With asset-class detail",
               int(df[non_total].notna().any(axis=1).sum()) if non_total else 0)
-    c3.metric("Fully annual",
-              int((df["Basis"] == "Annual").sum()) if "Basis" in df else 0)
+    c3.metric("Newest source",
+              df["As of"].dropna().max() if "As of" in df and df["As of"].notna().any()
+              else "—")
 
-    st.dataframe(df, width="stretch", hide_index=True)
+    st.dataframe(
+        df, width="stretch", hide_index=True,
+        column_config={
+            # One decimal place, as a percentage: these are returns, and the
+            # extra digits the extractors happen to carry are false precision.
+            **{c: st.column_config.NumberColumn(c, format="%.1f%%")
+               for c in class_cols},
+            "Source": st.column_config.LinkColumn(
+                "Source", display_text="open", help="The document these "
+                "figures were read from"),
+        })
     st.download_button(
         "Download CSV", df.to_csv(index=False).encode("utf-8"),
         "asset_class_performance.csv", "text/csv",

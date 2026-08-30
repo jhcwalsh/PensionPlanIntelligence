@@ -1027,7 +1027,19 @@ class PlanAssetClassPerformance(Base):
     built_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
 
     __table_args__ = (
-        UniqueConstraint("plan_id", "asset_class", name="uq_plan_asset_class"),
+        # Keyed on the document, not just the plan, because a plan can carry
+        # two rows: its latest annual figures (comparable across plans) and
+        # its latest figures of any kind (fresher, but perhaps a quarter or a
+        # month). Both are useful and they answer different questions; forcing
+        # one row per plan meant choosing between recency and comparability
+        # for every plan in the corpus.
+        # Horizon is part of the key: one board pack routinely reports a
+        # fiscal-year total alongside quarterly asset-class figures, so
+        # (plan, document, class) genuinely collides. Those are two different
+        # measurements of the same class from the same paper, and both are
+        # worth keeping.
+        UniqueConstraint("plan_id", "document_id", "horizon", "asset_class",
+                         name="uq_plan_doc_horizon_class"),
     )
 
 

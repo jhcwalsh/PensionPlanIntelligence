@@ -50,9 +50,18 @@ _YEAR = re.compile(r"(19|20)\d{2}")
 # What a period label actually measures. Order matters: "FY2025 (1-Year ending
 # 12/31/25)" is both, and "3-Year as of June 2026" contains a year too, so the
 # narrower tests run first.
-_MULTI = re.compile(r"(?i)\b(3|5|10|three|five|ten)[- ]?(year|yr)")
-_QUARTER = re.compile(r"(?i)\bq[1-4]\b|quarter")
-_PARTIAL = re.compile(r"(?i)\bf?ytd\b|to date")
+_INCEPTION = re.compile(r"(?i)since inception|since \d{4}|inception")
+# Any N-year window other than one. "20-Year Forward" and "3-Year as of" both
+# land here; a forward-looking assumption is not a return at all, but it is
+# certainly not this year's.
+_MULTI = re.compile(r"(?i)\b(?!1[- ]?year)(\d{1,2}|three|five|ten|twenty)[- ]?(year|yr)")
+_MONTH_NAMES = (r"january|february|march|april|may|june|july|august|"
+                r"september|october|november|december")
+_MONTHLY = re.compile(
+    r"(?i)\b1[- ]?month|\bmtd\b|\(1 month\)|month[- ]?to[- ]?date"
+    rf"|^\s*({_MONTH_NAMES})\s+\d{{4}}\s*$")
+_QUARTER = re.compile(r"(?i)\bq[1-4]\b|\b[1-4]q\b|quarter|\b3[- ]months?\b")
+_PARTIAL = re.compile(r"(?i)\bf?ytd\b|to date|through")
 _FISCAL = re.compile(r"(?i)\bfy\s?\d{4}|fiscal")
 _ONE_YEAR = re.compile(
     r"(?i)1[- ]?year|12 month|twelve month|calendar year|\bcy\s?\d{4}")
@@ -66,10 +75,26 @@ def horizon_of(period_label: str | None) -> str:
     is which is the difference between a table you can read across and one
     that invites a wrong conclusion -- the same reasoning that keeps
     queries.PERFORMANCE_PERIODS restricted to fy and 1y.
+
+    Order matters and is not arbitrary. "FY2026 (1-Year ending 12/31/25)"
+    satisfies several patterns; "3-Year as of 6/30/2025" contains a year;
+    "March 2026 (through March 13)" is both a month and a partial period.
+    The narrowest and most misleading readings are tested first, because the
+    cost of calling a one-month return "annual" is far higher than the cost
+    of calling it "unclear".
+
+    The label set came from the real corpus, not from imagination: bare
+    "May 2026" is how three plans report a monthly number, and "1Q 2026",
+    "3 Months Ending 03/31/2026" and "Since Inception (2013 vintage)" all
+    appear verbatim.
     """
     if not period_label:
         return "unclear"
-    t = period_label
+    t = period_label.strip()
+    if _INCEPTION.search(t):
+        return "inception"
+    if _MONTHLY.search(t):
+        return "month"
     if _MULTI.search(t):
         return "multi_year"
     if _QUARTER.search(t):
@@ -200,31 +225,83 @@ def collect_from_summaries(session, class_map, since: date | None) -> list[dict]
 
 
 def pick_latest(rows: list[dict]) -> list[dict]:
-    """One row per (plan, asset class): the best comparable figure.
+    """All of one plan's figures from a single document: the most recent.
 
-    **Annual beats recent.** Newest-wins alone put a Q1 quarterly return in
-    the table whenever one existed, displacing the plan's fiscal-year figure
-    purely for being three months fresher -- and a quarterly -1.98% next to
-    another plan's annual 16.3% reads as a comparison when it is not one.
-    So an annual figure is preferred outright, and recency only breaks ties
-    within the same horizon.
+    Selecting per (plan, asset class) produced rows that were each
+    individually defensible and collectively meaningless -- a plan's equity
+    return from an August board pack beside its private-equity return from
+    an FY2024 CAFR, presented as one row. Every number was right; the row
+    was not a portfolio.
 
-    A non-annual figure is still kept when it is all a plan has: the row
-    carries its horizon, so it can be labelled or filtered rather than
-    silently dropped. Undated rows lose to dated ones but beat nothing.
+    So the unit of selection is the *document*. One source per plan, the most
+    recent one carrying performance data, and every figure in the row comes
+    from it. That restores the property the CAFR-only view had and this one
+    had traded away: a row you can read across, whose period and frequency
+    are single facts about the row rather than per-cell footnotes.
+
+    The cost is real and worth stating: a plan whose newest document reports
+    only a total fund return shows only that, even when an older document
+    holds a full asset-class breakdown. Recency and completeness genuinely
+    conflict here, and mixing them is what produced the incoherent rows.
+
+    Ties on date break towards the document with more asset classes.
     """
-    def rank(r):
-        # Higher is better: comparable first, then recent.
-        return (1 if r.get("horizon") == "annual" else 0,
-                r["as_of_date"] or date.min)
-
-    best: dict[tuple[str, str], dict] = {}
+    # Grouped by document AND horizon, not document alone. A single board
+    # pack often reports a fiscal-year total beside quarterly asset-class
+    # figures; treating the document as the unit meant labelling that whole
+    # row with one frequency, which is a coin toss between two true answers.
+    # Splitting it gives two rows, each of which can be read across.
+    by_doc: dict[tuple[str, int | None, str], list[dict]] = {}
     for r in rows:
-        key = (r["plan_id"], r["asset_class"])
-        cur = best.get(key)
-        if cur is None or rank(r) > rank(cur):
-            best[key] = r
-    return list(best.values())
+        key = (r["plan_id"], r["document_id"], r.get("horizon") or "unclear")
+        by_doc.setdefault(key, []).append(r)
+
+    def rank(group: list[dict]):
+        """Prefer a breakdown over a bare total, then recency, then breadth.
+
+        Strict newest-first cost 27 plans their asset-class detail: their
+        latest performance document reports a total-fund number and nothing
+        else, so the row collapsed to one cell.
+        """
+        when = next((g["as_of_date"] for g in group if g["as_of_date"]), None)
+        has_detail = any(g["asset_class"] != "total" for g in group)
+        return (1 if has_detail else 0, when or date.min, len(group))
+
+    # Two candidates per plan, because recency and comparability are
+    # different questions and a plan can answer both from different
+    # documents. An annual row is comparable across plans; the latest row is
+    # the freshest thing that plan has published. Where the same document
+    # wins both, the plan gets one row -- deduplicated below.
+    best_annual: dict[str, list[dict]] = {}
+    best_other: dict[str, list[dict]] = {}
+    for (plan_id, _doc_id, horizon), group in by_doc.items():
+        target = best_annual if horizon == "annual" else best_other
+        cur = target.get(plan_id)
+        if cur is None or rank(group) > rank(cur):
+            target[plan_id] = group
+
+    # At most two rows per plan: the comparable annual one, and the freshest
+    # non-annual one. A second annual row would just be a staler version of
+    # the first, leaving a reader to work out which to trust.
+    chosen: list[list[dict]] = []
+    for plan_id in set(best_annual) | set(best_other):
+        for group in (best_annual.get(plan_id), best_other.get(plan_id)):
+            if group is not None:
+                chosen.append(group)
+
+    # A single document can report the same class twice (a summary table and
+    # a detail table). Keep the first: the table is unique on
+    # (plan_id, document_id, asset_class), so a duplicate is an insert
+    # failure, not a cosmetic issue.
+    out, seen = [], set()
+    for group in chosen:
+        for r in group:
+            key = (r["plan_id"], r["document_id"], r.get("horizon"), r["asset_class"])
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(r)
+    return out
 
 
 def main() -> int:
