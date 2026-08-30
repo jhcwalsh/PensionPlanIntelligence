@@ -989,21 +989,33 @@ def collated_performance_rows(session) -> list[dict]:
     by_plan: dict[str, dict] = {}
     for rec, plan_name in rows:
         entry = by_plan.setdefault(rec.plan_id, {
-            "Plan": plan_name, "_dates": [], "_sources": set()})
+            "Plan": plan_name, "_dates": [], "_sources": set(),
+            "_horizons": set()})
         label = labels.get(rec.asset_class)
         if label:
             entry[label] = rec.return_pct
         if rec.as_of_date:
             entry["_dates"].append(rec.as_of_date)
         entry["_sources"].add(rec.source)
+        entry["_horizons"].add(rec.horizon or "unclear")
 
     out = []
     for entry in by_plan.values():
         dates = entry.pop("_dates")
         sources = entry.pop("_sources")
+        horizons = entry.pop("_horizons")
         entry["As of"] = max(dates).isoformat() if dates else None
         entry["Sources"] = ", ".join(sorted(
             {"cafr": "CAFR", "board_doc": "Board doc"}.get(s, s) for s in sources))
+        # Says whether a row can be read across. "Annual" means every figure
+        # in it covers a year; anything else names what is mixed in, because
+        # a quarterly return beside an annual one is not a comparison.
+        others = sorted(horizons - {"annual"})
+        entry["Basis"] = "Annual" if not others else (
+            "Mixed: " + ", ".join(
+                {"quarter": "quarterly", "partial": "part-year",
+                 "multi_year": "3-10yr", "unclear": "unlabelled"}.get(h, h)
+                for h in others))
         out.append(entry)
 
     out.sort(key=lambda r: (r["As of"] or "", r["Plan"]), reverse=True)

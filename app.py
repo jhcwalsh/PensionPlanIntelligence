@@ -3398,19 +3398,27 @@ def _render_collated_performance():
 
     st.subheader("Latest return by asset class")
     st.caption(
-        "The most recent figure held for each plan and asset class, drawn "
+        "The latest annual figure held for each plan and asset class, drawn "
         "from CAFRs and from returns the summariser already extracts out of "
-        "board documents. **Periods are not aligned**: a row can pair a 2026 "
-        "quarterly equity return with an FY2024 private-equity figure, so "
-        "read across a row with care and check the As-of and Sources "
-        "columns. Names are normalised, so 'US Equities', 'Domestic Equity' "
-        "and 'S&P 500' land in one column."
+        "board documents. An annual figure is preferred over a fresher "
+        "quarterly one, because a quarterly return beside an annual one is "
+        "not a comparison — **check the Basis column**, which says whether "
+        "every number in a row covers a year or something else is mixed in. "
+        "Fiscal years still differ between plans, so As of matters too. "
+        "Names are normalised: 'US Equities', 'Domestic Equity' and "
+        "'S&P 500' land in one column."
     )
 
     df = pd.DataFrame(rows)
     ordered = (["Plan"] + [label for _, label in queries.COLLATED_CLASSES]
-               + ["As of", "Sources"])
+               + ["Basis", "As of", "Sources"])
     df = df[[c for c in ordered if c in df.columns]]
+
+    if "Basis" in df.columns and st.checkbox(
+            "Only rows where every figure is annual", value=False,
+            help="Hides plans whose row mixes in a quarterly, part-year or "
+                 "multi-year figure — those cannot be read across."):
+        df = df[df["Basis"] == "Annual"]
 
     c1, c2, c3 = st.columns(3)
     c1.metric("Plans covered", len(df))
@@ -3418,9 +3426,8 @@ def _render_collated_performance():
                  if key != "total" and label in df.columns]
     c2.metric("With asset-class detail",
               int(df[non_total].notna().any(axis=1).sum()) if non_total else 0)
-    c3.metric("Including 2026 figures",
-              int(df["Sources"].str.contains("Board doc").sum())
-              if "Sources" in df else 0)
+    c3.metric("Fully annual",
+              int((df["Basis"] == "Annual").sum()) if "Basis" in df else 0)
 
     st.dataframe(df, width="stretch", hide_index=True)
     st.download_button(

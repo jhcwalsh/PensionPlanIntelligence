@@ -47,6 +47,39 @@ TOTAL_LABELS = {"total fund", "total", "total plan", "overall",
 
 _YEAR = re.compile(r"(19|20)\d{2}")
 
+# What a period label actually measures. Order matters: "FY2025 (1-Year ending
+# 12/31/25)" is both, and "3-Year as of June 2026" contains a year too, so the
+# narrower tests run first.
+_MULTI = re.compile(r"(?i)\b(3|5|10|three|five|ten)[- ]?(year|yr)")
+_QUARTER = re.compile(r"(?i)\bq[1-4]\b|quarter")
+_PARTIAL = re.compile(r"(?i)\bf?ytd\b|to date")
+_FISCAL = re.compile(r"(?i)\bfy\s?\d{4}|fiscal")
+_ONE_YEAR = re.compile(
+    r"(?i)1[- ]?year|12 month|twelve month|calendar year|\bcy\s?\d{4}")
+
+
+def horizon_of(period_label: str | None) -> str:
+    """What the number measures, so incomparable figures can be kept apart.
+
+    A quarterly return and a fiscal-year return are both "the latest
+    performance figure" and mean entirely different things. Recording which
+    is which is the difference between a table you can read across and one
+    that invites a wrong conclusion -- the same reasoning that keeps
+    queries.PERFORMANCE_PERIODS restricted to fy and 1y.
+    """
+    if not period_label:
+        return "unclear"
+    t = period_label
+    if _MULTI.search(t):
+        return "multi_year"
+    if _QUARTER.search(t):
+        return "quarter"
+    if _PARTIAL.search(t):
+        return "partial"
+    if _FISCAL.search(t) or _ONE_YEAR.search(t):
+        return "annual"
+    return "unclear"
+
 
 def load_class_map() -> dict:
     with io.open(MAPPINGS, encoding="utf-8") as f:
@@ -117,6 +150,8 @@ def collect_from_cafr(session, class_map) -> list[dict]:
             "asset_class": canon,
             "return_pct": ret,
             "period_label": f"FY{fy}" if fy else None,
+            # A CAFR figure is a fiscal year by construction.
+            "horizon": "annual",
             # A fiscal year is not a date; June 30 is the common year end and
             # is only used to order sources against each other, never shown.
             "as_of_date": date(int(fy), 6, 30) if fy else None,
@@ -156,6 +191,7 @@ def collect_from_summaries(session, class_map, since: date | None) -> list[dict]
                 "asset_class": canon,
                 "return_pct": ret,
                 "period_label": (item.get("period") or "")[:64] or None,
+                "horizon": horizon_of(item.get("period")),
                 "as_of_date": _as_date(meeting_date),
                 "source": "board_doc",
                 "document_id": doc_id,
@@ -164,20 +200,29 @@ def collect_from_summaries(session, class_map, since: date | None) -> list[dict]
 
 
 def pick_latest(rows: list[dict]) -> list[dict]:
-    """One row per (plan, asset class): the most recent wins.
+    """One row per (plan, asset class): the best comparable figure.
 
-    Undated rows lose to dated ones but beat nothing, so a plan whose only
-    figure carries no date still appears rather than vanishing.
+    **Annual beats recent.** Newest-wins alone put a Q1 quarterly return in
+    the table whenever one existed, displacing the plan's fiscal-year figure
+    purely for being three months fresher -- and a quarterly -1.98% next to
+    another plan's annual 16.3% reads as a comparison when it is not one.
+    So an annual figure is preferred outright, and recency only breaks ties
+    within the same horizon.
+
+    A non-annual figure is still kept when it is all a plan has: the row
+    carries its horizon, so it can be labelled or filtered rather than
+    silently dropped. Undated rows lose to dated ones but beat nothing.
     """
+    def rank(r):
+        # Higher is better: comparable first, then recent.
+        return (1 if r.get("horizon") == "annual" else 0,
+                r["as_of_date"] or date.min)
+
     best: dict[tuple[str, str], dict] = {}
     for r in rows:
         key = (r["plan_id"], r["asset_class"])
         cur = best.get(key)
-        if cur is None:
-            best[key] = r
-            continue
-        a, b = r["as_of_date"], cur["as_of_date"]
-        if a and (b is None or a > b):
+        if cur is None or rank(r) > rank(cur):
             best[key] = r
     return list(best.values())
 

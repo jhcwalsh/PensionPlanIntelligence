@@ -1014,6 +1014,13 @@ class PlanAssetClassPerformance(Base):
     asset_class = Column(String(64), nullable=False)     # canonical key
     return_pct = Column(Float)
     period_label = Column(String(64))                    # 'FY2025', 'Q1 2026'...
+    # What the number MEASURES, derived from period_label. Without this a
+    # quarterly -1.98% sits in the same column as an annual 16.3% and reads
+    # as a comparison. 27% of the first build was not an annual return:
+    # quarters, fiscal-year-to-date, and 3/5/10-year annualised figures.
+    #   'annual'  a fiscal year or a 1-year/12-month window -- comparable
+    #   'quarter' | 'partial' | 'multi_year' | 'unclear' -- not comparable
+    horizon = Column(String(16))
     as_of_date = Column(Date)
     source = Column(String(16), nullable=False)          # 'cafr' | 'board_doc'
     document_id = Column(Integer, ForeignKey("documents.id"))
