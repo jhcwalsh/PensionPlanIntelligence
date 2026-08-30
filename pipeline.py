@@ -118,6 +118,7 @@ def run_pipeline(
     max_docs_per_plan: int = 50,
     min_year: int = 2026,
     retry_failed: bool = False,
+    allow_ocr: bool = True,
 ):
     init_db()
     start = utcnow()
@@ -152,7 +153,13 @@ def run_pipeline(
 
         if do_extract:
             console.rule("[bold]Step 2: Extract Text[/bold]")
+            import extractor as _extractor
             from extractor import run_extractor
+            _extractor.OCR_ENABLED = allow_ocr
+            if not allow_ocr:
+                console.print("[yellow]OCR off: scanned documents are recorded "
+                              "as 'ocr_deferred', not extracted. Price them with "
+                              "scripts/pending_spend.py[/yellow]")
             run_extractor(retry_failed=retry_failed)
 
         if do_summarize:
@@ -211,6 +218,11 @@ def main():
                              "on sites that do not date their links this filter "
                              "does nothing -- --max-docs is the binding limit "
                              "there.")
+    parser.add_argument("--no-ocr", action="store_true",
+                        help="Extract only what a text layer gives up for free. "
+                             "Scanned documents are recorded as 'ocr_deferred' "
+                             "instead of being sent to Sonnet vision; price the "
+                             "backlog later with scripts/pending_spend.py")
     parser.add_argument("--retry-failed", action="store_true",
                         help="Re-attempt failed extractions (with OCR fallback)")
     parser.add_argument("--status", action="store_true",
@@ -279,6 +291,7 @@ def main():
         max_docs_per_plan=args.max_docs,
         min_year=args.min_year,
         retry_failed=args.retry_failed,
+        allow_ocr=not args.no_ocr,
     )
 
 

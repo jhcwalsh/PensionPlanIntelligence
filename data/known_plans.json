@@ -2663,7 +2663,7 @@
     "notes": "California 1937 Act county fund. AUM ~$2.5B. Standalone Board of Retirement, meets 2nd Wednesday monthly. Board packets hosted at assets.marincounty.gov/mcera-prod/public/. The meetings page lists per-meeting pages rather than documents, hence sub_page_pattern. Verified reachable from a residential IP 2026-08-29.",
     "fiscal_year_end": "06-30",
     "sub_page_pattern": "/board/(agendas-minutes|board-retirement)/[a-z0-9-]+\\d",
-    "max_sub_pages": 20,
+    "max_sub_pages": 40,
     "sub_page_skip_committee_filter": true
   }
 ]

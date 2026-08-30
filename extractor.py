@@ -49,6 +49,13 @@ MAX_VISION_OCR_PAGES = 100
 # page count exceeds the doc cap is skipped outright (a 200-page image-only
 # board pack isn't worth transcribing even partially).
 OCR_DOC_TYPES = {"cafr", "agenda", "minutes"}
+
+# Vision OCR is the one part of text extraction that costs money (Sonnet, per
+# rendered page). Set False -- `pipeline.py --no-ocr` -- to extract everything
+# a text layer will give up for free and record the rest as `ocr_deferred`,
+# which `scripts/pending_spend.py` prices. Deferring loses nothing: the
+# document keeps its file and its row, and re-running with OCR on picks it up.
+OCR_ENABLED = True
 MAX_VISION_OCR_DOC_PAGES = 50
 
 # 2x render is roughly 1200x1600 px for letter-size — plenty of resolution for
@@ -226,16 +233,24 @@ def _extract_pdf_ocr(path: str) -> tuple[str, int, OcrInfo]:
         return "", 0, OcrInfo()
 
 
-def extract_pdf(path: str, allow_ocr: bool = True) -> tuple[str, int, str | None, int | None]:
+def extract_pdf(path: str, allow_ocr: bool = True,
+                gate_reason: str = "ocr_gate_doc_type"
+                ) -> tuple[str, int, str | None, int | None]:
     """Extract PDF text. Returns (text, pages, reason, pages_ocred) where
-    reason is an extraction_details reason for empty/partial results."""
+    reason is an extraction_details reason for empty/partial results.
+
+    `gate_reason` names *which* gate stopped OCR, so a document deferred to
+    keep spend down is distinguishable from one whose doc_type was never
+    OCR-worthy. Both leave the document re-processable; only one is a
+    decision anyone would want to revisit.
+    """
     text, pages = extract_pdf_pdfplumber(path)
     if len(text.strip()) < 100:
         text, pages = extract_pdf_pymupdf(path)
     if len(text.strip()) >= 100:
         return text, pages, None, None
     if not allow_ocr:
-        return text, pages, "ocr_gate_doc_type", None
+        return text, pages, gate_reason, None
     console.print("  [dim]Trying OCR...[/dim]")
     text, pages, info = extract_pdf_ocr(path)
     if not text.strip():
@@ -451,8 +466,15 @@ def extract_document(doc: Document) -> ExtractOutcome:
     console.print(f"  Extracting [cyan]{Path(path).name}[/cyan]")
 
     if ext == ".pdf":
+        type_allows_ocr = doc.doc_type in OCR_DOC_TYPES
         text, pages, reason, pages_ocred = extract_pdf(
-            path, allow_ocr=doc.doc_type in OCR_DOC_TYPES)
+            path,
+            allow_ocr=OCR_ENABLED and type_allows_ocr,
+            # Only call it deferred when spend is the reason: a doc_type that
+            # was never OCR-worthy is not work anyone is waiting to fund.
+            gate_reason=("ocr_deferred" if type_allows_ocr and not OCR_ENABLED
+                         else "ocr_gate_doc_type"),
+        )
     elif ext in (".docx", ".doc"):
         text, pages = extract_docx(path)
         reason, pages_ocred = ("extract_empty" if not text.strip() else None), None

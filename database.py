@@ -1013,6 +1013,11 @@ class ExtractionDetail(Base):
     - ``file_missing``       no file at local_path (never downloaded / other machine)
     - ``unsupported_format`` extension we don't extract
     - ``ocr_gate_doc_type``  empty text layer; doc_type isn't OCR-worthy
+    - ``ocr_deferred``       empty text layer, doc_type *is* OCR-worthy, but
+                             extraction ran with OCR off to avoid the spend.
+                             The only reason here that is a funding decision
+                             rather than a property of the document —
+                             ``scripts/pending_spend.py`` prices these.
     - ``ocr_gate_page_cap``  empty text layer; over MAX_VISION_OCR_DOC_PAGES
     - ``ocr_empty``          vision OCR ran (or was unavailable) and produced no text
     - ``extract_empty``      non-PDF (docx) extraction produced no text
