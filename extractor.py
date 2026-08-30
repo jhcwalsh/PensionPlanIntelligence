@@ -537,16 +537,29 @@ def _persist_outcome(session, doc, outcome):
     is not the problem -- the same payload commits in 0.1s on a live
     connection -- so a rollback, a fresh load and one retry clears it.
 
-    `pool_pre_ping` does not help here: it validates at checkout, and this
+    The same idle window surfaces two different exceptions depending on who
+    notices first, and both have now been seen live on this corpus:
+
+        OperationalError  psycopg.OperationalError:
+                          SSL connection has been closed unexpectedly
+        InternalError     psycopg.errors.IdleInTransactionSessionTimeout:
+                          terminating connection due to idle-in-transaction
+                          timeout
+
+    Catching only the first is what a plausible-looking fix does; it then
+    fails on the next large document with an unfamiliar traceback. Both are
+    caught here.
+
+    `pool_pre_ping` does not help either: it validates at checkout, and this
     connection is checked out and healthy before the parse begins.
     """
-    from sqlalchemy.exc import OperationalError
+    from sqlalchemy.exc import InternalError, OperationalError
 
     try:
         _apply_outcome(session, doc, outcome)
         session.commit()
         return doc
-    except OperationalError as e:
+    except (OperationalError, InternalError) as e:
         console.print(f"  [yellow]connection lost during extraction, "
                       f"retrying commit: {str(e)[:90]}[/yellow]")
         session.rollback()

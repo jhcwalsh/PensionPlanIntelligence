@@ -7,7 +7,7 @@ packet: it failed reproducibly and took the nine documents queued behind it
 down with it, because the loop has no per-document guard.
 """
 import pytest
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import InternalError, OperationalError
 
 import extractor
 from database import Document, ExtractionDetail, Plan
@@ -68,6 +68,37 @@ def test_a_dropped_connection_is_retried_not_fatal(session, monkeypatch):
     stored = session.get(Document, doc.id)
     assert stored.extraction_status == "done"
     assert stored.extracted_text == "recovered"
+
+
+def test_idle_in_transaction_timeout_is_also_retried(session, monkeypatch):
+    """The second face of the same fault.
+
+    The idle window ends in one of two exceptions depending on who notices
+    the dead connection first: psycopg reports a closed SSL socket as
+    OperationalError, while Postgres killing the session for idling in a
+    transaction arrives as InternalError. Catching only the first passes its
+    test and then fails on the next large document.
+    """
+    doc = _doc(session)
+
+    calls = {"n": 0}
+    real_commit = session.commit
+
+    def flaky_commit():
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise InternalError(
+                "UPDATE documents SET extracted_text=...", {},
+                Exception("terminating connection due to "
+                          "idle-in-transaction timeout"))
+        return real_commit()
+
+    monkeypatch.setattr(session, "commit", flaky_commit)
+    extractor._persist_outcome(session, doc, _outcome(text="survived the timeout"))
+    monkeypatch.undo()
+
+    assert calls["n"] == 2
+    assert session.get(Document, doc.id).extracted_text == "survived the timeout"
 
 
 def test_a_second_failure_still_raises(session, monkeypatch):
