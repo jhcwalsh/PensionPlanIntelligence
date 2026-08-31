@@ -87,6 +87,20 @@ def test_a_good_call_returns_parsed_arguments_and_a_positive_cost(monkeypatch):
     assert cost > 0
 
 
+def test_truncation_that_does_not_announce_itself_still_raises(monkeypatch):
+    """Two providers in the first corpus run returned arguments cut off
+    mid-string — one at 50,651 characters — while reporting finish_reason
+    "stop". The length check passed and json.loads failed instead. Same
+    fault, so the caller should see the same exception."""
+    resp = _resp("stop", tool_calls=True)
+    resp.choices[0].message.tool_calls[0].function.arguments = (
+        '{"returns": [{"asset_class": "US Equ')
+
+    monkeypatch.setattr(llm_openrouter, "_raw_call", lambda **kw: resp)
+    with pytest.raises(llm_openrouter.ResponseTruncated, match="malformed"):
+        llm_openrouter.call_tool("sys", "user", {"type": "object"}, "record")
+
+
 def test_no_api_key_means_no_call(monkeypatch):
     """The key is never optional and never falls back to the Anthropic one."""
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)

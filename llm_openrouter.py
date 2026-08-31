@@ -92,4 +92,17 @@ def call_tool(system: str, user: str, schema: dict,
     if not calls:
         raise RuntimeError(
             f"no tool call; finish_reason={choice.finish_reason}")
-    return json.loads(calls[0].function.arguments), cost
+
+    raw = calls[0].function.arguments
+    try:
+        return json.loads(raw), cost
+    except ValueError as e:
+        # Truncation that did not announce itself. Two providers in the first
+        # corpus run returned arguments cut off mid-string -- one at 50,651
+        # characters -- while reporting finish_reason "stop", so the check
+        # above passed and json.loads failed with "Unterminated string".
+        # Same fault, so same exception: a caller deciding whether to retry
+        # with a narrower window should not have to tell them apart.
+        raise ResponseTruncated(
+            f"malformed tool arguments ({len(raw)} chars, "
+            f"finish_reason={choice.finish_reason}): {e}") from None
