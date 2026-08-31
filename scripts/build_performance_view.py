@@ -112,9 +112,36 @@ def horizon_of(period_label: str | None) -> str:
     return "unclear"
 
 
-def load_class_map() -> dict:
+class ClassMap(dict):
+    """The mapping, plus a case-folded index of the labels it can fold safely.
+
+    The map was built from mixed-case labels ("Public Equity"), but board
+    documents shout their table headings ("PUBLIC EQUITY"), and an exact
+    lookup misses every one. Measured on the targeted reads: 6,360 of 8,373
+    rows failed to canonicalise, and the commonest misses were PUBLIC EQUITY,
+    REAL ESTATE and PRIVATE EQUITY -- all present in the map in title case.
+
+    Folding is not unconditionally safe, which is why this is an index rather
+    than a `.lower()` on both sides. Three labels map to two different
+    canonicals depending on case ("total fixed income" is 'total' in one
+    casing and 'fixed_income_core' in another). Those are left out, so they
+    keep today's behaviour of not matching rather than silently picking one.
+    """
+
+    def __init__(self, data):
+        super().__init__(data)
+        by_low: dict[str, dict] = {}
+        for key, entry in data.items():
+            canon = (entry or {}).get("canonical")
+            slot = by_low.setdefault(key.lower(), {"canons": set(), "entry": entry})
+            slot["canons"].add(canon)
+        self.folded = {k: v["entry"] for k, v in by_low.items()
+                       if len(v["canons"]) == 1}
+
+
+def load_class_map() -> ClassMap:
     with io.open(MAPPINGS, encoding="utf-8") as f:
-        return json.load(f)
+        return ClassMap(json.load(f))
 
 
 def canonical(raw: str, class_map: dict) -> str | None:
@@ -134,6 +161,13 @@ def canonical(raw: str, class_map: dict) -> str | None:
         # One retry on a squashed-whitespace match before giving up.
         squashed = " ".join(key.split())
         entry = class_map.get(squashed)
+    if entry is None:
+        # Then case, which is a formatting choice in the source document and
+        # not a distinction between asset classes.
+        folded = getattr(class_map, "folded", None)
+        if folded is None:
+            folded = ClassMap(class_map).folded
+        entry = folded.get(" ".join(key.split()).lower())
     if not entry:
         return None
     canon = entry.get("canonical")

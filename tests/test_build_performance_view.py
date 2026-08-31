@@ -108,6 +108,33 @@ def test_the_summariser_still_wins_where_there_was_no_targeted_read(
     assert got == {"targeted_read", "board_doc"}
 
 
+def test_a_shouted_heading_maps_like_a_title_cased_one():
+    """Board tables shout: PUBLIC EQUITY, REAL ESTATE, PRIVATE EQUITY.
+
+    The map was built from title-case labels, so an exact lookup missed all
+    of them — 6,360 of 8,373 extracted rows discarded on formatting.
+    """
+    m = bpv.load_class_map()
+    for shouted, titled in (("PUBLIC EQUITY", "Public Equity"),
+                            ("REAL ESTATE", "Real Estate"),
+                            ("DOMESTIC EQUITY", "Domestic Equity")):
+        assert bpv.canonical(shouted, m) == bpv.canonical(titled, m) is not None
+
+
+def test_case_folding_stops_where_case_actually_carries_meaning():
+    """Three labels mean different things in different casings. Folding those
+    would silently pick one; they keep today's behaviour of not matching."""
+    m = bpv.ClassMap({
+        "Total Fixed Income": {"canonical": "fixed_income_core"},
+        "TOTAL FIXED INCOME": {"canonical": "total"},
+        "Real Assets": {"canonical": "real_assets"},
+    })
+    assert "total fixed income" not in m.folded
+    assert "real assets" in m.folded
+    assert bpv.canonical("total fixed income", m) is None
+    assert bpv.canonical("REAL ASSETS", m) == "real_assets"
+
+
 def test_an_empty_read_contributes_nothing(session, monkeypatch):
     """A window with no returns in it is a real and common outcome — 300 of
     810 documents. It must not create a row, and must not crash the build."""
