@@ -17,6 +17,10 @@ python-docx==1.1.2
 
 # AI
 anthropic==0.42.0
+# OpenRouter is OpenAI-compatible; used only by llm_openrouter for the
+# targeted-read extraction. Pipeline-only — the Streamlit service in
+# requirements.txt never calls a model.
+openai==1.59.6
 
 # Pipeline status output (rich tables in pipeline.py)
 rich==13.9.4

@@ -46,6 +46,14 @@ PRICES: dict[str, Price] = {
     "claude-haiku-4-5-20251001": _p("1", "5", "1.25", "0.10"),
     "claude-sonnet-4-6":         _p("3", "15", "3.75", "0.30"),
     "claude-opus-4-6":           _p("5", "25", "6.25", "0.50"),
+
+    # OpenRouter, DeepSeek V4 Flash. Both cache columns are zero deliberately.
+    # DeepSeek does have a cache-read price (~$0.0177/M), but adapt_usage
+    # reports every prompt token as uncached, so each call is priced at the
+    # full input rate. That over-states a cached call and never under-states
+    # one — the safe direction, and the opposite of the usage-name mismatch
+    # that llm_openrouter exists to prevent.
+    "deepseek/deepseek-v4-flash": _p("0.0886", "0.1772", "0", "0"),
 }
 
 MILLION = Decimal(1_000_000)
