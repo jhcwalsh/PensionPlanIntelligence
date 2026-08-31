@@ -509,7 +509,27 @@ def _is_valid_pdf(path: Path) -> bool:
         return False
 
 
-def download_document(url: str, dest_dir: Path, filename: str) -> tuple[Path | None, int]:
+def _sole_pdf_link(html: bytes, base_url: str) -> str | None:
+    """The one PDF a landing page points at, or None if it is not that simple.
+
+    Deliberately strict. A page offering several PDFs is a listing, and
+    guessing which one belongs to this document row would attach the wrong
+    file to it -- worse than a gap, because a gap is visible. Only an
+    unambiguous page (every PDF link resolving to a single URL) is followed.
+    """
+    try:
+        text = html.decode("utf-8", "ignore")
+    except Exception:                                       # noqa: BLE001
+        return None
+    hrefs = re.findall(r'href=["\']([^"\']+\.pdf[^"\']*)["\']', text, re.I)
+    if not hrefs:
+        return None
+    resolved = {urljoin(base_url, h) for h in hrefs}
+    return resolved.pop() if len(resolved) == 1 else None
+
+
+def download_document(url: str, dest_dir: Path, filename: str,
+                      _follow_once: bool = True) -> tuple[Path | None, int]:
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / filename
 
@@ -541,10 +561,25 @@ def download_document(url: str, dest_dir: Path, filename: str) -> tuple[Path | N
                 f.write(chunk)
 
         if dest.suffix.lower() == ".pdf" and not _is_valid_pdf(dest):
+            html = dest.read_bytes()
             try:
                 dest.unlink()
             except OSError:
                 pass
+
+            # Some catalogues publish a landing page where a document URL is
+            # expected. Rhode Island's board packs are the case here: the
+            # scraper stores the CKAN dataset page, whose HTML links the
+            # actual PDF once. Following that link is the difference between
+            # nine recoverable documents and nine dead ones.
+            if _follow_once:
+                target = _sole_pdf_link(html, url)
+                if target and target != url:
+                    console.print(f"  [dim]Landing page; following its PDF "
+                                  f"link[/dim]")
+                    return download_document(target, dest_dir, filename,
+                                             _follow_once=False)
+
             console.print(
                 f"  [red]Download for {url} returned non-PDF content "
                 f"(likely HTML error page); rejecting[/red]"
