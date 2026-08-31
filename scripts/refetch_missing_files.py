@@ -57,7 +57,15 @@ def _waf_blocked_plan_ids() -> set[str]:
 
 def missing_file_documents(session, plan_ids: list[str] | None,
                            only_unextracted: bool = True):
-    """Rows whose local file is absent *and* which have no text to show for it.
+    """Rows that need their bytes fetched again, and have no text to show yet.
+
+    Two ways a document needs re-downloading, and only one of them is the file
+    being absent. The other is a file that is present and is not what its name
+    claims: 13 documents hold a 560 KB HTML error page under a ``.pdf`` name,
+    served when the plan answered a PDF URL with a redirect or a block page.
+    ``download_document`` rejects that now, but these predate the check, and
+    keying only on absence left them permanently unfetchable — the extractor
+    could not read them and the refetcher could not see them.
 
     Keyed on the file rather than on `extraction_details`, because a row can
     lose its file without anything having re-run to record why.
@@ -83,10 +91,14 @@ def missing_file_documents(session, plan_ids: list[str] | None,
         q = q.filter(Document.plan_id.in_(plan_ids))
     if only_unextracted:
         q = q.filter(Document.extracted_text.is_(None))
+    from fetcher import _is_valid_pdf
+
     out = []
     for doc in q:
         path = Path(doc.local_path) if doc.local_path else None
         if path is None or not path.exists():
+            out.append(doc)
+        elif path.suffix.lower() == ".pdf" and not _is_valid_pdf(path):
             out.append(doc)
     return out
 
