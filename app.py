@@ -3398,8 +3398,16 @@ def _percent_display(df, numeric_cols):
     import pandas as pd          # imported per-function, as elsewhere here
 
     out = df.copy()
-    for c in (c for c in numeric_cols if c in out.columns):
+    numeric = [c for c in numeric_cols if c in out.columns]
+    for c in numeric:
         out[c] = out[c].map(lambda v: "" if pd.isna(v) else f"{v:.1f}%")
+    # Text columns get the same treatment. A handful of rows carry no period
+    # label or no date, and Streamlit writes those as the word "None" too --
+    # which reads as a bug rather than as "we don't know". Only object
+    # columns: a real datetime column keeps its type for DatetimeColumn.
+    for c in out.columns:
+        if c not in numeric and out[c].dtype == object:
+            out[c] = out[c].map(lambda v: "" if v is None or pd.isna(v) else v)
     return out
 
 
