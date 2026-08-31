@@ -1079,6 +1079,39 @@ class DocumentCatalogue(Base):
     built_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
 
 
+class DocumentSectionRead(Base):
+    """Figures read from one located section of a document.
+
+    Separate from ``summaries.performance_data``, which holds whatever the
+    summariser happened to see in the ~50,000 characters it was given. This
+    holds what a targeted read of the right slice found, and records which
+    slice, so a disagreement between the two is investigable rather than
+    mysterious.
+
+    ``offset`` is a character position in ``documents.extracted_text`` at the
+    time of the read. Unique with ``document_id`` so a re-run is a no-op
+    rather than a second charge for the same passage.
+    """
+
+    __tablename__ = "document_section_read"
+
+    id = Column(Integer, primary_key=True)
+    document_id = Column(Integer, ForeignKey("documents.id"),
+                         nullable=False, index=True)
+    # "offset" is a reserved word in Postgres. SQLAlchemy quotes it, so the
+    # column works, but hand-written SQL against this table must quote it too.
+    offset = Column(Integer, nullable=False)
+    heading = Column(String(200))
+    returns_json = Column(Text)          # same shape as summaries.performance_data
+    model = Column(String(64))
+    cost_usd = Column(Numeric(10, 6))
+    created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("document_id", "offset", name="uq_section_read"),
+    )
+
+
 class DocumentSkip(Base):
     """Documents the summarizer should permanently skip.
 
