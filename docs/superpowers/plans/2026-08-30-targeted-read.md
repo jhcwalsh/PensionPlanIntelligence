@@ -2,571 +2,452 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Read the pages a catalogue entry points at, and only those pages, so recovering a performance table costs cents rather than the price of a whole scanned board pack.
+**Goal:** Read the part of a document that holds the numbers, instead of the first tenth of it.
 
-**Architecture:** A pure parser turns free-text page hints into candidate ranges. A resolver reconciles the *printed* page numbers those hints use against the PDF's own indices, because board packs paginate themselves and an unverified offset silently returns the wrong pages. OCR then runs over the resolved range only, and the text lands in a new table beside `extracted_text` rather than on top of it.
+**Architecture:** Two phases against one idea. Phase A covers documents whose text we already hold — the large majority — where locating a section is a free text search and the only paid step is reading the slice we chose. Phase B covers scanned documents, where the same idea needs OCR and therefore needs a page offset resolved first.
 
-**Tech Stack:** Python, SQLAlchemy, PyMuPDF (`fitz`), Anthropic vision via the existing `extractor.extract_pdf_ocr` machinery, `costs` for pricing.
+**Tech Stack:** Python, SQLAlchemy, Anthropic tool-use via `summarizer._get_client`, `costs` for pricing, PyMuPDF for Phase B.
 
 **Spec:** `docs/superpowers/specs/2026-08-30-relevance-gating-design.md`
 
-## Global Constraints
+## Why this was rewritten
 
-- **Nothing is discarded.** No task writes to `documents.extracted_text`, truncates it, or deletes any row. Targeted text is stored in a new table. A test asserts `extracted_text` is byte-identical after a run.
-- **No paid call is reachable without `--approve`.** Follow `scripts/catalogue.py`: the client constructor is never entered on an unapproved path, and the test asserts that rather than asserting cost is zero.
-- **`--budget` is a hard stop**, checked before each call against spend so far. It stops the run; it does not warn.
-- **Never write an ALTER TABLE migration system.** Add the model, run `init_db()`.
-- **`documents.extracted_text` is `deferred()`** — bulk readers need `.options(undefer(...))`, and single-document reads must not loop.
-- **OCR bills per page**: 1.3¢ measured. Every page read must be one a hint asked for.
-- **Don't run `git add .`** — stage by explicit path.
-- Baseline: `LLM_MODE=mock pytest tests/ -q` green at 648 passed / 30 skipped.
+The first version of this plan covered only the 354 scanned documents. Chasing a different question — why eleven plans have documents but no performance figures — showed that scoping was wrong, and wrong about the bigger number.
 
-## Measured inputs (from the 354-document catalogue, 2026-08-30)
+Those eleven plans mostly do not publish performance material at all: Nashville's meeting pages offer one document each, the agenda; Atlanta's ten "board packs" are one-page meeting notices misfiled by `guess_doc_type`; across their 641 documents only ten run past twenty pages. No scraper fixes that.
+
+But those ten long documents *are* held, extracted and summarised, and still yield nothing. The summariser compresses every document to ~50,000 characters before Claude sees it (`summarizer.SMART_TRUNCATE_TARGET`). That is not naive — head, investment-keyword windows, tail — but it fills its budget from the front, and an allocation table is a dense numeric grid that sits deep. Measured on a real board pack, the genuine performance headings begin **31% of the way in**.
+
+This is not a ten-document problem:
 
 | | |
 |---|---|
-| documents with relevant material | 253 |
-| ...carrying page hints | 172 |
-| ...whose hints parse to page numbers | **119** |
-| hints giving only agenda-item ids (`Item 9.7`, `VII.A`) | 53 |
-| page ranges extracted | 133 |
-| median span / largest span | **5 pages** / 204 pages |
+| Documents with stored text | 4,926 |
+| **Truncated before summarising (>50k chars)** | **1,014** |
+| Heavily truncated (>250k chars) | 79 |
+| **Plans affected** | **136 of 148** |
+
+So the ceiling on performance coverage is not fetching, and not the scanned tail. It is that a fifth of the corpus is read in part, and the part is chosen to write a good summary rather than to find a table.
+
+## Global Constraints
+
+- **Nothing is discarded.** No task writes to `documents.extracted_text` or deletes any row. Extracted figures go to their own table; a test asserts `extracted_text` is byte-identical after a run.
+- **No paid call is reachable without `--approve`.** Follow `scripts/catalogue.py`: the client constructor is never entered on an unapproved path, and the test asserts *that*, not that cost came out zero.
+- **`--budget` is a hard stop**, checked before each call against spend so far.
+- **Never write an ALTER TABLE migration system.** Add the model, run `init_db()`.
+- **`documents.extracted_text` is `deferred()`** — bulk readers need `.options(undefer(...))`; never loop reading it without one.
+- Baseline: `LLM_MODE=mock pytest tests/ -q` green at 651 passed / 30 skipped.
+
+## Measured inputs (2026-08-30, live corpus)
+
+Section search over the four largest stored documents:
+
+| Document | Chars | Heading hits | First genuine hit |
+|---|---|---|---|
+| `inv-202412.pdf` | 641,965 | 26 | **31% in** |
+| `brd-202411p.pdf` | 1,341,713 | 39 | 1% (prose, not a table) |
+| Rhode Island pack | 1,158,684 | 99 | 2% (prose) |
+| `Gov%202025-04%20V2_0.pdf` | **2,000,000** | **0** | — capped at `MAX_STORED_CHARS` |
+
+Two things follow, and they shape Tasks 1 and 2. Hits are **noisy** — most are prose mentions ("provide holistic asset allocation"), not table headings — so a raw first-match rule would read the wrong slice. And a document sitting at exactly 2,000,000 characters was truncated at *storage*, so its tail is not on disk at all; those are a Phase B/R2 problem, not this one.
 
 ## File Structure
 
-- `page_hints.py` (new) — pure parsing of hint text to ranges. No I/O, no DB, no API. Its own file because it is the one piece that is fully testable without anything else, and it carries all the format variation.
-- `database.py` (modify) — add `DocumentPageText`.
-- `targeted_read.py` (new) — resolve ranges against a PDF, OCR them, store. The only module that spends.
-- `scripts/read_targets.py` (new) — the CLI: worklist, `--approve`, `--budget`.
-- `tests/test_page_hints.py`, `tests/test_targeted_read.py` (new).
+- `section_finder.py` (new) — pure text search producing ranked candidate windows. No I/O, no API.
+- `database.py` (modify) — add `DocumentSectionRead`.
+- `targeted_extract.py` (new) — the only module that spends: rank candidates, then extract from the chosen window.
+- `scripts/read_sections.py` (new) — CLI: priced worklist, `--approve`, `--budget`.
+- `tests/test_section_finder.py`, `tests/test_targeted_extract.py` (new).
+- Phase B (`page_hints.py`, `targeted_read.py`) — deferred; see Task 6.
 
 ---
 
-### Task 1: Parse page hints into ranges
+### Task 1: Find candidate sections in stored text
 
 **Files:**
-- Create: `page_hints.py`
-- Test: `tests/test_page_hints.py`
+- Create: `section_finder.py`
+- Test: `tests/test_section_finder.py`
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: `parse_hints(text: str) -> list[PageRange]` where `PageRange` is a frozen dataclass `(start: int, end: int, label: str)`. `start`/`end` are **printed** page numbers, 1-based, inclusive. Task 3 consumes this.
+- Produces: `find_candidates(text: str, max_candidates: int = 12) -> list[Candidate]`, where `Candidate` is a frozen dataclass `(offset: int, heading: str, score: float)`. Task 2 consumes this.
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-from page_hints import parse_hints, PageRange
+from section_finder import find_candidates, Candidate
 
-def test_parses_the_common_forms():
-    assert parse_hints("pp. 22-23; ETI Quarterly Report pp. 92-93") == [
-        PageRange(22, 23, "pp. 22-23"),
-        PageRange(92, 93, "pp. 92-93"),
-    ]
+def test_finds_a_heading_on_its_own_line():
+    text = "preamble\n" * 100 + "\nASSET ALLOCATION\n" + "table rows\n" * 50
+    got = find_candidates(text)
+    assert got and "ASSET ALLOCATION" in got[0].heading
 
-def test_single_page_becomes_a_one_page_range():
-    assert parse_hints("presented by Wilshire on page 3") == [PageRange(3, 3, "page 3")]
+def test_prose_mentions_rank_below_headings():
+    """The measured failure mode: 99 hits on a real pack, nearly all prose.
 
-def test_handles_Page_N_colon_label_lists():
-    got = parse_hints("Page 4: May Returns; Page 5: Asset Allocation; Page 10: Trustee Report")
-    assert [(r.start, r.end) for r in got] == [(4, 4), (5, 5), (10, 10)]
+    'we provide holistic asset allocation advice' is a sentence; 'Asset
+    Allocation' alone on a line is a heading. Taking the first match reads
+    the wrong slice of a 1.1 MB document.
+    """
+    text = ("The consultant will provide holistic asset allocation advice "
+            "to the board in due course.\n") * 20 + "\nAsset Allocation\n" + "x\n" * 40
+    got = find_candidates(text)
+    assert "Asset Allocation" == got[0].heading.strip()
 
-def test_agenda_item_ids_yield_nothing():
-    # 53 of 172 hints look like this. They are not page numbers and must not
-    # be guessed at -- Item 9.7 is not page 9.
-    for h in ["Item 9.7, Item 10.1", "VII.A", "ITEM 9", "Item 6.1, Item 6.2"]:
-        assert parse_hints(h) == []
+def test_numeric_density_lifts_a_real_table():
+    """A heading followed by numbers beats one followed by prose."""
+    prose = "\nRates of Return\n" + "discussion of philosophy\n" * 30
+    table = "\nRates of Return\n" + "Domestic Equity 12.4 11.8 9.2\n" * 30
+    got = find_candidates(prose + table)
+    assert got[0].offset > len(prose) - 1
 
-def test_ignores_dates_and_times_that_look_like_numbers():
-    assert parse_hints("Memo dated April 24, 2026; Item 3 (9:15-9:30 a.m.)") == []
+def test_returns_nothing_when_there_is_nothing():
+    assert find_candidates("minutes of a routine meeting\n" * 200) == []
 
-def test_merges_overlapping_and_adjacent_ranges():
-    assert parse_hints("pp. 21-22, Pages 22-25") == [PageRange(21, 25, "pp. 21-22")]
-
-def test_drops_implausible_spans():
-    # "pp. 22-225" is 204 pages: a real hint, but reading it is not a
-    # targeted read. Task 4 reports these rather than spending on them.
-    assert parse_hints("pp. 22-225") == []
+def test_caps_the_number_of_candidates():
+    text = ("\nAsset Allocation\n" + "1.0 2.0 3.0\n" * 5) * 40
+    assert len(find_candidates(text, max_candidates=6)) <= 6
 ```
 
 - [ ] **Step 2: Run it and watch it fail**
 
-Run: `LLM_MODE=mock pytest tests/test_page_hints.py -v`
-Expected: FAIL, `ModuleNotFoundError: No module named 'page_hints'`
+Run: `LLM_MODE=mock pytest tests/test_section_finder.py -v`
+Expected: FAIL, `ModuleNotFoundError: No module named 'section_finder'`
 
 - [ ] **Step 3: Implement**
 
 ```python
-"""Turn a catalogue entry's free-text page hint into page ranges.
+"""Locate the parts of a long document that might hold a returns table.
 
-Pure: no I/O, no database, no API. All the format variation lives here,
-measured from the 172 real hints the 2026-08-30 catalogue produced.
+Free: pure text, no API, no I/O. That matters because the alternative --
+sending a 1.3 MB document to a model to be told where its tables are --
+costs more than reading the tables.
 
-Page numbers here are the ones PRINTED in the document, which is not the
-same as the PDF's page index -- see targeted_read.resolve_offset.
+Scoring is the whole content of this module. A naive keyword search over a
+real board pack returns 99 hits of which nearly all are prose ("the
+consultant will provide holistic asset allocation advice"). Reading the
+first match reads the wrong slice.
 """
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
 
-MAX_SPAN = 60          # beyond this it is not a targeted read
-MAX_PAGE = 3_000
-
-_RANGE = re.compile(
-    r"(?i)\b(?:pp?\.|pages?)\s*(\d{1,4})\s*(?:[-–]\s*(\d{1,4}))?")
+WINDOW = 30_000          # chars handed to the extractor around a hit
+_HEADINGS = re.compile(
+    r"(?im)^(.{0,80}?)(asset allocation|total fund performance"
+    r"|performance summary|investment performance|rates? of return"
+    r"|manager performance|portfolio performance)(.{0,60})$")
+_NUMBER = re.compile(r"-?\d+\.\d")
 
 
 @dataclass(frozen=True)
-class PageRange:
-    start: int
-    end: int
-    label: str
+class Candidate:
+    offset: int
+    heading: str
+    score: float
 
 
-def parse_hints(text: str) -> list[PageRange]:
+def _numeric_density(text: str) -> float:
+    """Fraction of lines that look like table rows."""
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    if not lines:
+        return 0.0
+    return sum(1 for ln in lines if len(_NUMBER.findall(ln)) >= 2) / len(lines)
+
+
+def find_candidates(text: str, max_candidates: int = 12) -> list[Candidate]:
     if not text:
         return []
-    found: list[PageRange] = []
-    for m in _RANGE.finditer(text):
-        start = int(m.group(1))
-        end = int(m.group(2)) if m.group(2) else start
-        if end < start or start < 1 or end > MAX_PAGE:
+    scored: list[Candidate] = []
+    for m in _HEADINGS.finditer(text):
+        before, term, after = m.group(1), m.group(2), m.group(3)
+        line = m.group(0).strip()
+
+        # A heading is short and mostly the term itself. A sentence that
+        # happens to contain the term is long and has words either side.
+        clutter = len(before.strip()) + len(after.strip())
+        score = 1.0 if clutter <= 4 else 1.0 / (1 + clutter / 10)
+
+        # Numbers just below it are the strongest signal that this is a table.
+        following = text[m.end():m.end() + 4_000]
+        score += 2.0 * _numeric_density(following)
+
+        scored.append(Candidate(offset=m.start(), heading=line, score=score))
+
+    scored.sort(key=lambda c: (-c.score, c.offset))
+    # Drop near-duplicates: one table produces several adjacent headings.
+    kept: list[Candidate] = []
+    for c in scored:
+        if any(abs(c.offset - k.offset) < WINDOW // 2 for k in kept):
             continue
-        if end - start + 1 > MAX_SPAN:
-            continue
-        found.append(PageRange(start, end, m.group(0).strip()))
-    return _merge(found)
+        kept.append(c)
+        if len(kept) >= max_candidates:
+            break
+    return [c for c in kept if c.score >= 0.5]
 
 
-def _merge(ranges: list[PageRange]) -> list[PageRange]:
-    """Overlapping and adjacent ranges become one, keeping the first label."""
-    if not ranges:
-        return []
-    ordered = sorted(ranges, key=lambda r: (r.start, r.end))
-    out = [ordered[0]]
-    for r in ordered[1:]:
-        last = out[-1]
-        if r.start <= last.end + 1:
-            out[-1] = PageRange(last.start, max(last.end, r.end), last.label)
-        else:
-            out.append(r)
-    return out
+def window_for(text: str, candidate: Candidate) -> str:
+    """The slice to hand a model: the heading and what follows it."""
+    start = max(0, candidate.offset - 500)
+    return text[start:start + WINDOW]
 ```
 
 - [ ] **Step 4: Run the tests**
 
-Run: `LLM_MODE=mock pytest tests/test_page_hints.py -v`
+Run: `LLM_MODE=mock pytest tests/test_section_finder.py -v`
 Expected: PASS
 
-- [ ] **Step 5: Check it against the real hints**
+- [ ] **Step 5: Check it against the real documents that motivated it**
 
-Run:
 ```bash
 python -c "
-import database, page_hints
-from sqlalchemy import text
+import database, section_finder
+from database import Document
+from sqlalchemy.orm import undefer
+from sqlalchemy import text as sql
 s = database.SessionLocal()
-rows = s.execute(text(\"SELECT page_hints FROM document_catalogue WHERE page_hints <> '' AND contains <> '[]'\")).fetchall()
-hit = sum(1 for (h,) in rows if page_hints.parse_hints(h))
-print(f'{hit} of {len(rows)} hints yield ranges')
+ids = [r[0] for r in s.execute(sql('''SELECT id FROM documents
+  WHERE octet_length(extracted_text) > 46000
+  ORDER BY octet_length(extracted_text) DESC LIMIT 5''')).fetchall()]
+for did in ids:
+    d = s.query(Document).options(undefer(Document.extracted_text)).get(did)
+    t = d.extracted_text or ''
+    for c in section_finder.find_candidates(t)[:3]:
+        print(f'{did} {c.score:.2f} @{100*c.offset//max(len(t),1):>3}%  {c.heading[:60]}')
 s.close()"
 ```
-Expected: on the order of 110-125 of 172. If it is far below 100, a real format is being missed — print the misses and add it. If it is above 140, the agenda-item guard is leaking; check that `Item 9.7` still yields nothing.
+
+Expected: the top candidate for `inv-202412.pdf` lands near **31% in** (`Asset Allocation, Portfolio Strategy` / `Total Rates of Return (%)`), not on the 1-2% prose mentions. If prose still ranks first, raise the numeric-density weight before continuing — the whole plan depends on this ranking being right.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add page_hints.py tests/test_page_hints.py
-git commit -m "Parse catalogue page hints into ranges"
+git add section_finder.py tests/test_section_finder.py
+git commit -m "Locate returns tables in stored text, free"
 ```
 
 ---
 
-### Task 2: Somewhere to put targeted text that is not on top of existing text
+### Task 2: Somewhere to put what a targeted read finds
 
 **Files:**
-- Modify: `database.py` (add `DocumentPageText` next to `DocumentCatalogue`)
-- Test: `tests/test_targeted_read.py` (schema test only in this task)
+- Modify: `database.py`
+- Test: `tests/test_targeted_extract.py` (schema test only)
 
 **Interfaces:**
-- Consumes: nothing.
-- Produces: `DocumentPageText(document_id, page_start, page_end, text, source, model, cost_usd, created_at)`, unique on `(document_id, page_start, page_end)`. Task 3 writes it.
+- Produces: `DocumentSectionRead(document_id, offset, heading, returns_json, model, cost_usd, created_at)`, unique on `(document_id, offset)`.
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 import database
-from database import Document, DocumentPageText, Plan
+from database import Document, DocumentSectionRead, Plan
 
-def test_targeted_text_is_stored_beside_the_document_not_on_it(tmp_db):
+def test_section_reads_sit_beside_the_document(tmp_db):
     s = database.get_session()
     s.add(Plan(id="mcera", name="MCERA", state="CA")); s.commit()
     d = Document(plan_id="mcera", url="https://x/a.pdf", filename="a.pdf",
-                 extracted_text="pages 1-100 as OCRd long ago")
+                 extracted_text="the whole pack")
     s.add(d); s.commit()
     before = d.extracted_text
 
-    s.add(DocumentPageText(document_id=d.id, page_start=340, page_end=372,
-                           text="the allocation table", source="ocr_targeted"))
-    s.commit()
-    s.expire_all()
+    s.add(DocumentSectionRead(document_id=d.id, offset=200_881,
+                              heading="Total Rates of Return (%)",
+                              returns_json='[{"asset_class":"US Equity","return_pct":12.4}]'))
+    s.commit(); s.expire_all()
 
     assert s.get(Document, d.id).extracted_text == before
-    row = s.query(DocumentPageText).one()
-    assert (row.page_start, row.page_end) == (340, 372)
+    assert s.query(DocumentSectionRead).one().offset == 200_881
     s.close()
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [ ] **Step 2: Run and watch it fail**
 
-Run: `LLM_MODE=mock pytest tests/test_targeted_read.py -v`
-Expected: FAIL, `ImportError: cannot import name 'DocumentPageText'`
+Expected: `ImportError: cannot import name 'DocumentSectionRead'`
 
 - [ ] **Step 3: Add the model**
 
-Place immediately after `DocumentCatalogue` in `database.py`:
+Place after `DocumentCatalogue` in `database.py`:
 
 ```python
-class DocumentPageText(Base):
-    """Text from a specific page range, read because something asked for it.
+class DocumentSectionRead(Base):
+    """Figures read from one located section of a document.
 
-    Separate from ``documents.extracted_text`` on purpose. That column holds
-    whatever the original extraction produced -- for the 354 catalogued
-    documents, pages 1-100, truncated at the old 150,000-character cap. A
-    targeted read of pages 340-372 is a different, later, narrower act, and
-    writing it into the same column would either overwrite material or grow
-    a blob nobody can attribute. Both lose information.
+    Separate from ``summaries.performance_data``, which holds whatever the
+    summariser happened to see in the ~50,000 characters it was given. This
+    holds what a targeted read of the right slice found, and records which
+    slice, so a disagreement between the two is investigable rather than
+    mysterious.
 
-    Unique on (document_id, page_start, page_end) so a re-run is a no-op
-    rather than a second charge for the same pages.
+    ``offset`` is a character position in ``documents.extracted_text`` at the
+    time of the read. Unique with ``document_id`` so a re-run is a no-op
+    rather than a second charge for the same passage.
     """
 
-    __tablename__ = "document_page_text"
+    __tablename__ = "document_section_read"
 
     id = Column(Integer, primary_key=True)
     document_id = Column(Integer, ForeignKey("documents.id"),
                          nullable=False, index=True)
-    page_start = Column(Integer, nullable=False)   # PDF index, 1-based
-    page_end = Column(Integer, nullable=False)
-    text = Column(GzippedText)
-    source = Column(String(32), nullable=False)    # 'ocr_targeted'
+    offset = Column(Integer, nullable=False)
+    heading = Column(String(200))
+    returns_json = Column(Text)          # same shape as summaries.performance_data
     model = Column(String(64))
     cost_usd = Column(Numeric(10, 6))
     created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
 
     __table_args__ = (
-        UniqueConstraint("document_id", "page_start", "page_end",
-                         name="uq_page_text_span"),
+        UniqueConstraint("document_id", "offset", name="uq_section_read"),
     )
 ```
 
-- [ ] **Step 4: Run the test**
-
-Run: `LLM_MODE=mock pytest tests/test_targeted_read.py -v`
-Expected: PASS
+- [ ] **Step 4: Run the test** — Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add database.py tests/test_targeted_read.py
-git commit -m "Store targeted page text beside the document, never on it"
+git add database.py tests/test_targeted_extract.py
+git commit -m "Store targeted section reads beside the document"
 ```
 
 ---
 
-### Task 3: Resolve printed page numbers to PDF indices, and read them
+### Task 3: Extract returns from a chosen window
 
 **Files:**
-- Create: `targeted_read.py`
-- Test: `tests/test_targeted_read.py` (extend)
+- Create: `targeted_extract.py`
+- Test: `tests/test_targeted_extract.py` (extend)
 
 **Interfaces:**
-- Consumes: `page_hints.PageRange` (Task 1), `DocumentPageText` (Task 2).
-- Produces:
-  - `resolve_offset(pdf_path: str, probe_pages: list[int]) -> int | None` — how far the PDF index runs ahead of the printed number, or `None` when it cannot be established.
-  - `read_range(pdf_path, start, end, model) -> tuple[str, Decimal]` — OCR of a PDF-index range.
+- Consumes: `section_finder.Candidate`, `DocumentSectionRead`.
+- Produces: `extract_window(text: str, candidate, model: str) -> tuple[dict, Decimal]`.
 
-**Why an offset step exists at all:** a board pack's cover, agenda and tabs are unnumbered, so "page 22" in a contents entry is rarely PDF page 22. Reading the unadjusted index returns the wrong pages and stores them as if they were right — a silent corruption, and the expensive kind, because nobody re-reads a page they believe they already have.
+Reuse the tool-use shape from `extract_performance_reports.py:190-215` — system prompt, `tools=[SCHEMA]`, `tool_choice={"type":"tool", ...}`, read `block.input` from the `tool_use` block.
+
+**Two things that file learned the hard way, and this must not repeat:**
+- `MAX_OUTPUT_TOKENS` must be generous (that file uses 16384). At 4096 it silently truncated every call and saved thirty documents with zero rows and no error.
+- Check `msg.stop_reason == "max_tokens"` and surface it, rather than trusting the payload.
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 from decimal import Decimal
-import targeted_read
+import targeted_extract
+from section_finder import Candidate
 
-def test_offset_is_found_from_a_printed_folio(monkeypatch):
-    # PDF page 25 carries the printed folio "22" -> offset 3
-    monkeypatch.setattr(targeted_read, "_ocr_single_page",
-                        lambda p, i: ("... quarterly review ...\n22\n", Decimal("0.013")))
-    assert targeted_read.resolve_offset("x.pdf", [25]) == 3
+def test_returns_parsed_rows_and_cost(monkeypatch):
+    monkeypatch.setattr(targeted_extract, "_call_model", lambda w, m: (
+        {"returns": [{"asset_class": "US Equity", "return_pct": 12.4,
+                      "period": "FY2026"}]}, Decimal("0.004")))
+    data, cost = targeted_extract.extract_window(
+        "…", Candidate(200_881, "Total Rates of Return (%)", 2.4), "m")
+    assert data["returns"][0]["asset_class"] == "US Equity"
+    assert cost == Decimal("0.004")
 
-def test_offset_is_none_when_no_folio_is_found(monkeypatch):
-    monkeypatch.setattr(targeted_read, "_ocr_single_page",
-                        lambda p, i: ("no numbers here at all", Decimal("0.013")))
-    assert targeted_read.resolve_offset("x.pdf", [25]) is None
-
-def test_unresolved_offset_reads_nothing(monkeypatch):
-    """Refusing to guess is the whole point: a wrong offset stores wrong
-    pages under a correct-looking label."""
-    monkeypatch.setattr(targeted_read, "resolve_offset", lambda *a, **k: None)
-    called = []
-    monkeypatch.setattr(targeted_read, "read_range",
-                        lambda *a, **k: called.append(a) or ("", Decimal(0)))
-    out = targeted_read.read_target("x.pdf", start=22, end=23, model="m")
-    assert out.status == "offset_unresolved"
-    assert called == []
+def test_a_truncated_response_raises_rather_than_saving_nothing(monkeypatch):
+    """extract_performance_reports saved 30 documents with zero rows and no
+    error when max_tokens cut the tool call short. A silent empty result is
+    worse than a failure, because nobody re-runs it."""
+    def truncated(window, model):
+        raise targeted_extract.ResponseTruncated("in=58236 out=4096")
+    monkeypatch.setattr(targeted_extract, "_call_model", truncated)
+    import pytest
+    with pytest.raises(targeted_extract.ResponseTruncated):
+        targeted_extract.extract_window("…", Candidate(0, "x", 1.0), "m")
 ```
 
 - [ ] **Step 2: Run and watch it fail**
 
-Run: `LLM_MODE=mock pytest tests/test_targeted_read.py -v`
-Expected: FAIL, `ModuleNotFoundError: No module named 'targeted_read'`
-
 - [ ] **Step 3: Implement**
 
-```python
-"""Read the pages a catalogue entry points at, and only those.
-
-Reuses extractor's vision OCR per page. The one thing it adds is the offset:
-"page 22" in a contents entry means the printed folio, and a board pack's
-cover, agenda and tab dividers are unnumbered, so the PDF index runs ahead.
-Reading the unadjusted index returns plausible-looking wrong pages and stores
-them as if correct -- which nobody re-checks, because the row exists.
-
-When the offset cannot be established, this reads nothing and says so.
-"""
-from __future__ import annotations
-
-import re
-from dataclasses import dataclass
-from decimal import Decimal
-
-MAX_OFFSET = 40
-_FOLIO = re.compile(r"(?m)^\s*(\d{1,4})\s*$")
-
-
-@dataclass
-class ReadResult:
-    status: str                 # 'ok' | 'offset_unresolved' | 'empty'
-    text: str = ""
-    cost: Decimal = Decimal(0)
-    offset: int | None = None
-
-
-def _ocr_single_page(pdf_path: str, index: int) -> tuple[str, Decimal]:
-    """One page, one vision call. Split out so tests can replace it."""
-    import fitz
-    from costs import cost_usd
-    from extractor import _ocr_page_image        # existing per-page helper
-    doc = fitz.open(pdf_path)
-    try:
-        text, usage = _ocr_page_image(doc[index - 1])
-        return text, cost_usd("claude-sonnet-4-6", usage)
-    finally:
-        doc.close()
-
-
-def resolve_offset(pdf_path: str, probe_pages: list[int]) -> int | None:
-    """PDF index minus printed folio, or None when no folio is legible."""
-    for index in probe_pages:
-        text, _ = _ocr_single_page(pdf_path, index)
-        folios = [int(m) for m in _FOLIO.findall(text)]
-        for folio in folios:
-            offset = index - folio
-            if 0 <= offset <= MAX_OFFSET:
-                return offset
-    return None
-
-
-def read_range(pdf_path: str, start: int, end: int,
-               model: str) -> tuple[str, Decimal]:
-    parts, total = [], Decimal(0)
-    for index in range(start, end + 1):
-        text, cost = _ocr_single_page(pdf_path, index)
-        parts.append(text)
-        total += cost
-    return "\n".join(parts), total
-
-
-def read_target(pdf_path: str, start: int, end: int, model: str) -> ReadResult:
-    """Printed page `start`-`end` -> text, or a status explaining why not."""
-    offset = resolve_offset(pdf_path, [start, start + 1])
-    if offset is None:
-        return ReadResult(status="offset_unresolved")
-    text, cost = read_range(pdf_path, start + offset, end + offset, model)
-    if not text.strip():
-        return ReadResult(status="empty", cost=cost, offset=offset)
-    return ReadResult(status="ok", text=text, cost=cost, offset=offset)
-```
-
-**`extractor._ocr_page_image` does not exist yet — verified.** The per-page render-and-call is inline in `_extract_pdf_ocr` at `extractor.py:193-210`: it builds a pixmap with `page.get_pixmap(matrix=mat)`, base64-encodes it as PNG, and calls `client.messages.create`. Your first move in this task is to lift lines 193-210's body into
+Mirror `extract_performance_reports.py`. Required elements:
 
 ```python
-def _ocr_page_image(page) -> tuple[str, object]:
-    """One rendered page -> (text, usage). Extracted from _extract_pdf_ocr so
-    targeted reads can call a single page without the 100-page loop."""
+MODEL = "claude-haiku-4-5-20251001"   # a 30k window, one table: Haiku is enough
+MAX_OUTPUT_TOKENS = 16_384
+
+
+class ResponseTruncated(RuntimeError):
+    """The model hit max_tokens. The payload is incomplete and must not be
+    saved as if it were a result."""
 ```
 
-leaving `_extract_pdf_ocr` calling it in the same order with identical behaviour. Run `LLM_MODE=mock pytest tests/ -q` after that refactor and before writing anything new — the existing OCR tests are the proof it is behaviour-preserving, and separating the two changes is what makes a later bisect readable.
+The tool schema records a list of `{asset_class, return_pct, period, benchmark_pct}` — the same shape as `summaries.performance_data`, so `scripts/build_performance_view.py` can consume it with no new parser.
 
-- [ ] **Step 4: Run the tests**
-
-Run: `LLM_MODE=mock pytest tests/test_targeted_read.py -v`
-Expected: PASS
+- [ ] **Step 4: Run the tests** — Expected: PASS
 
 - [ ] **Step 5: Commit**
-
-```bash
-git add targeted_read.py tests/test_targeted_read.py
-git commit -m "Resolve printed page numbers to PDF indices before reading"
-```
 
 ---
 
 ### Task 4: The CLI — priced worklist, approval, hard budget
 
 **Files:**
-- Create: `scripts/read_targets.py`
-- Test: `tests/test_targeted_read.py` (extend)
+- Create: `scripts/read_sections.py`
+- Test: `tests/test_targeted_extract.py` (extend)
 
-**Interfaces:**
-- Consumes: everything above.
-- Produces: `python -m scripts.read_targets [--approve] [--budget N] [--limit N] [--plan ID]`
+Model it on `scripts/catalogue.py`, which is the reference for the no-spend contract.
 
-Model it on `scripts/catalogue.py` — same structure, same guarantees, same output shape. That file is the reference for the no-spend contract.
+Behaviour:
+- Selects documents whose stored text exceeds `summarizer.SMART_TRUNCATE_TARGET` and that have no `DocumentSectionRead` row.
+- Orders newest-first by `meeting_date`, nulls last.
+- Runs `find_candidates` (free) and reports: documents, candidate windows, estimated cost, and separately the count with **no** candidates — those are reported, never guessed at.
+- Without `--approve`: prints the worklist, prints `Nothing spent.`, returns 0, constructs no client.
+- With `--approve`: extracts the top candidate per document, writes a `DocumentSectionRead`, commits per document, checks `--budget` before each call.
+- `--top N` to read more than one window per document (default 1).
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the failing tests** — mirror `tests/test_catalogue.py`: no-client-on-unapproved-path; budget is a hard stop; already-read documents are skipped; `extracted_text` unchanged after a run.
 
-```python
-def test_without_approve_no_ocr_is_reachable(session, monkeypatch, capsys):
-    _catalogued_doc(session, hints="pp. 22-23")
-    monkeypatch.setattr(targeted_read, "_ocr_single_page",
-                        lambda *a: (_ for _ in ()).throw(
-                            AssertionError("OCR reached on a no-spend path")))
-    monkeypatch.setattr("sys.argv", ["read_targets"])
-    assert read_targets.main() == 0
-    assert "Nothing spent" in capsys.readouterr().out
-
-def test_worklist_prices_pages_not_documents(session, monkeypatch, capsys):
-    _catalogued_doc(session, hints="pp. 22-23")       # 2 pages
-    _catalogued_doc(session, hints="Item 9.7")        # unparseable
-    monkeypatch.setattr("sys.argv", ["read_targets"])
-    read_targets.main()
-    out = capsys.readouterr().out
-    assert "2 pages" in out
-    assert "1 document with hints that do not parse" in out
-
-def test_budget_stops_the_run(session, monkeypatch):
-    for _ in range(10):
-        _catalogued_doc(session, hints="pp. 1-5")
-    monkeypatch.setattr(targeted_read, "read_target",
-                        lambda *a, **k: targeted_read.ReadResult(
-                            status="ok", text="x", cost=Decimal("0.10"), offset=0))
-    monkeypatch.setattr("sys.argv",
-                        ["read_targets", "--approve", "--budget", "0.30"])
-    read_targets.main()
-    assert 0 < session.query(DocumentPageText).count() <= 4
-```
-
-- [ ] **Step 2: Run and watch it fail**
-
-Run: `LLM_MODE=mock pytest tests/test_targeted_read.py -v`
-Expected: FAIL on the import of `scripts.read_targets`
+- [ ] **Step 2: Run and watch them fail**
 
 - [ ] **Step 3: Implement**
 
-Follow `scripts/catalogue.py` closely. Required behaviour:
-
-- Selects catalogue rows where `contains <> '[]'` and `page_hints <> ''`, whose document has a local file, and which have no `DocumentPageText` row covering the same span.
-- Runs `page_hints.parse_hints` on each; documents whose hints yield no ranges are **counted and reported, never guessed at**.
-- Orders newest-first by `documents.meeting_date`, nulls last — the spec's date-as-prioritiser.
-- Prints a priced worklist: documents, total pages, estimated cost at 1.3c/page, and separately the count whose hints did not parse.
-- Without `--approve`: prints the worklist, prints `Nothing spent.`, returns 0, and constructs no client.
-- With `--approve`: reads each range, stores a `DocumentPageText` row, commits per document, and checks `--budget` before each document.
-- Reports `offset_unresolved` documents separately at the end — they are the ones needing a human, not a retry.
-
-- [ ] **Step 4: Run the tests**
-
-Run: `LLM_MODE=mock pytest tests/ -q`
-Expected: PASS, ~656 passed
+- [ ] **Step 4: Run the full suite** — Expected: PASS, ~665 passed
 
 - [ ] **Step 5: Price the real run**
 
-Run: `python -m scripts.read_targets`
-Expected: a worklist of roughly 119 documents and on the order of 600-900 pages (median span 5, plus multi-range documents), estimated at **$8-12** — against $375 to read the same documents whole. If the estimate lands far above $20, the span cap in Task 1 is too loose; check what is being included before spending anything.
+Run: `python -m scripts.read_sections`
+Expected: on the order of 1,014 documents. At roughly 7,500 input tokens per 30k-char window plus ~800 output, Haiku puts this near **$10-15** for the whole corpus. If the estimate exceeds $30, the window or the candidate cap is too generous — fix that before spending.
 
 - [ ] **Step 6: Commit**
 
+---
+
+### Task 5: Verify on real documents, then a bounded first run
+
+- [ ] **Step 1: Read three documents from three plans**
+
 ```bash
-git add scripts/read_targets.py tests/test_targeted_read.py
-git commit -m "Priced worklist and approval gate for targeted reads"
+python -m scripts.read_sections --limit 3 --approve --budget 0.20
 ```
+
+- [ ] **Step 2: Check the figures against the source**
+
+For each, print the stored `returns_json` and open the document at that offset. **The numbers must appear in the document at that position.** This is the step that catches a plausible-looking hallucination, and it is the reason the offset is stored.
+
+- [ ] **Step 3: Compare against what the summariser got**
+
+For the same documents, print `summaries.performance_data`. The targeted read should find *more* — that is the entire premise. If it finds the same or less, stop: the ranking in Task 1 is picking the wrong window and no amount of running it wider will help.
+
+- [ ] **Step 4: Confirm nothing was overwritten** — original `extracted_text` character counts unchanged.
+
+- [ ] **Step 5: Rebuild the performance view and measure the gain**
+
+```bash
+python -m scripts.build_performance_view
+```
+
+Record plans with asset-class detail before and after. Baseline today: **110 of 148**.
+
+- [ ] **Step 6: Commit the verification**, recording the three documents, what was found, and the before/after coverage.
 
 ---
 
-### Task 5: Verify against three real documents before any bulk run
+### Task 6: Phase B — scanned documents (deferred, do not start here)
 
-**Files:**
-- Test: manual, recorded in the commit message.
+The original version of this plan covered the 354 scanned documents: parsing free-text page hints from `document_catalogue`, resolving the printed folio against the PDF page index, and OCR-ing only the resolved range. That work is still valid and still wanted, and its detail is preserved in git at `67cf502`.
 
-Nothing here has touched a real PDF. The offset logic in particular is a hypothesis about how board packs paginate, and it is the piece that fails silently.
+It is deferred behind Phase A for three reasons, all measured: it is **1,014 documents against 354**; it costs **nothing per document to locate** where Phase B needs OCR to find anything at all; and it has **no page-offset problem**, which is the one part of Phase B that fails silently and expensively.
 
-- [ ] **Step 1: Pick three documents with parseable hints, from different plans**
-
-```bash
-python -c "
-import database, page_hints
-from sqlalchemy import text
-s = database.SessionLocal()
-rows = s.execute(text('''
-  SELECT dc.document_id, d.plan_id, d.filename, dc.page_hints
-  FROM document_catalogue dc JOIN documents d ON d.id = dc.document_id
-  WHERE dc.contains <> '[]' AND dc.page_hints <> '' AND d.local_path IS NOT NULL
-''')).fetchall()
-seen = set()
-for did, plan, fn, h in rows:
-    if plan in seen: continue
-    r = page_hints.parse_hints(h)
-    if r:
-        seen.add(plan)
-        print(did, plan, fn, r[:2])
-    if len(seen) == 3: break
-s.close()"
-```
-
-- [ ] **Step 2: Read one range from each, approved, with a tight budget**
-
-```bash
-python -m scripts.read_targets --limit 3 --approve --budget 0.50
-```
-
-- [ ] **Step 3: Confirm the pages are the right pages**
-
-For each result, print the stored text and check it against what the hint promised. A hint saying "Asset Allocation Report - Page 36" must return text about asset allocation. **If it returns an unrelated page, the offset is wrong** — stop, and do not run in bulk. That is the failure this task exists to catch, and it will not announce itself.
-
-- [ ] **Step 4: Confirm nothing was overwritten**
-
-Substitute the three document ids from Step 1:
-
-```bash
-python -c "
-import database
-from database import Document, DocumentPageText
-from sqlalchemy.orm import undefer
-IDS = [111, 222, 333]        # <- the three ids printed by Step 1
-s = database.SessionLocal()
-for d in s.query(Document).options(undefer(Document.extracted_text)).filter(Document.id.in_(IDS)):
-    n = s.query(DocumentPageText).filter_by(document_id=d.id).count()
-    print(f'{d.id}: {len(d.extracted_text or \"\"):,} chars still in documents, {n} targeted rows alongside')
-s.close()"
-```
-
-Every one must still report its original character count — the same number as before the run. A shrunk count means a targeted read wrote over the original extraction, which is the constraint this whole design exists to hold.
-
-- [ ] **Step 5: Commit the verification**
-
-```bash
-git commit --allow-empty -m "Verify targeted reads return the promised pages"
-```
-
-Record in the message: the three documents, what each hint promised, and what came back.
+Do not start Task 6 until Task 5's before/after number exists. If Phase A moves coverage from 110 plans to something near 140, Phase B's remaining value is small and should be re-priced before it is built.
