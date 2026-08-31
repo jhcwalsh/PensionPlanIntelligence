@@ -38,7 +38,7 @@ So the ceiling on performance coverage is not fetching, and not the scanned tail
 - **Nothing is discarded.** No task writes to `documents.extracted_text` or deletes any row. Extracted figures go to their own table; a test asserts `extracted_text` is byte-identical after a run.
 - **No paid call is reachable without `--approve`.** Follow `scripts/catalogue.py`: the client constructor is never entered on an unapproved path, and the test asserts *that*, not that cost came out zero.
 - **`--budget` is a hard stop**, checked before each call against spend so far.
-- **`OPENROUTER_API_KEY` is a new secret** and the user creates it — not you. It belongs in `.env` (gitignored) and, when this runs from CI, in GitHub Actions secrets. `llm_openrouter` raises at import of its client if the variable is unset; it must never fall back to the Anthropic key or to an unauthenticated call.
+- **`OPENROUTER_API_KEY` lives in `.env` (gitignored) and nowhere else.** This is a local one-off backfill over documents that already exist — no workflow runs it, and CI never needs the key because the tests monkeypatch `_raw_call`. Do not add it to GitHub Actions secrets; if a later cadence ever calls this path, that is when it earns one. `llm_openrouter` raises if the variable is unset; it must never fall back to the Anthropic key or to an unauthenticated call.
 - **Every paid call is recorded** via `database.record_api_usage`, the same as every other spending path in this repo. A run that produces rows but no `api_usage` entries is a bug, not a saving.
 - **Never write an ALTER TABLE migration system.** Add the model, run `init_db()`.
 - **`documents.extracted_text` is `deferred()`** — bulk readers need `.options(undefer(...))`; never loop reading it without one.
