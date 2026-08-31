@@ -1840,8 +1840,8 @@
     "abbreviation": "SDCERS",
     "state": "CA",
     "aum_billions": 12.0,
-    "website": "https://www.sdcers.org",
-    "materials_url": "https://www.sdcers.org/about/board-of-administration/board-meeting-agendas-minutes",
+    "website": "https://www.sdcers.gov",
+    "materials_url": "https://www.sdcers.gov/about/board-of-administration/board-meeting-agendas-minutes",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
@@ -1850,9 +1850,9 @@
       "minutes"
     ],
     "extra_pages": [
-      "https://www.sdcers.org/board-meeting-agendas/board-agenda"
+      "https://www.sdcers.gov/board-meeting-agendas/board-agenda"
     ],
-    "notes": "Main board-meeting-agendas-minutes page has no direct links; board agendas are on /board-meeting-agendas/board-agenda",
+    "notes": "Site migrated sdcers.org -> sdcers.gov in 2026; the old .org URLs soft-404 to the homepage, which is why 30 stored documents became unfetchable. Agendas now live in OnBase at board.sdcers.gov/OnBaseAgendaOnline, whose list populates only after a search is submitted and whose TLS chain omits its intermediate (requests fails; a browser recovers). Discovery there needs an interaction step, not just rendering.",
     "fiscal_year_end": "06-30",
     "cafr_url_template": "https://content.sdcers.org/wp-content/uploads/2024/12/fy-{year}-sdcers-acfr.pdf"
   },
