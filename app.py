@@ -3377,24 +3377,30 @@ def _collated_performance_rows() -> list[dict]:
     return queries.collated_performance_rows(get_db_session())
 
 
-def _percent_styler(df, numeric_cols):
-    """Returns as percentages to one decimal, with blanks where there is no
-    figure.
+def _percent_display(df, numeric_cols):
+    """A display copy with returns as "12.6%" strings and blanks for missing.
 
-    These are returns: the extra digits the extractors happen to carry
-    through (10.55, 6.72) are false precision, and a bare 12.6 beside a
-    column header that does not say "%" is ambiguous. `na_rep=""` is the
-    reason this is a Styler rather than `NumberColumn(format=...)` — that
-    path renders a missing value as the word "None", and these tables are
-    mostly empty by nature.
+    Returns a *copy*: callers keep the numeric frame for the CSV download, so
+    a spreadsheet still gets numbers.
+
+    Pre-formatted strings rather than `NumberColumn(format="%.1f%%")`,
+    because that renders a missing value as the literal word "None" and
+    these tables are mostly empty by nature — a plan reports four asset
+    classes, not thirteen. A Styler with `na_rep=""` looks like the fix and
+    is not: `st.dataframe` honours a Styler's number format but still writes
+    "None" for the gaps, and a blanket `.format(na_rep="")` also turns the
+    integer "2023" into "2023.000000". Both were tried against the real
+    tables before this.
+
+    The cost is that these columns sort as text. Worth it: a column of
+    "None" is unreadable, and the numeric frame is one click away in the CSV.
     """
-    cols = [c for c in numeric_cols if c in df.columns]
-    return (df.style
-            # Blank every missing value, not only the numeric ones: a handful
-            # of rows carry no period label or no date, and "None" in a text
-            # cell reads as a bug rather than as "we don't know".
-            .format(na_rep="")
-            .format("{:.1f}%", subset=cols, na_rep=""))
+    import pandas as pd          # imported per-function, as elsewhere here
+
+    out = df.copy()
+    for c in (c for c in numeric_cols if c in out.columns):
+        out[c] = out[c].map(lambda v: "" if pd.isna(v) else f"{v:.1f}%")
+    return out
 
 
 def _render_collated_performance():
@@ -3456,12 +3462,7 @@ def _render_collated_performance():
         df[c] = pd.to_numeric(df[c], errors="coerce")
 
     st.dataframe(
-        # A Styler, not NumberColumn's format=, because most cells in this
-        # table are empty — a plan reports four asset classes, not thirteen —
-        # and NumberColumn renders a missing number as the literal word
-        # "None". Hundreds of them read as an error rather than as absence.
-        # na_rep is the only way to get a blank, and it lives on the Styler.
-        _percent_styler(df, class_cols),
+        _percent_display(df, class_cols),
         width="stretch", hide_index=True,
         column_config={
             # Period labels run long and verbatim — "FY2025 (year ending June
@@ -3532,7 +3533,7 @@ def page_performance():
         # decimal, blanks rather than "None". Two performance tables on one
         # page formatting their numbers differently is its own small lie
         # about whether they mean the same thing.
-        _percent_styler(df, [label for _, label in queries.PERFORMANCE_CLASSES]),
+        _percent_display(df, [label for _, label in queries.PERFORMANCE_CLASSES]),
         width="stretch",
         hide_index=True,
         column_config={
