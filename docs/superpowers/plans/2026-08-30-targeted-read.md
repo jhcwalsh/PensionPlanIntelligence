@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python, SQLAlchemy, **DeepSeek V4 Flash via OpenRouter** (OpenAI-compatible tool calling), `costs` for pricing, PyMuPDF for Phase B.
 
-**Why not Anthropic here.** This step is mechanical: a schema-constrained read of one 30,000-character window. DeepSeek V4 Flash costs **$0.068/M input and $0.168/M output** against Haiku 4.5's $1.00/$5.00 — about a twentieth, which takes the full 1,014-document run from **$11.65 to $0.65**. It supports `tools`/`tool_choice` and JSON-schema structured output, which the design depends on, and OpenRouter's **Exacto** routing mode optimises for tool-calling accuracy specifically.
+**Why not Anthropic here.** This step is mechanical: a schema-constrained read of one 30,000-character window. DeepSeek V4 Flash costs **$0.0886/M input and $0.1772/M output** against Haiku 4.5's $1.00/$5.00 — about a twentieth, which takes the full 1,014-document run from **$11.65 to $0.82**. (Prices read from OpenRouter's live `/models` catalogue on 2026-08-30; an earlier draft of this plan quoted $0.068/$0.168, which was stale.) It supports `tools`/`tool_choice` and JSON-schema structured output, which the design depends on, and OpenRouter's **Exacto** routing mode optimises for tool-calling accuracy specifically.
 
 Deliberately scoped to this extractor. Summarising stays on Anthropic: that text feeds the briefings people read, and swapping it is a quality decision needing its own comparison, not a cost decision.
 
@@ -358,8 +358,8 @@ def test_usage_is_translated_not_passed_through():
     adapted = llm_openrouter.adapt_usage(raw)
     cost = costs.cost_usd(llm_openrouter.MODEL, adapted)
     assert cost > 0
-    # 7500 in @ $0.068/M + 800 out @ $0.168/M
-    assert Decimal("0.0006") < cost < Decimal("0.0007")
+    # 7500 in @ $0.0886/M + 800 out @ $0.1772/M = $0.00080628
+    assert Decimal("0.0008") < cost < Decimal("0.00081")
 
 
 def test_the_model_has_a_price():
@@ -402,10 +402,13 @@ Expected: FAIL, `ModuleNotFoundError: No module named 'llm_openrouter'`
 In `costs.py`, alongside the Anthropic entries:
 
 ```python
-    # OpenRouter, DeepSeek V4 Flash. No prompt caching on this route, so the
-    # cache columns are zero rather than guessed -- a wrong cache price would
-    # under-report exactly like the usage-name mismatch does.
-    "deepseek/deepseek-v4-flash": _p("0.068", "0.168", "0", "0"),
+    # OpenRouter, DeepSeek V4 Flash. Both cache columns are zero deliberately.
+    # DeepSeek does have a cache-read price (~$0.0177/M), but adapt_usage
+    # reports every prompt token as uncached, so each call is priced at the
+    # full input rate. That over-states a cached call and never under-states
+    # one -- the safe direction, and the opposite of the usage-name mismatch
+    # this whole module exists to prevent.
+    "deepseek/deepseek-v4-flash": _p("0.0886", "0.1772", "0", "0"),
 ```
 
 - [ ] **Step 4: Implement the client**
@@ -672,7 +675,7 @@ Behaviour:
 
 Run: `python -m scripts.read_sections`
 
-Expected: on the order of 1,014 documents. At roughly 7,500 input tokens per 30k-char window plus ~800 output, DeepSeek V4 Flash puts the whole corpus near **$0.65** — call it **$0.70** allowing OpenRouter's 5.5% card fee on credit purchases. The same run on Haiku 4.5 would have been $11.65.
+Expected: on the order of 1,014 documents. At roughly 7,500 input tokens per 30k-char window plus ~800 output, DeepSeek V4 Flash puts the whole corpus near **$0.82** — call it **$0.87** allowing OpenRouter's 5.5% card fee on credit purchases. The same run on Haiku 4.5 would have been $11.65.
 
 Two numbers to check rather than one, because the cheap model changes what a wrong estimate means. If the estimate exceeds **$3**, the window or the candidate cap is too generous — fix that before spending. If it comes out below **$0.10**, the worklist is far smaller than 1,014 documents and the *selection* is wrong; do not let a comfortable price hide a query that found nothing.
 
@@ -688,7 +691,7 @@ Two numbers to check rather than one, because the cheap model changes what a wro
 python -m scripts.read_sections --limit 3 --approve --budget 0.05
 ```
 
-Three windows on DeepSeek is about **$0.003**. The budget is a ceiling, not an estimate — if the run stops on it, something is calling the model far more often than once per document.
+Three windows on DeepSeek is about **$0.0024**. The budget is a ceiling, not an estimate — if the run stops on it, something is calling the model far more often than once per document.
 
 - [ ] **Step 2: Check the figures against the source**
 
