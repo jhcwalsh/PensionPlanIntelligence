@@ -81,12 +81,18 @@ def _estimate_cost(n_windows: int) -> Decimal:
                         + Decimal(800) * price.output) / costs.MILLION
 
 
-def _worklist(docs, top: int):
-    """Rank every document for free. Returns (worklist, n_without_candidates).
+def _worklist(docs, top: int, limit: int | None = None):
+    """Rank documents for free. Returns (worklist, n_without_candidates).
 
     Documents with no candidate are counted and reported, never handed an
     arbitrary window -- that would spend money to extract nothing and look
     like a model failure rather than a document without a returns table.
+
+    ``limit`` counts documents that *have* candidates, and stops the scan
+    once it has that many. Limiting in SQL instead would cut before ranking,
+    and the three newest documents in this corpus all have no candidate --
+    so `--limit 3` read nothing at all, which is a verification run that
+    verifies nothing.
     """
     work, blank = [], 0
     for doc in docs:
@@ -98,6 +104,8 @@ def _worklist(docs, top: int):
             blank += 1
             continue
         work.append((doc, text, cands))
+        if limit and len(work) >= limit:
+            break
     return work, blank
 
 
@@ -110,21 +118,21 @@ def main() -> int:
     ap.add_argument("--budget", type=float, default=2.0,
                     help="hard ceiling in USD; the run stops rather than exceeding it")
     ap.add_argument("--limit", type=int,
-                    help="only consider the first N documents")
+                    help="read at most N documents that have a candidate "
+                         "section (counts readable documents, not scanned ones)")
     ap.add_argument("--top", type=int, default=1,
                     help="windows to read per document (default 1)")
     args = ap.parse_args()
 
     session = database.SessionLocal()
     try:
-        q = backlog_documents(session)
-        if args.limit:
-            q = q.limit(args.limit)
-        work, blank = _worklist(q.all(), args.top)
+        work, blank = _worklist(backlog_documents(session).yield_per(50),
+                                args.top, args.limit)
 
         n_windows = sum(len(c) for _, _, c in work)
         if blank:
-            console.print(f"[yellow]{blank}[/yellow] long documents have "
+            scope = "scanned so far" if args.limit else "in the corpus"
+            console.print(f"[yellow]{blank}[/yellow] long documents {scope} have "
                           f"no candidate section — reported, not guessed at")
         if not work:
             console.print("Nothing to read — no truncated document has a "
