@@ -66,9 +66,15 @@ def call_tool(system: str, user: str, schema: dict,
         tools=[{"type": "function",
                 "function": {"name": tool_name, "parameters": schema}}],
         tool_choice={"type": "function", "function": {"name": tool_name}},
-        # Route for tool-calling accuracy rather than price: the whole design
-        # rests on the tool call being well-formed.
-        extra_body={"provider": {"sort": "throughput"}, "route": "exacto"},
+        # The whole design rests on the tool call being well-formed, so route
+        # only to providers that actually implement the parameters sent --
+        # without this, OpenRouter may fall back to one that ignores `tools`
+        # and returns prose, which arrives here as "no tool call".
+        #
+        # An earlier draft asked for route="exacto". OpenRouter rejects it:
+        # `route` accepts only "fallback", and no exacto variant of this model
+        # exists in the catalogue. Naming a feature does not summon it.
+        extra_body={"provider": {"require_parameters": True}},
     )
     choice = resp.choices[0]
     usage = adapt_usage(resp.usage)

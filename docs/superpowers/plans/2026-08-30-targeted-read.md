@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python, SQLAlchemy, **DeepSeek V4 Flash via OpenRouter** (OpenAI-compatible tool calling), `costs` for pricing, PyMuPDF for Phase B.
 
-**Why not Anthropic here.** This step is mechanical: a schema-constrained read of one 30,000-character window. DeepSeek V4 Flash costs **$0.0886/M input and $0.1772/M output** against Haiku 4.5's $1.00/$5.00 — about a twentieth, which takes the full run from **$9.30 to $0.41**. (Prices read from OpenRouter's live `/models` catalogue on 2026-08-30; an earlier draft of this plan quoted $0.068/$0.168, which was stale.) It supports `tools`/`tool_choice` and JSON-schema structured output, which the design depends on, and OpenRouter's **Exacto** routing mode optimises for tool-calling accuracy specifically.
+**Why not Anthropic here.** This step is mechanical: a schema-constrained read of one 30,000-character window. DeepSeek V4 Flash costs **$0.0886/M input and $0.1772/M output** against Haiku 4.5's $1.00/$5.00 — about a twentieth, which takes the full run from **$9.30 to $0.41**. (Prices read from OpenRouter's live `/models` catalogue on 2026-08-30; an earlier draft of this plan quoted $0.068/$0.168, which was stale.) It supports `tools`/`tool_choice` and JSON-schema structured output, which the design depends on, confirmed against the live catalogue's `supported_parameters`. Routing asks for `provider.require_parameters` so only providers that actually implement those parameters are used. (An earlier draft asked for `route: "exacto"`; OpenRouter rejects it — `route` accepts only `"fallback"`, and the catalogue has no exacto variant of this model.)
 
 Deliberately scoped to this extractor. Summarising stays on Anthropic: that text feeds the briefings people read, and swapping it is a quality decision needing its own comparison, not a cost decision.
 
@@ -482,9 +482,11 @@ def call_tool(system: str, user: str, schema: dict,
         tools=[{"type": "function",
                 "function": {"name": tool_name, "parameters": schema}}],
         tool_choice={"type": "function", "function": {"name": tool_name}},
-        # Route for tool-calling accuracy rather than price: the whole design
-        # rests on the tool call being well-formed.
-        extra_body={"provider": {"sort": "throughput"}, "route": "exacto"},
+        # The whole design rests on the tool call being well-formed, so route
+        # only to providers that actually implement the parameters sent --
+        # without this, OpenRouter may fall back to one that ignores `tools`
+        # and returns prose, which arrives here as "no tool call".
+        extra_body={"provider": {"require_parameters": True}},
     )
     choice = resp.choices[0]
     usage = adapt_usage(resp.usage)
