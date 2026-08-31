@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python, SQLAlchemy, **DeepSeek V4 Flash via OpenRouter** (OpenAI-compatible tool calling), `costs` for pricing, PyMuPDF for Phase B.
 
-**Why not Anthropic here.** This step is mechanical: a schema-constrained read of one 30,000-character window. DeepSeek V4 Flash costs **$0.0886/M input and $0.1772/M output** against Haiku 4.5's $1.00/$5.00 — about a twentieth, which takes the full 1,014-document run from **$11.65 to $0.82**. (Prices read from OpenRouter's live `/models` catalogue on 2026-08-30; an earlier draft of this plan quoted $0.068/$0.168, which was stale.) It supports `tools`/`tool_choice` and JSON-schema structured output, which the design depends on, and OpenRouter's **Exacto** routing mode optimises for tool-calling accuracy specifically.
+**Why not Anthropic here.** This step is mechanical: a schema-constrained read of one 30,000-character window. DeepSeek V4 Flash costs **$0.0886/M input and $0.1772/M output** against Haiku 4.5's $1.00/$5.00 — about a twentieth, which takes the full run from **$9.30 to $0.41**. (Prices read from OpenRouter's live `/models` catalogue on 2026-08-30; an earlier draft of this plan quoted $0.068/$0.168, which was stale.) It supports `tools`/`tool_choice` and JSON-schema structured output, which the design depends on, and OpenRouter's **Exacto** routing mode optimises for tool-calling accuracy specifically.
 
 Deliberately scoped to this extractor. Summarising stays on Anthropic: that text feeds the briefings people read, and swapping it is a quality decision needing its own comparison, not a cost decision.
 
@@ -27,7 +27,7 @@ This is not a ten-document problem:
 | | |
 |---|---|
 | Documents with stored text | 4,926 |
-| **Truncated before summarising (>50k chars)** | **1,014** |
+| **Truncated before summarising (>50k chars)** | **810** |
 | Heavily truncated (>250k chars) | 79 |
 | **Plans affected** | **136 of 148** |
 
@@ -675,7 +675,9 @@ Behaviour:
 
 Run: `python -m scripts.read_sections`
 
-Expected: on the order of 1,014 documents. At roughly 7,500 input tokens per 30k-char window plus ~800 output, DeepSeek V4 Flash puts the whole corpus near **$0.82** — call it **$0.87** allowing OpenRouter's 5.5% card fee on credit purchases. The same run on Haiku 4.5 would have been $11.65.
+Measured on the live corpus: **810** documents exceed the character limit, of which **510** have a candidate section and **300** have none. 510 windows come to **$0.41** at top-1, or **$0.77** for 958 windows at top-3. The same work on Haiku 4.5 would have been $9.30.
+
+The 1,014 an earlier draft of this plan quoted was wrong — almost certainly `LENGTH(extracted_text)` measuring gzipped bytes rather than characters, which is the trap CLAUDE.md warns about. The 810 was confirmed by decompressing every document down to 2,000 compressed bytes, far below the query's own threshold, so nothing is being silently dropped.
 
 Two numbers to check rather than one, because the cheap model changes what a wrong estimate means. If the estimate exceeds **$3**, the window or the candidate cap is too generous — fix that before spending. If it comes out below **$0.10**, the worklist is far smaller than 1,014 documents and the *selection* is wrong; do not let a comfortable price hide a query that found nothing.
 
@@ -719,6 +721,6 @@ Record plans with asset-class detail before and after. Baseline today: **110 of 
 
 The original version of this plan covered the 354 scanned documents: parsing free-text page hints from `document_catalogue`, resolving the printed folio against the PDF page index, and OCR-ing only the resolved range. That work is still valid and still wanted, and its detail is preserved in git at `67cf502`.
 
-It is deferred behind Phase A for three reasons, all measured: it is **1,014 documents against 354**; it costs **nothing per document to locate** where Phase B needs OCR to find anything at all; and it has **no page-offset problem**, which is the one part of Phase B that fails silently and expensively.
+It is deferred behind Phase A for three reasons, all measured: it is **810 documents against 354**; it costs **nothing per document to locate** where Phase B needs OCR to find anything at all; and it has **no page-offset problem**, which is the one part of Phase B that fails silently and expensively.
 
 Do not start Task 7 until Task 6's before/after number exists. If Phase A moves coverage from 110 plans to something near 140, Phase B's remaining value is small and should be re-priced before it is built.
