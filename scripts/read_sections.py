@@ -48,6 +48,35 @@ from targeted_extract import extract_window
 console = Console(legacy_windows=False)
 
 
+def _printable(s) -> str:
+    """Make text safe for whatever encoding stdout actually has.
+
+    Headings come from PDF text layers and carry private-use glyphs -- the
+    Symbol-font bullet arrives as \\uf0a7. Printed to a cp1252-redirected
+    stdout that raises UnicodeEncodeError, and on the first full corpus run it
+    killed the process after twelve windows. A progress line must never be
+    able to end a paid run.
+    """
+    enc = getattr(sys.stdout, "encoding", None) or "ascii"
+    return str(s or "").encode(enc, "replace").decode(enc, "replace")
+
+
+def _say(msg: str) -> None:
+    """Print progress, but never let printing end the run.
+
+    Belt and braces over _printable: the sanitiser covers the encoding fault
+    actually seen, and this covers the next one nobody predicted. Work that
+    has been paid for and committed must not be followed by a crash.
+    """
+    try:
+        console.print(msg)
+    except Exception:                                       # noqa: BLE001
+        try:
+            print(msg.encode("ascii", "replace").decode("ascii"))
+        except Exception:                                   # noqa: BLE001
+            pass
+
+
 def backlog_documents(session):
     """Documents the summariser truncated, with no section read yet.
 
@@ -139,22 +168,22 @@ def main() -> int:
         n_windows = sum(len(c) for _, _, c in work)
         if blank:
             scope = "scanned so far" if args.limit else "in the corpus"
-            console.print(f"[yellow]{blank}[/yellow] long documents {scope} have "
+            _say(f"[yellow]{blank}[/yellow] long documents {scope} have "
                           f"no candidate section — reported, not guessed at")
         if not work:
-            console.print("Nothing to read — no truncated document has a "
+            _say("Nothing to read — no truncated document has a "
                           "candidate section awaiting a read.")
             return 0
 
         est = _estimate_cost(n_windows)
-        console.print(f"\n[bold]{len(work)}[/bold] documents, "
+        _say(f"\n[bold]{len(work)}[/bold] documents, "
                       f"[bold]{n_windows}[/bold] windows to read")
-        console.print(f"estimated cost   [bold]${est:.2f}[/bold]   "
+        _say(f"estimated cost   [bold]${est:.2f}[/bold]   "
                       f"({MODEL}, {section_finder.WINDOW:,} chars each)")
-        console.print(f"budget ceiling   ${args.budget:.2f}")
+        _say(f"budget ceiling   ${args.budget:.2f}")
 
         if not args.approve:
-            console.print("\n[yellow]Nothing spent. Re-run with --approve "
+            _say("\n[yellow]Nothing spent. Re-run with --approve "
                           "to proceed.[/yellow]\n")
             return 0
 
@@ -216,7 +245,8 @@ def main() -> int:
                     data, cost = fut.result()
                 except Exception as e:                      # noqa: BLE001
                     # One plan's quirk must not cost the other 809 documents.
-                    console.print(f"  [red]{doc.id} {doc.filename}: {e}[/red]")
+                    _say(f"  [red]{doc.id} {_printable(doc.filename)}: "
+                         f"{_printable(e)}[/red]")
                     failed += 1
                     top_up(ex)
                     continue
@@ -233,17 +263,17 @@ def main() -> int:
                 session.commit()
                 done += 1
                 pct = 100 * cand.offset // max(len(text), 1)
-                console.print(f"  [green]{done:>4}[/green]/{len(jobs)} "
-                              f"{str(doc.filename)[:36]:<36} @{pct:>3}%  "
-                              f"{len(rows):>3} rets  ${spent:.3f}  "
-                              f"{cand.heading[:26]}")
+                _say(f"  [green]{done:>4}[/green]/{len(jobs)} "
+                     f"{_printable(doc.filename)[:36]:<36} @{pct:>3}%  "
+                     f"{len(rows):>3} rets  ${spent:.3f}  "
+                     f"{_printable(cand.heading)[:26]}")
                 top_up(ex)
         stopped = 0 if exhausted else 1
 
-        console.print(f"\nread [bold]{done}[/bold] windows, "
+        _say(f"\nread [bold]{done}[/bold] windows, "
                       f"{failed} failed, spent [bold]${spent:.4f}[/bold]")
         if stopped:
-            console.print(f"[yellow]Stopped on the ${args.budget:.2f} "
+            _say(f"[yellow]Stopped on the ${args.budget:.2f} "
                           f"budget ceiling.[/yellow]")
         return stopped
     finally:

@@ -178,6 +178,38 @@ def test_documents_with_no_candidate_are_reported_not_guessed_at(
     assert "no candidate" in out.lower()
 
 
+def test_an_unprintable_heading_does_not_end_the_run(session, monkeypatch):
+    """A PDF text layer carries private-use glyphs — the Symbol bullet arrives
+    as \\uf0a7. Printed to a cp1252 stdout that raises UnicodeEncodeError, and
+    on the first full corpus run it killed the process after twelve windows,
+    after the money was spent. A progress line must never end a paid run.
+    """
+    _docs(session, n=2)
+    monkeypatch.setattr(read_sections, "extract_window",
+                        lambda t, c: ({"returns": []}, Decimal("0.0001")))
+
+    real = read_sections.console.print
+
+    def exploding(msg, *a, **kw):
+        # Fail on a progress line specifically — the one carrying document
+        # text, which is where the real fault came from.
+        if "rets" in str(msg):
+            raise UnicodeEncodeError("charmap", "x", 0, 1, "undefined")
+        return real(msg, *a, **kw)
+
+    monkeypatch.setattr(read_sections.console, "print", exploding)
+    monkeypatch.setattr("sys.argv", ["read_sections", "--approve",
+                                     "--workers", "1"])
+    read_sections.main()
+
+    assert session.query(DocumentSectionRead).count() == 2
+
+
+def test_printable_survives_a_private_use_glyph():
+    assert read_sections._printable("Total  Return")
+    assert read_sections._printable(None) == ""
+
+
 def test_a_failed_read_does_not_stop_the_run(session, monkeypatch):
     """One plan's quirk must not cost the other 1,013 documents."""
     _docs(session, n=3)
