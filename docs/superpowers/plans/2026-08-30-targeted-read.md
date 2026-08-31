@@ -6,7 +6,11 @@
 
 **Architecture:** Two phases against one idea. Phase A covers documents whose text we already hold — the large majority — where locating a section is a free text search and the only paid step is reading the slice we chose. Phase B covers scanned documents, where the same idea needs OCR and therefore needs a page offset resolved first.
 
-**Tech Stack:** Python, SQLAlchemy, Anthropic tool-use via `summarizer._get_client`, `costs` for pricing, PyMuPDF for Phase B.
+**Tech Stack:** Python, SQLAlchemy, **DeepSeek V4 Flash via OpenRouter** (OpenAI-compatible tool calling), `costs` for pricing, PyMuPDF for Phase B.
+
+**Why not Anthropic here.** This step is mechanical: a schema-constrained read of one 30,000-character window. DeepSeek V4 Flash costs **$0.068/M input and $0.168/M output** against Haiku 4.5's $1.00/$5.00 — about a twentieth, which takes the full 1,014-document run from **$11.65 to $0.65**. It supports `tools`/`tool_choice` and JSON-schema structured output, which the design depends on, and OpenRouter's **Exacto** routing mode optimises for tool-calling accuracy specifically.
+
+Deliberately scoped to this extractor. Summarising stays on Anthropic: that text feeds the briefings people read, and swapping it is a quality decision needing its own comparison, not a cost decision.
 
 **Spec:** `docs/superpowers/specs/2026-08-30-relevance-gating-design.md`
 
@@ -34,6 +38,8 @@ So the ceiling on performance coverage is not fetching, and not the scanned tail
 - **Nothing is discarded.** No task writes to `documents.extracted_text` or deletes any row. Extracted figures go to their own table; a test asserts `extracted_text` is byte-identical after a run.
 - **No paid call is reachable without `--approve`.** Follow `scripts/catalogue.py`: the client constructor is never entered on an unapproved path, and the test asserts *that*, not that cost came out zero.
 - **`--budget` is a hard stop**, checked before each call against spend so far.
+- **`OPENROUTER_API_KEY` is a new secret** and the user creates it — not you. It belongs in `.env` (gitignored) and, when this runs from CI, in GitHub Actions secrets. `llm_openrouter` raises at import of its client if the variable is unset; it must never fall back to the Anthropic key or to an unauthenticated call.
+- **Every paid call is recorded** via `database.record_api_usage`, the same as every other spending path in this repo. A run that produces rows but no `api_usage` entries is a bug, not a saving.
 - **Never write an ALTER TABLE migration system.** Add the model, run `init_db()`.
 - **`documents.extracted_text` is `deferred()`** — bulk readers need `.options(undefer(...))`; never loop reading it without one.
 - Baseline: `LLM_MODE=mock pytest tests/ -q` green at 651 passed / 30 skipped.
@@ -55,10 +61,13 @@ Two things follow, and they shape Tasks 1 and 2. Hits are **noisy** — most are
 
 - `section_finder.py` (new) — pure text search producing ranked candidate windows. No I/O, no API.
 - `database.py` (modify) — add `DocumentSectionRead`.
+- `llm_openrouter.py` (new) — a metered OpenRouter client. Its own module because everything else here talks to Anthropic, and the two differ in both call shape and usage accounting.
+- `costs.py` (modify) — a `PRICES` entry for the DeepSeek model.
+- `requirements-pipeline.txt` (modify) — add `openai` (not currently a dependency).
 - `targeted_extract.py` (new) — the only module that spends: rank candidates, then extract from the chosen window.
 - `scripts/read_sections.py` (new) — CLI: priced worklist, `--approve`, `--budget`.
 - `tests/test_section_finder.py`, `tests/test_targeted_extract.py` (new).
-- Phase B (`page_hints.py`, `targeted_read.py`) — deferred; see Task 6.
+- Phase B (`page_hints.py`, `targeted_read.py`) — deferred; see Task 7.
 
 ---
 
@@ -70,7 +79,7 @@ Two things follow, and they shape Tasks 1 and 2. Hits are **noisy** — most are
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: `find_candidates(text: str, max_candidates: int = 12) -> list[Candidate]`, where `Candidate` is a frozen dataclass `(offset: int, heading: str, score: float)`. Task 2 consumes this.
+- Produces: `find_candidates(text: str, max_candidates: int = 12) -> list[Candidate]`, where `Candidate` is a frozen dataclass `(offset: int, heading: str, score: float)`; and the module constant `WINDOW = 30_000`, the slice length a candidate's offset opens. Tasks 4 and 5 consume both.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -313,21 +322,235 @@ git commit -m "Store targeted section reads beside the document"
 
 ---
 
-### Task 3: Extract returns from a chosen window
+### Task 3: A metered OpenRouter client
+
+**Files:**
+- Create: `llm_openrouter.py`
+- Modify: `costs.py` (one `PRICES` entry), `requirements-pipeline.txt`
+- Test: `tests/test_openrouter_client.py`
+
+**Interfaces:**
+- Produces: `MODEL` (the OpenRouter model id), `call_tool(system, user, schema, tool_name) -> tuple[dict, Decimal]`, and `ResponseTruncated`. Task 4 consumes these.
+
+**The trap this task exists to avoid.** `costs.cost_usd` reads `input_tokens`, `output_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens` — Anthropic's names — via `getattr(usage, attr, 0)`. OpenAI-shaped responses call them `prompt_tokens` and `completion_tokens`, so every field misses and **every call costs a silent zero**. `costs.py`'s own docstring names this as the one direction of error that goes unquestioned: spend appears to fall. The adapter below exists to make that impossible, and the first test asserts it.
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+from decimal import Decimal
+import pytest
+import costs, llm_openrouter
+
+
+class _OpenAIUsage:
+    """The shape OpenRouter returns — deliberately not Anthropic's."""
+    prompt_tokens = 7_500
+    completion_tokens = 800
+
+
+def test_usage_is_translated_not_passed_through():
+    """The silent-zero trap. costs.cost_usd reads Anthropic field names, so
+    handing it an OpenAI usage block returns 0.00 and the spend vanishes."""
+    raw = _OpenAIUsage()
+    assert costs.cost_usd(llm_openrouter.MODEL, raw) == Decimal(0), (
+        "if this fails the field names now match and this guard is obsolete")
+
+    adapted = llm_openrouter.adapt_usage(raw)
+    cost = costs.cost_usd(llm_openrouter.MODEL, adapted)
+    assert cost > 0
+    # 7500 in @ $0.068/M + 800 out @ $0.168/M
+    assert Decimal("0.0006") < cost < Decimal("0.0007")
+
+
+def test_the_model_has_a_price():
+    assert llm_openrouter.MODEL in costs.PRICES
+
+
+def test_truncated_response_raises(monkeypatch):
+    class _Msg:
+        tool_calls = None
+    class _Choice:
+        message, finish_reason = _Msg(), "length"
+    class _Resp:
+        choices, usage = [_Choice()], _OpenAIUsage()
+
+    monkeypatch.setattr(llm_openrouter, "_raw_call", lambda **kw: _Resp())
+    with pytest.raises(llm_openrouter.ResponseTruncated):
+        llm_openrouter.call_tool("sys", "user", {"type": "object"}, "record")
+
+
+def test_missing_tool_call_raises_rather_than_returning_empty(monkeypatch):
+    class _Msg:
+        tool_calls = None
+    class _Choice:
+        message, finish_reason = _Msg(), "stop"
+    class _Resp:
+        choices, usage = [_Choice()], _OpenAIUsage()
+
+    monkeypatch.setattr(llm_openrouter, "_raw_call", lambda **kw: _Resp())
+    with pytest.raises(RuntimeError):
+        llm_openrouter.call_tool("sys", "user", {"type": "object"}, "record")
+```
+
+- [ ] **Step 2: Run and watch it fail**
+
+Run: `LLM_MODE=mock pytest tests/test_openrouter_client.py -v`
+Expected: FAIL, `ModuleNotFoundError: No module named 'llm_openrouter'`
+
+- [ ] **Step 3: Add the price**
+
+In `costs.py`, alongside the Anthropic entries:
+
+```python
+    # OpenRouter, DeepSeek V4 Flash. No prompt caching on this route, so the
+    # cache columns are zero rather than guessed -- a wrong cache price would
+    # under-report exactly like the usage-name mismatch does.
+    "deepseek/deepseek-v4-flash": _p("0.068", "0.168", "0", "0"),
+```
+
+- [ ] **Step 4: Implement the client**
+
+```python
+"""DeepSeek V4 Flash through OpenRouter, metered the same way as Anthropic.
+
+Its own module because OpenRouter is OpenAI-shaped and everything else here
+is Anthropic-shaped, and the differences are not cosmetic:
+
+  * the tool call arrives as a JSON *string* in
+    ``choices[0].message.tool_calls[0].function.arguments``, not as a parsed
+    ``tool_use`` block;
+  * truncation shows as ``finish_reason == "length"``, not
+    ``stop_reason == "max_tokens"``;
+  * usage is ``prompt_tokens``/``completion_tokens``, which ``costs.cost_usd``
+    does not recognise -- see ``adapt_usage``.
+
+Reads OPENROUTER_API_KEY. Used only for schema-constrained extraction;
+summarising stays on Anthropic.
+"""
+from __future__ import annotations
+
+import json
+import os
+from decimal import Decimal
+from types import SimpleNamespace
+
+import costs
+import database
+
+MODEL = "deepseek/deepseek-v4-flash"
+BASE_URL = "https://openrouter.ai/api/v1"
+MAX_OUTPUT_TOKENS = 16_384
+
+
+class ResponseTruncated(RuntimeError):
+    """finish_reason was 'length'. The arguments JSON is incomplete and must
+    not be saved as if it were a result."""
+
+
+def adapt_usage(usage):
+    """OpenAI token names -> the names costs.cost_usd reads.
+
+    Without this every call costs 0.00 and the spend silently disappears.
+    """
+    return SimpleNamespace(
+        input_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+        output_tokens=getattr(usage, "completion_tokens", 0) or 0,
+        cache_creation_input_tokens=0,
+        cache_read_input_tokens=0,
+    )
+
+
+def _raw_call(**kwargs):
+    from openai import OpenAI
+    key = os.environ.get("OPENROUTER_API_KEY")
+    if not key:
+        raise RuntimeError("OPENROUTER_API_KEY not set")
+    client = OpenAI(api_key=key, base_url=BASE_URL)
+    return client.chat.completions.create(**kwargs)
+
+
+def call_tool(system: str, user: str, schema: dict,
+              tool_name: str) -> tuple[dict, Decimal]:
+    resp = _raw_call(
+        model=MODEL,
+        max_tokens=MAX_OUTPUT_TOKENS,
+        messages=[{"role": "system", "content": system},
+                  {"role": "user", "content": user}],
+        tools=[{"type": "function",
+                "function": {"name": tool_name, "parameters": schema}}],
+        tool_choice={"type": "function", "function": {"name": tool_name}},
+        # Route for tool-calling accuracy rather than price: the whole design
+        # rests on the tool call being well-formed.
+        extra_body={"provider": {"sort": "throughput"}, "route": "exacto"},
+    )
+    choice = resp.choices[0]
+    usage = adapt_usage(resp.usage)
+    cost = costs.cost_usd(MODEL, usage)
+
+    # Record before raising. A truncated call is still a billed call, and the
+    # failures are exactly the ones worth seeing in api_usage afterwards.
+    if not costs.mock_mode():
+        database.record_api_usage(MODEL, usage)
+
+    if choice.finish_reason == "length":
+        raise ResponseTruncated(
+            f"in={usage.input_tokens} out={usage.output_tokens}")
+    calls = getattr(choice.message, "tool_calls", None)
+    if not calls:
+        raise RuntimeError(
+            f"no tool call; finish_reason={choice.finish_reason}")
+    return json.loads(calls[0].function.arguments), cost
+```
+
+`record_api_usage` puts this spend in `api_usage` alongside every other paid path, which is what keeps `scripts/pending_spend.py` honest. The `costs.mock_mode()` guard mirrors `costs._RecordingMessages`. Import `database` at module top beside `costs`.
+
+Add `openai` to `requirements-pipeline.txt`, **not** `requirements.txt` — the Streamlit service never calls a model, and `moto` being in the wrong file was the same mistake earlier on this branch.
+
+- [ ] **Step 5: Run the tests** — Expected: PASS
+
+- [ ] **Step 6: One real call, to prove the wiring** — *ask before running it*
+
+This is the first paid call in the plan. It is about **$0.000002**, but it is real, and the standing rule on this project is that spending is authorised explicitly rather than inferred from the size of the number. Ask, then run.
+
+```bash
+python -c "
+import llm_openrouter as m
+data, cost = m.call_tool(
+  'Extract the returns.',
+  'Total Fund 8.4%\nUS Equity 12.1%\nReal Estate -3.2%',
+  {'type':'object','properties':{'returns':{'type':'array','items':{
+     'type':'object','properties':{'asset_class':{'type':'string'},
+     'return_pct':{'type':'number'}}}}},'required':['returns']},
+  'record_returns')
+print(data); print('cost \$', cost)"
+```
+
+Expected: three rows, and a cost **greater than zero** — a zero here means `adapt_usage` is not on the path, which is the whole point of the task.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add llm_openrouter.py costs.py requirements-pipeline.txt tests/test_openrouter_client.py
+git commit -m "Metered OpenRouter client for schema-constrained extraction"
+```
+
+---
+
+### Task 4: Extract returns from a chosen window
 
 **Files:**
 - Create: `targeted_extract.py`
 - Test: `tests/test_targeted_extract.py` (extend)
 
 **Interfaces:**
-- Consumes: `section_finder.Candidate`, `DocumentSectionRead`.
-- Produces: `extract_window(text: str, candidate, model: str) -> tuple[dict, Decimal]`.
+- Consumes: `section_finder.Candidate` and `section_finder.WINDOW` (Task 1), `llm_openrouter.call_tool` and `ResponseTruncated` (Task 3).
+- Produces: `extract_window(text: str, candidate: Candidate) -> tuple[dict, Decimal]`, re-exporting `ResponseTruncated`. Task 5 consumes both, and writes the `DocumentSectionRead` row from Task 2 — this module does no I/O.
 
-Reuse the tool-use shape from `extract_performance_reports.py:190-215` — system prompt, `tools=[SCHEMA]`, `tool_choice={"type":"tool", ...}`, read `block.input` from the `tool_use` block.
+All model mechanics live in `llm_openrouter` — this module builds the prompt and the schema and interprets the result. Do **not** reach for `summarizer._get_client` here; that is the Anthropic path and it is deliberately not used for this step.
 
-**Two things that file learned the hard way, and this must not repeat:**
-- `MAX_OUTPUT_TOKENS` must be generous (that file uses 16384). At 4096 it silently truncated every call and saved thirty documents with zero rows and no error.
-- Check `msg.stop_reason == "max_tokens"` and surface it, rather than trusting the payload.
+The tool schema mirrors `extract_performance_reports.py`'s: a list of `{asset_class, return_pct, period, benchmark_pct}` — the same shape as `summaries.performance_data`, so `scripts/build_performance_view.py` consumes it with no new parser.
+
+**The scar this carries.** `extract_performance_reports.py` ran with `MAX_OUTPUT_TOKENS = 4096`, which silently cut every tool call short: thirty documents saved with zero rows, no error, discovered only by reading raw output. Task 3's client raises `ResponseTruncated` rather than returning a partial payload; this module must let that propagate, never catch it and write an empty result.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -337,11 +560,11 @@ import targeted_extract
 from section_finder import Candidate
 
 def test_returns_parsed_rows_and_cost(monkeypatch):
-    monkeypatch.setattr(targeted_extract, "_call_model", lambda w, m: (
+    monkeypatch.setattr(targeted_extract, "_call_model", lambda w: (
         {"returns": [{"asset_class": "US Equity", "return_pct": 12.4,
                       "period": "FY2026"}]}, Decimal("0.004")))
     data, cost = targeted_extract.extract_window(
-        "…", Candidate(200_881, "Total Rates of Return (%)", 2.4), "m")
+        "…", Candidate(200_881, "Total Rates of Return (%)", 2.4))
     assert data["returns"][0]["asset_class"] == "US Equity"
     assert cost == Decimal("0.004")
 
@@ -349,31 +572,71 @@ def test_a_truncated_response_raises_rather_than_saving_nothing(monkeypatch):
     """extract_performance_reports saved 30 documents with zero rows and no
     error when max_tokens cut the tool call short. A silent empty result is
     worse than a failure, because nobody re-runs it."""
-    def truncated(window, model):
+    def truncated(window):
         raise targeted_extract.ResponseTruncated("in=58236 out=4096")
     monkeypatch.setattr(targeted_extract, "_call_model", truncated)
     import pytest
     with pytest.raises(targeted_extract.ResponseTruncated):
-        targeted_extract.extract_window("…", Candidate(0, "x", 1.0), "m")
+        targeted_extract.extract_window("…", Candidate(0, "x", 1.0))
 ```
 
 - [ ] **Step 2: Run and watch it fail**
 
 - [ ] **Step 3: Implement**
 
-Mirror `extract_performance_reports.py`. Required elements:
+Mirror `extract_performance_reports.py`'s prompt and schema, but not its client. Required elements:
 
 ```python
-MODEL = "claude-haiku-4-5-20251001"   # a 30k window, one table: Haiku is enough
-MAX_OUTPUT_TOKENS = 16_384
+from decimal import Decimal
+
+from llm_openrouter import call_tool, ResponseTruncated  # re-exported for callers
+from section_finder import WINDOW
+
+TOOL_NAME = "record_returns"
+
+SYSTEM = (
+    "You are reading one excerpt from a public pension fund board document. "
+    "Record every asset-class return you can see in the excerpt. Copy the "
+    "numbers exactly as printed; do not compute, convert or infer any figure "
+    "that is not there. If the excerpt holds no returns table, record none."
+)
+
+RETURNS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "returns": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "asset_class": {"type": "string"},
+                    "return_pct": {"type": "number"},
+                    "period": {
+                        "type": "string",
+                        "description": "as printed, e.g. 'FY2026', 'Q1 2026', '3 Year'",
+                    },
+                    "benchmark_pct": {"type": "number"},
+                },
+                "required": ["asset_class", "return_pct", "period"],
+            },
+        }
+    },
+    "required": ["returns"],
+}
 
 
-class ResponseTruncated(RuntimeError):
-    """The model hit max_tokens. The payload is incomplete and must not be
-    saved as if it were a result."""
+def _call_model(window: str) -> tuple[dict, Decimal]:
+    """One seam, so the tests above can replace the only paid call."""
+    return call_tool(SYSTEM, window, RETURNS_SCHEMA, TOOL_NAME)
+
+
+def extract_window(text: str, candidate) -> tuple[dict, Decimal]:
+    return _call_model(text[candidate.offset:candidate.offset + WINDOW])
 ```
 
-The tool schema records a list of `{asset_class, return_pct, period, benchmark_pct}` — the same shape as `summaries.performance_data`, so `scripts/build_performance_view.py` can consume it with no new parser.
+`MODEL`, `MAX_OUTPUT_TOKENS` and the truncation check all belong to `llm_openrouter` (Task 3). Do not redeclare them here — a second copy of the token cap is exactly how `extract_performance_reports.py` came to run at 4096 without anyone noticing.
+
+The row shape — `{asset_class, return_pct, period, benchmark_pct}` — is the same shape as `summaries.performance_data`, so `scripts/build_performance_view.py` consumes it with no new parser. `benchmark_pct` is deliberately optional: most tables print it, some do not, and a required field would push the model into inventing one.
 
 - [ ] **Step 4: Run the tests** — Expected: PASS
 
@@ -381,7 +644,7 @@ The tool schema records a list of `{asset_class, return_pct, period, benchmark_p
 
 ---
 
-### Task 4: The CLI — priced worklist, approval, hard budget
+### Task 5: The CLI — priced worklist, approval, hard budget
 
 **Files:**
 - Create: `scripts/read_sections.py`
@@ -403,24 +666,29 @@ Behaviour:
 
 - [ ] **Step 3: Implement**
 
-- [ ] **Step 4: Run the full suite** — Expected: PASS, ~665 passed
+- [ ] **Step 4: Run the full suite** — Expected: PASS, ~670 passed (651 at baseline plus the roughly twenty added across Tasks 1-5)
 
 - [ ] **Step 5: Price the real run**
 
 Run: `python -m scripts.read_sections`
-Expected: on the order of 1,014 documents. At roughly 7,500 input tokens per 30k-char window plus ~800 output, Haiku puts this near **$10-15** for the whole corpus. If the estimate exceeds $30, the window or the candidate cap is too generous — fix that before spending.
+
+Expected: on the order of 1,014 documents. At roughly 7,500 input tokens per 30k-char window plus ~800 output, DeepSeek V4 Flash puts the whole corpus near **$0.65** — call it **$0.70** allowing OpenRouter's 5.5% card fee on credit purchases. The same run on Haiku 4.5 would have been $11.65.
+
+Two numbers to check rather than one, because the cheap model changes what a wrong estimate means. If the estimate exceeds **$3**, the window or the candidate cap is too generous — fix that before spending. If it comes out below **$0.10**, the worklist is far smaller than 1,014 documents and the *selection* is wrong; do not let a comfortable price hide a query that found nothing.
 
 - [ ] **Step 6: Commit**
 
 ---
 
-### Task 5: Verify on real documents, then a bounded first run
+### Task 6: Verify on real documents, then a bounded first run
 
 - [ ] **Step 1: Read three documents from three plans**
 
 ```bash
-python -m scripts.read_sections --limit 3 --approve --budget 0.20
+python -m scripts.read_sections --limit 3 --approve --budget 0.05
 ```
+
+Three windows on DeepSeek is about **$0.003**. The budget is a ceiling, not an estimate — if the run stops on it, something is calling the model far more often than once per document.
 
 - [ ] **Step 2: Check the figures against the source**
 
@@ -444,10 +712,10 @@ Record plans with asset-class detail before and after. Baseline today: **110 of 
 
 ---
 
-### Task 6: Phase B — scanned documents (deferred, do not start here)
+### Task 7: Phase B — scanned documents (deferred, do not start here)
 
 The original version of this plan covered the 354 scanned documents: parsing free-text page hints from `document_catalogue`, resolving the printed folio against the PDF page index, and OCR-ing only the resolved range. That work is still valid and still wanted, and its detail is preserved in git at `67cf502`.
 
 It is deferred behind Phase A for three reasons, all measured: it is **1,014 documents against 354**; it costs **nothing per document to locate** where Phase B needs OCR to find anything at all; and it has **no page-offset problem**, which is the one part of Phase B that fails silently and expensively.
 
-Do not start Task 6 until Task 5's before/after number exists. If Phase A moves coverage from 110 plans to something near 140, Phase B's remaining value is small and should be re-priced before it is built.
+Do not start Task 7 until Task 6's before/after number exists. If Phase A moves coverage from 110 plans to something near 140, Phase B's remaining value is small and should be re-priced before it is built.
