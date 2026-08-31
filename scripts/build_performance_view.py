@@ -63,14 +63,54 @@ _INCEPTION = re.compile(r"(?i)since inception|since \d{4}|inception")
 _MULTI = re.compile(r"(?i)\b(?!1[- ]?year)(\d{1,2}|three|five|ten|twenty)[- ]?(year|yr)")
 _MONTH_NAMES = (r"january|february|march|april|may|june|july|august|"
                 r"september|october|november|december")
+# "Mo" is this corpus's abbreviation for "Month" (187 "1 Mo" rows) and "Last
+# Month" is spelled out rather than numbered (285 rows) -- both as common as
+# the "1-month" / "MTD" forms already handled.
 _MONTHLY = re.compile(
-    r"(?i)\b1[- ]?month|\bmtd\b|\(1 month\)|month[- ]?to[- ]?date"
+    r"(?i)\b1[- ]?month|\b1[- ]?mo\b|\blast month\b|\bmtd\b|\(1 month\)"
+    r"|month[- ]?to[- ]?date"
     rf"|^\s*({_MONTH_NAMES})\s+\d{{4}}\s*$")
-_QUARTER = re.compile(r"(?i)\bq[1-4]\b|\b[1-4]q\b|quarter|\b3[- ]months?\b")
-_PARTIAL = re.compile(r"(?i)\bf?ytd\b|to date|through")
-_FISCAL = re.compile(r"(?i)\bfy\s?\d{4}|fiscal")
+# "Qtr" (640 "Last Qtr" rows) and "Mo" (180 "3 Mo" rows) are this corpus's
+# abbreviations; QTD is bucketed with the other quarter-length readings
+# rather than with "partial", unlike *YTD -- a deliberate choice, not an
+# oversight, since a quarter-to-date figure is still a quarter-length read.
+_QUARTER = re.compile(
+    r"(?i)\bq[1-4]\b|\b[1-4]q\b|quarter|\bqtr\b|\bqtd\b"
+    r"|\b3[- ]?months?\b|\b3[- ]?mo\b")
+# Was `\bf?ytd\b`: the leading `\b` before the optional "f" meant only a bare
+# "YTD" or "FYTD" could match, because "C" immediately before "YTD" is a
+# word character and breaks the boundary. "CYTD" (calendar-YTD, 643 rows)
+# needs any prefix letter accepted, not just "f" -- `\w*ytd\b` matches CYTD,
+# FYTD and bare YTD alike, all still "partial".
+_PARTIAL = re.compile(r"(?i)\w*ytd\b|to date|through")
+# "FYE 6/30/25" / "FYE 6/30/24" (fiscal-year-*end*, followed by the end
+# date) is a different shape from the bare "FY2025" the original regex
+# expected -- there is a literal "E" between "fy" and the date, so
+# `fy\s?\d{4}` never matched it. 396 + 381 rows.
+_FISCAL = re.compile(r"(?i)\bfy\s?\d{4}|\bfye\b|fiscal")
+# "CYE 12/31/24" is the calendar-year twin of FYE: calendar-year-*end*
+# followed by the end date, not `cy` directly against a 4-digit year. 146
+# rows.
 _ONE_YEAR = re.compile(
-    r"(?i)1[- ]?year|12 month|twelve month|calendar year|\bcy\s?\d{4}")
+    r"(?i)1[- ]?year|12 month|twelve month|calendar year|\bcy\s?\d{4}|\bcye\b")
+# A bare four-digit year and nothing else -- "2023", "2024" etc, 368+328+
+# 317+316+299 rows in the corpus. Anchored to the whole (stripped) label so
+# it never fires on a year embedded in a longer, more specific label that
+# an earlier, narrower check should win instead (e.g. "3-Year as of 2023").
+_BARE_YEAR = re.compile(r"^(19|20)\d{2}$")
+
+# Not a period at all -- a forward-looking actuarial assumption the
+# extractor filed under "period" anyway (240 "Long-Term Expected Real Rate
+# of Return" rows). "Assumed" is the sibling term for the same concept
+# elsewhere in this codebase (extract_cafr_actuarial.py's
+# `assumed_return_pct`, kept separate from realized performance on
+# purpose), so it is included on the same reasoning even though only
+# "Expected" is attested in the measured corpus. Deliberately narrow -- it
+# must match the "rate of return" phrase, not just "expected"/"assumed"
+# alone, so a real but oddly-labelled return period (e.g. "Expected Q3
+# Report") is never the one that gets dropped.
+_NOT_A_RETURN_PERIOD = re.compile(
+    r"(?i)\b(expected|assumed)\b.*\brate of return\b")
 
 
 def horizon_of(period_label: str | None) -> str:
@@ -93,6 +133,17 @@ def horizon_of(period_label: str | None) -> str:
     "May 2026" is how three plans report a monthly number, and "1Q 2026",
     "3 Months Ending 03/31/2026" and "Since Inception (2013 vintage)" all
     appear verbatim.
+
+    A bare period-end date such as "12/31/24" is deliberately left
+    "unclear" rather than guessed as "annual". It states only when a period
+    ended, not how long it was -- pension performance tables report
+    quarter-end and year-end figures from the same four dates a year
+    (3/31, 6/30, 9/30, 12/31), so nothing in the string distinguishes a
+    year's return from a quarter's. Calling it "annual" would silently
+    mislabel every quarterly one of these; "unclear" is honest about not
+    knowing, which is the same principle "FYE"/"CYE" rely on the other way
+    -- those *do* carry an explicit year-length qualifier before the date,
+    which is what earns them "annual".
     """
     if not period_label:
         return "unclear"
@@ -107,7 +158,7 @@ def horizon_of(period_label: str | None) -> str:
         return "quarter"
     if _PARTIAL.search(t):
         return "partial"
-    if _FISCAL.search(t) or _ONE_YEAR.search(t):
+    if _FISCAL.search(t) or _ONE_YEAR.search(t) or _BARE_YEAR.match(t):
         return "annual"
     return "unclear"
 
@@ -244,6 +295,9 @@ def _rows_from_payload(payload, plan_id, meeting_date, doc_id,
     rows = []
     for item in items:
         if not isinstance(item, dict):
+            continue
+        period = item.get("period") or ""
+        if _NOT_A_RETURN_PERIOD.search(period):
             continue
         canon = canonical(item.get("asset_class") or "", class_map)
         ret = _as_float(item.get("return_pct"))
