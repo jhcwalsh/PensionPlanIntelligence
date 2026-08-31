@@ -190,6 +190,63 @@ file, matched the UI's displayed size exactly.
 
 ---
 
+## D6. Per-asset-class performance across plans (James, 2026-08-31)
+
+**Requested:** for a single asset class — Real Estate, Real Assets, and the
+rest — see the quarterly, 1-year and 3-year performance of every plan
+together. The existing Performance tab answers "what does this plan hold and
+how did it do"; this answers "how did everyone do in real estate".
+
+**The data is already there.** Plans holding at least one figure, by class and
+horizon, counted across `document_section_read` and `summaries.performance_data`:
+
+| Asset class | Quarterly | Annual | Multi-year |
+|---|---|---|---|
+| Private equity | 29 | 55 | 40 |
+| US public equity | 29 | 60 | 35 |
+| Real estate | 28 | 54 | 39 |
+| Fixed income (core) | 25 | 58 | 32 |
+| Non-US public equity | 22 | 46 | 29 |
+| Real assets / infrastructure | 26 | 38 | 30 |
+
+**Why it needs a new selection rule.** `pick_latest` keeps at most two rows per
+plan — its latest annual and its latest of any kind — and every figure in a row
+comes from one document. That is right for a portfolio snapshot you read
+across, and exactly wrong here: it discards the other horizons, which are the
+columns this view is made of.
+
+**Decided (James, 2026-08-31): best available per cell.** Fill each horizon
+from the most recent document reporting it, and label the row with the dates
+involved. A row can mix an August quarterly with a June 3-year figure. That is
+acceptable *here* and not on the existing tab, because within one asset class
+the comparison is across plans rather than across classes — the incoherence the
+one-document rule protects against is a portfolio that never existed, and this
+view does not claim to show one. Coverage is the point: strict single-source
+collapses most plans to the annual column.
+
+**Additive.** A new section reading the same rows through a different
+selection. Nothing about the existing tab changes.
+
+**Do first:** the `horizon_of` repair (D7). Building the columns before the
+labels are classified means building them against a quarter of the data.
+
+## D7. `horizon_of` drops thousands of classifiable period labels
+
+Measured on the targeted-read corpus. Each of these lands in `unclear`, which
+no horizon-keyed view can use:
+
+| Label | Rows | Should be |
+|---|---|---|
+| `CYTD` | 643 | partial |
+| `Last Qtr`, `3 Mo` | 820 | quarter |
+| `FYE 6/30/25`, `CYE 12/31/24`, bare `2023` | ~2,200 | annual |
+| `Last Month`, `1 Mo` | 472 | month |
+| `12/31/24`, `12/31/25` | 445 | a period *ending* on a date, length unstated |
+| `Long-Term Expected Real Rate of Return` | 240 | **not a return** — an actuarial assumption in the period field; drop the row |
+
+Worth more than any extraction work: these are figures already paid for and
+already stored, discarded at the last step before display.
+
 ## E. Carried-forward loose ends
 
 ### E1. PDF retention — the root cause behind several symptoms
@@ -240,7 +297,14 @@ What's left:
    `missing_file` CAFRs and the 450 truncated-at-150k documents. Worth
    doing once rather than re-diagnosing its symptoms again next time a
    PDF ages off disk.
-3. **wsib's missing performance data** (new, D3) — low priority, needs a
+3. **D7 `horizon_of` repair** — thousands of stored figures land in
+   `unclear` and no horizon-keyed view can use them. Cheapest coverage
+   available anywhere in this list: no fetching, no extraction, no spend.
+   Blocks D6.
+4. **D6 per-asset-class section** — the cross-plan view of one asset class
+   across quarterly / annual / multi-year. Additive; the existing tab is
+   untouched.
+5. **wsib's missing performance data** (new, D3) — low priority, needs a
    second section search or a cross-section merge, not urgent since it
    fails safe (fewer rows, not wrong ones).
 4. **A2 Auth0**, **A3 public repo**, **A4 WAF proxy** — decisions only
