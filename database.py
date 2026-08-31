@@ -1138,6 +1138,14 @@ class ExtractionDetail(Base):
 
     - ``file_missing``       no file at local_path (never downloaded / other machine)
     - ``unsupported_format`` extension we don't extract
+    - ``not_a_pdf``          the bytes are not a PDF whatever the URL claimed.
+                             A fetcher problem wearing an extraction problem's
+                             clothes: 13 documents stored an HTML error or
+                             redirect page under a .pdf name, and every one was
+                             recorded ``ocr_empty`` -- asserting OCR had read a
+                             scan and found nothing. Refetchable, and worth
+                             refetching, because the plan may serve the real
+                             file to a different client.
     - ``ocr_gate_doc_type``  empty text layer; doc_type isn't OCR-worthy
     - ``ocr_deferred``       empty text layer, doc_type *is* OCR-worthy, but
                              extraction ran with OCR off to avoid the spend.

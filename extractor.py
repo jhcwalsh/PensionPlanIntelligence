@@ -244,6 +244,20 @@ def _extract_pdf_ocr(path: str) -> tuple[str, int, OcrInfo]:
         return "", 0, OcrInfo(reason="api_error")
 
 
+def _looks_like_pdf(path: str) -> bool:
+    """True if the bytes start with the PDF magic number.
+
+    The extension is what the URL claimed; this is what arrived. A plan that
+    serves an error page, a login wall or a JS redirect to a .pdf URL leaves a
+    file whose name says PDF and whose first five bytes say '<!DOC'.
+    """
+    try:
+        with open(path, "rb") as f:
+            return f.read(5) == b"%PDF-"
+    except OSError:
+        return False
+
+
 def extract_pdf(path: str, allow_ocr: bool = True,
                 gate_reason: str = "ocr_gate_doc_type"
                 ) -> tuple[str, int, str | None, int | None]:
@@ -255,6 +269,16 @@ def extract_pdf(path: str, allow_ocr: bool = True,
     OCR-worthy. Both leave the document re-processable; only one is a
     decision anyone would want to revisit.
     """
+    # Check what the file actually is before deciding what it failed to say.
+    # Thirteen documents in the OCR backlog turned out to be HTML saved with a
+    # .pdf extension -- an error or redirect page the fetcher stored without
+    # noticing. Every one was recorded 'ocr_empty', which asserts OCR read a
+    # scanned document and found nothing in it. They were never PDFs, so no
+    # amount of OCR was ever going to help, and the label hid a fetcher
+    # problem behind an extraction one.
+    if not _looks_like_pdf(path):
+        return "", 0, "not_a_pdf", None
+
     text, pages = extract_pdf_pdfplumber(path)
     if len(text.strip()) < 100:
         text, pages = extract_pdf_pymupdf(path)
