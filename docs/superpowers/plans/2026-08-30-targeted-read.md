@@ -715,7 +715,62 @@ python -m scripts.build_performance_view
 
 Record plans with asset-class detail before and after. Baseline today: **110 of 148**.
 
-- [ ] **Step 6: Commit the verification**, recording the three documents, what was found, and the before/after coverage.
+- [x] **Step 6: Commit the verification**
+
+## Outcome (2026-08-31)
+
+**951 windows read across all 510 documents that had one, for $1.0980.**
+Five failed, all on the same fault — output over the 16,384-token cap — and
+all five raised rather than saving a partial table.
+
+Verification on the first three documents, before the corpus run:
+
+| | Summariser | Targeted |
+|---|---|---|
+| `Aug_26_2026_public_materials.pdf` | 0 | **102** |
+| CERS Investment Committee | 15 | **77** |
+| `BOT_Packet.pdf` | 2 | **16** |
+
+All 195 figures appear verbatim in the window they were read from — zero
+hallucinated numbers. The decisive check was doc 5815, whose top-ranked
+window opens on an `Asset Allocation` heading listing 28.94 / 17.17 / 15.28:
+portfolio **weights**. The model skipped every one and read the
+`Comparative Performance` table on the following page instead, which is what
+the prompt hardening was built for and what the 30,000-character window
+made reachable.
+
+Coverage, measured with and without the targeted reads:
+
+| | Without | With |
+|---|---|---|
+| Plans with any data | 126 | 127 |
+| **Plans with asset-class detail** | **110** | **116** |
+| Asset-class cells filled | 597 | **683** (+14%) |
+| Plans losing detail | — | **0** |
+
+**Read this gain honestly.** It is smaller than this plan implied when it
+speculated about "something near 140". Extraction is no longer the
+constraint: the targeted read yields 7,236 canonicalisable rows against the
+summariser's 4,069. What caps the view is `pick_latest`, which keeps one
+document per plan per horizon — a deliberate choice, made because rows
+blending an August equity figure with an FY2024 private-equity figure were
+individually defensible and collectively meaningless. Better extraction
+mostly improves documents already represented rather than adding plans.
+
+So the binding limit has moved from "we cannot read the table" to "we show
+one document per plan". That is a product decision, not an extraction
+problem, and it should be re-opened deliberately rather than by loosening
+extraction further.
+
+Two things worth knowing before Phase B:
+
+- **Only 29% of extracted rows canonicalise, and that is correct.** The rest
+  are benchmarks (MSCI ACWI, Russell 2000, Policy Benchmark) and individual
+  manager mandates (Oaktree High Yield, Eaton Vance High Yield) — real
+  figures that are not asset classes. They stay in `document_section_read`
+  for a later question to reach.
+- **300 of the 810 long documents have no candidate section at all.** They
+  are reported, never handed an arbitrary window.
 
 ---
 
