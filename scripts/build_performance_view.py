@@ -2,13 +2,19 @@
 
     python -m scripts.build_performance_view
 
-Makes no API calls and extracts nothing. Two sources already carry returns
-by asset class, and until now only one of them was ever shown:
+Makes no API calls and extracts nothing. Three sources carry returns by
+asset class:
 
   * ``cafr_performance``          fiscal-year returns from CAFR extraction
   * ``summaries.performance_data``  a by-product of ordinary summarising,
                                     4,233 data points across 925 documents
                                     in 2026 alone, surfaced nowhere
+  * ``document_section_read``     figures read from a window chosen for
+                                  holding numbers, for the documents the
+                                  summariser saw only the first tenth of
+
+Where a document has both a targeted read and a summariser reading, the
+targeted read supersedes it: same table, but one of them actually saw it.
 
 Newest wins per (plan, asset class), so a 2026 board document supersedes an
 FY2024 CAFR for the same class rather than competing with it. Asset-class
@@ -33,7 +39,7 @@ from sqlalchemy import text
 
 import database
 from database import (CafrExtract, CafrPerformance, Document,
-                      PlanAssetClassPerformance, Summary)
+                      DocumentSectionRead, PlanAssetClassPerformance, Summary)
 
 console = Console(legacy_windows=False)
 
@@ -186,6 +192,42 @@ def collect_from_cafr(session, class_map) -> list[dict]:
     return rows
 
 
+def _rows_from_payload(payload, plan_id, meeting_date, doc_id,
+                       class_map, source: str) -> list[dict]:
+    """Parse one JSON list of returns into view rows.
+
+    Shared because the summariser and the targeted read emit the same shape
+    on purpose -- that is what lets a targeted read drop into this builder
+    with no new parser.
+    """
+    try:
+        items = json.loads(payload)
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(items, list):
+        return []
+
+    rows = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        canon = canonical(item.get("asset_class") or "", class_map)
+        ret = _as_float(item.get("return_pct"))
+        if not canon or ret is None:
+            continue
+        rows.append({
+            "plan_id": plan_id,
+            "asset_class": canon,
+            "return_pct": ret,
+            "period_label": (item.get("period") or "")[:64] or None,
+            "horizon": horizon_of(item.get("period")),
+            "as_of_date": _as_date(meeting_date),
+            "source": source,
+            "document_id": doc_id,
+        })
+    return rows
+
+
 def collect_from_summaries(session, class_map, since: date | None) -> list[dict]:
     """Returns already parsed out of board documents by the summariser."""
     q = (session.query(Summary.performance_data, Document.plan_id,
@@ -198,29 +240,33 @@ def collect_from_summaries(session, class_map, since: date | None) -> list[dict]
 
     rows = []
     for payload, plan_id, meeting_date, doc_id in q:
-        try:
-            items = json.loads(payload)
-        except (TypeError, ValueError):
-            continue
-        if not isinstance(items, list):
-            continue
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            canon = canonical(item.get("asset_class") or "", class_map)
-            ret = _as_float(item.get("return_pct"))
-            if not canon or ret is None:
-                continue
-            rows.append({
-                "plan_id": plan_id,
-                "asset_class": canon,
-                "return_pct": ret,
-                "period_label": (item.get("period") or "")[:64] or None,
-                "horizon": horizon_of(item.get("period")),
-                "as_of_date": _as_date(meeting_date),
-                "source": "board_doc",
-                "document_id": doc_id,
-            })
+        rows += _rows_from_payload(payload, plan_id, meeting_date, doc_id,
+                                   class_map, "board_doc")
+    return rows
+
+
+def collect_from_section_reads(session, class_map,
+                               since: date | None) -> list[dict]:
+    """Returns read from a located section rather than from the opening tenth.
+
+    The summariser fills a ~50,000-character budget from the front of the
+    document, chosen to write a good summary rather than to find a table. On
+    a real board pack the performance headings begin 31% in. These rows come
+    from a window picked for holding numbers, so for a truncated document
+    they are strictly better evidence than the summariser's.
+    """
+    q = (session.query(DocumentSectionRead.returns_json, Document.plan_id,
+                       Document.meeting_date, Document.id)
+         .join(Document, Document.id == DocumentSectionRead.document_id)
+         .filter(DocumentSectionRead.returns_json.isnot(None),
+                 DocumentSectionRead.returns_json.notin_(("[]", ""))))
+    if since:
+        q = q.filter(Document.meeting_date >= since)
+
+    rows = []
+    for payload, plan_id, meeting_date, doc_id in q:
+        rows += _rows_from_payload(payload, plan_id, meeting_date, doc_id,
+                                   class_map, "targeted_read")
     return rows
 
 
@@ -316,8 +362,20 @@ def main() -> int:
     session = database.SessionLocal()
     try:
         cafr = collect_from_cafr(session, class_map)
+        targeted = collect_from_section_reads(session, class_map, since)
         board = collect_from_summaries(session, class_map, since)
-        chosen = pick_latest(cafr + board)
+
+        # Where a document has both, the targeted read supersedes the
+        # summariser outright rather than merging with it. pick_latest groups
+        # by (plan, document, horizon), so leaving both in would put two
+        # readings of the same table in one group, inflate the breadth tiebreak
+        # with duplicates, and settle each clash by list order — which is not
+        # a decision anyone made. The targeted read saw the table; the
+        # summariser saw the first 50,000 characters.
+        read_docs = {r["document_id"] for r in targeted}
+        board = [r for r in board if r["document_id"] not in read_docs]
+
+        chosen = pick_latest(cafr + targeted + board)
 
         session.execute(text("DELETE FROM plan_asset_class_performance"))
         for r in chosen:
@@ -326,13 +384,18 @@ def main() -> int:
 
         plans = len({r["plan_id"] for r in chosen})
         classes = len({r["asset_class"] for r in chosen})
-        from_board = sum(1 for r in chosen if r["source"] == "board_doc")
+        n = {}
+        for r in chosen:
+            n[r["source"]] = n.get(r["source"], 0) + 1
         console.print(
             f"[green]{len(chosen)}[/green] rows across [green]{plans}[/green] "
             f"plans and {classes} asset classes "
-            f"({from_board} from board documents, {len(chosen)-from_board} from CAFRs)"
+            f"({n.get('targeted_read', 0)} targeted reads, "
+            f"{n.get('board_doc', 0)} summariser, {n.get('cafr', 0)} CAFR)"
         )
-        console.print(f"[dim]candidates seen: {len(cafr)} CAFR, {len(board)} board[/dim]")
+        console.print(f"[dim]candidates seen: {len(cafr)} CAFR, "
+                      f"{len(targeted)} targeted, {len(board)} summariser "
+                      f"(after {len(read_docs)} superseded documents)[/dim]")
         return 0
     finally:
         session.close()

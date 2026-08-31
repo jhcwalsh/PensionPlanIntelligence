@@ -93,15 +93,49 @@ def test_approve_writes_reads_without_touching_the_document(session, monkeypatch
 
 
 def test_budget_is_a_hard_stop(session, monkeypatch):
+    """One worker, so the ceiling is exact and the assertion is unambiguous."""
     _docs(session, n=10)
     monkeypatch.setattr(read_sections, "extract_window",
                         lambda t, c: ({"returns": []}, Decimal("0.10")))
     monkeypatch.setattr("sys.argv",
-                        ["read_sections", "--approve", "--budget", "0.30"])
+                        ["read_sections", "--approve", "--budget", "0.30",
+                         "--workers", "1"])
     read_sections.main()
 
     n = session.query(DocumentSectionRead).count()
     assert 0 < n <= 4, f"budget ceiling not enforced ({n} written)"
+
+
+def test_concurrency_does_not_blow_through_the_budget(session, monkeypatch):
+    """The ceiling must survive parallelism, not merely serial execution.
+
+    Submission accounts for calls already in flight, so W workers cannot each
+    be mid-request when the limit lands. Without that term this test writes
+    ten rows against a three-row budget.
+    """
+    _docs(session, n=10)
+    monkeypatch.setattr(read_sections, "extract_window",
+                        lambda t, c: ({"returns": []}, Decimal("0.10")))
+    monkeypatch.setattr("sys.argv",
+                        ["read_sections", "--approve", "--budget", "0.30",
+                         "--workers", "8"])
+    read_sections.main()
+
+    n = session.query(DocumentSectionRead).count()
+    assert 0 < n <= 4, f"in-flight spend not counted against budget ({n} written)"
+
+
+def test_every_window_is_read_when_the_budget_allows(session, monkeypatch):
+    """Concurrency must not drop jobs: the sliding-window submitter is easy to
+    get wrong in the direction of quietly reading fewer documents than asked."""
+    _docs(session, n=9)
+    monkeypatch.setattr(read_sections, "extract_window",
+                        lambda t, c: ({"returns": []}, Decimal("0.0001")))
+    monkeypatch.setattr("sys.argv",
+                        ["read_sections", "--approve", "--workers", "4"])
+    read_sections.main()
+
+    assert session.query(DocumentSectionRead).count() == 9
 
 
 def test_already_read_documents_are_skipped(session, monkeypatch):

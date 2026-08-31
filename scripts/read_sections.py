@@ -4,10 +4,10 @@
     python -m scripts.read_sections --approve --budget 1.00
 
 The summariser compresses every document to ~50,000 characters before Claude
-sees it, filling that budget from the front. 1,014 documents across 136 plans
-are longer than that, and an allocation table is a dense numeric grid sitting
-deep -- measured at 31% in on a real board pack. This finds the table for
-free and pays only to read the slice it chose.
+sees it, filling that budget from the front. 810 documents are longer than
+that, and an allocation table is a dense numeric grid sitting deep --
+measured at 31% in on a real board pack. This finds the table for free and
+pays only to read the slice it chose.
 
 **Without `--approve` no paid call is reachable.** Not "does not spend by
 default" -- the call site is never entered. On 2026-08-29 a run whose entire
@@ -17,7 +17,10 @@ not a guarantee, so this one lives at the call site and has a test asserting
 no client is built.
 
 `--budget` is a hard stop, checked before each call against what has already
-been spent. It stops the run; it does not warn.
+been spent *plus what is in flight*. It stops the run; it does not warn. The
+in-flight term is what keeps it a ceiling under `--workers`: without it, W
+concurrent calls could each be mid-request when the limit is reached and the
+run would overshoot by W calls with nobody having decided to.
 
 Nothing here writes to `documents`. Reads are stored beside the text in
 `document_section_read` -- no extracted material is overwritten or deleted.
@@ -27,6 +30,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from decimal import Decimal
 
 from rich.console import Console
@@ -54,7 +58,7 @@ def backlog_documents(session):
     The threshold is deliberately loose. Measured over 120 sampled documents
     the gzip ratio runs from 1.98 to 6.63, so no single factor converts bytes
     to characters -- a tight threshold silently drops real documents, and this
-    one did: //3 selected 759 where 1,014 exceed the character limit. A factor
+    one did: //3 selected 759 where 810 exceed the character limit. A factor
     of 10 is comfortably past the observed maximum and costs almost nothing,
     because the byte volume is dominated by a handful of huge documents that
     every threshold selects anyway (33.9 MB at //10 against 27.0 MB at //3).
@@ -122,6 +126,9 @@ def main() -> int:
                          "section (counts readable documents, not scanned ones)")
     ap.add_argument("--top", type=int, default=1,
                     help="windows to read per document (default 1)")
+    ap.add_argument("--workers", type=int, default=12,
+                    help="concurrent reads (default 12). A window takes ~45s, "
+                         "so serial is 12 hours for the full corpus.")
     args = ap.parse_args()
 
     session = database.SessionLocal()
@@ -151,21 +158,67 @@ def main() -> int:
                           "to proceed.[/yellow]\n")
             return 0
 
+        jobs = [(doc, text, cand)
+                for doc, text, cands in work for cand in cands]
         spent = Decimal(0)
         done = failed = stopped = 0
-        for doc, text, cands in work:
-            if float(spent) >= args.budget:
-                console.print(f"\n[yellow]Budget ${args.budget:.2f} reached "
-                              f"after {done} reads. Stopping.[/yellow]")
-                stopped = 1
-                break
-            for cand in cands:
+        per_window = _estimate_cost(1)
+
+        # Reading a 30,000-char window takes ~45 seconds -- the model is fast,
+        # but a window holding a full returns grid produces a long tool call.
+        # Serially that is 12 hours for this corpus, which is not a run anyone
+        # supervises. The work is embarrassingly parallel: independent
+        # documents, no shared state but the budget.
+        #
+        # Only the worker threads call the API. Every database write stays on
+        # this thread, because a Session is not thread-safe and the failure
+        # mode if it were shared is silent corruption rather than an error.
+        it = iter(jobs)
+        pending: dict = {}
+
+        exhausted = False
+
+        def submit_next(ex) -> bool:
+            """Submit one job unless the budget cannot cover what is in flight.
+
+            The ceiling counts calls already dispatched, priced at the observed
+            average once there is one. Without that term, W workers could each
+            be mid-call when the limit is reached and the run would overshoot
+            by W calls with nobody having decided to.
+            """
+            nonlocal exhausted
+            avg = (spent / done) if done else per_window
+            for job in it:
+                if float(spent + avg * len(pending)) >= args.budget:
+                    return False
+                pending[ex.submit(extract_window, job[1], job[2])] = job
+                return True
+            exhausted = True
+            return False
+
+        def top_up(ex) -> None:
+            while len(pending) < args.workers and submit_next(ex):
+                pass
+
+        with ThreadPoolExecutor(max_workers=args.workers) as ex:
+            # Exactly one call before the first result, then fill to --workers.
+            # Until something completes there is no observed cost, so the
+            # in-flight term can only be priced at the estimate -- and an
+            # estimate wrong by 100x is what let extract_performance_reports
+            # run at max_tokens=4096 for thirty documents. Buying the first
+            # observation with one call instead of twelve bounds that mistake
+            # to a single window, at the price of 45 seconds once.
+            submit_next(ex)
+            while pending:
+                fut = next(as_completed(list(pending)))
+                doc, text, cand = pending.pop(fut)
                 try:
-                    data, cost = extract_window(text, cand)
+                    data, cost = fut.result()
                 except Exception as e:                      # noqa: BLE001
-                    # One plan's quirk must not cost the other 1,013 documents.
+                    # One plan's quirk must not cost the other 809 documents.
                     console.print(f"  [red]{doc.id} {doc.filename}: {e}[/red]")
                     failed += 1
+                    top_up(ex)
                     continue
                 spent += cost
                 rows = data.get("returns", [])
@@ -180,12 +233,18 @@ def main() -> int:
                 session.commit()
                 done += 1
                 pct = 100 * cand.offset // max(len(text), 1)
-                console.print(f"  [green]{done:>4}[/green] "
-                              f"{str(doc.filename)[:40]:<40} @{pct:>3}%  "
-                              f"{len(rows):>3} returns  {cand.heading[:34]}")
+                console.print(f"  [green]{done:>4}[/green]/{len(jobs)} "
+                              f"{str(doc.filename)[:36]:<36} @{pct:>3}%  "
+                              f"{len(rows):>3} rets  ${spent:.3f}  "
+                              f"{cand.heading[:26]}")
+                top_up(ex)
+        stopped = 0 if exhausted else 1
 
         console.print(f"\nread [bold]{done}[/bold] windows, "
                       f"{failed} failed, spent [bold]${spent:.4f}[/bold]")
+        if stopped:
+            console.print(f"[yellow]Stopped on the ${args.budget:.2f} "
+                          f"budget ceiling.[/yellow]")
         return stopped
     finally:
         session.close()
