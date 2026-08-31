@@ -16,6 +16,7 @@ See docs/superpowers/specs/2026-08-29-pdf-retention-design.md.
 """
 from __future__ import annotations
 
+import contextlib
 import functools
 import hashlib
 import logging
@@ -220,28 +221,18 @@ def store_document(session, document, path, cfg: R2Config | None = None):
         return None
 
 
-def open_local_or_remote(document, cfg: R2Config | None = None) -> pathlib.Path:
-    """Return a readable path for `document`'s PDF.
+def _resolve(document, cfg: R2Config | None = None) -> tuple[pathlib.Path, bool]:
+    """(path, is_temporary) for `document`'s PDF.
 
     Prefers a present local file (free); otherwise pulls the retained object
-    to a temp file. This is the call extractors use so they stop caring
-    whether the PDF survived on disk.
-
-    The returned `Path` is one of two different things depending on which
-    branch was taken, and the return value alone does not tell you which:
-    when the local file was present, this is that permanent file and must
-    not be deleted; when it fell back to R2, this is a freshly written
-    temporary file (`tempfile.NamedTemporaryFile(delete=False)`) that
-    nothing else will clean up -- the caller owns removing it. There is no
-    flag or wrapper type distinguishing the two cases yet; a caller that
-    cares must compare the returned path against `document.local_path`
-    itself, or a future revision of this function needs to make the
-    distinction explicit.
+    to a temp file. The boolean is the part callers cannot work out for
+    themselves, and getting it wrong either leaks a 90 MB temp file per
+    document or deletes the corpus's only local copy.
     """
     if document.local_path:
         local = pathlib.Path(document.local_path)
         if local.exists():
-            return local
+            return local, False
 
     if not document.content_sha256:
         raise FileNotFoundError(
@@ -256,4 +247,39 @@ def open_local_or_remote(document, cfg: R2Config | None = None) -> pathlib.Path:
     tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
     tmp.write(data)
     tmp.close()
-    return pathlib.Path(tmp.name)
+    return pathlib.Path(tmp.name), True
+
+
+@contextlib.contextmanager
+def document_pdf(document, cfg: R2Config | None = None):
+    """Yield a readable path to `document`'s PDF, cleaning up after itself.
+
+    **This is the call extractors should use.** ``open_local_or_remote``
+    returns a path that is sometimes a permanent local file and sometimes a
+    temp file the caller owns, with nothing in the return value saying which
+    -- fine for a one-off, a leak of up to 90 MB per document in a loop over
+    a corpus. Ownership is decided here, where it is known, instead of by
+    each caller comparing paths and hoping.
+
+    Raises FileNotFoundError when the PDF is neither on disk nor retained,
+    which is the signal to record `file_missing` rather than to fail loudly.
+    """
+    path, is_temp = _resolve(document, cfg)
+    try:
+        yield path
+    finally:
+        if is_temp:
+            try:
+                path.unlink()
+            except OSError:
+                pass
+
+
+def open_local_or_remote(document, cfg: R2Config | None = None) -> pathlib.Path:
+    """Return a readable path for `document`'s PDF.
+
+    Prefer ``document_pdf`` — this leaves any temp file for the caller to
+    remove, and callers reliably forget. Kept for one-shot uses where the
+    process is about to exit anyway.
+    """
+    return _resolve(document, cfg)[0]

@@ -34,6 +34,7 @@ import anthropic
 
 import costs
 import fitz  # PyMuPDF
+import pdf_store
 from dotenv import load_dotenv
 from rich.console import Console
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
@@ -467,9 +468,27 @@ def extract_one(session, doc: Document, plan: Plan, *,
         console.print(f"  [dim]{label}: skipping (aggregator CAFR)[/dim]")
         return "aggregator_skipped"
 
-    if not doc.local_path or not Path(doc.local_path).exists():
-        console.print(f"  [yellow]{label}: missing local file[/yellow]")
+    # Through the store, so a CAFR whose local file is gone but whose bytes
+    # were retained still extracts. Only 45 of 140 CAFR PDFs remain on disk,
+    # and five documents have sat at "missing_file" for exactly this reason.
+    try:
+        with pdf_store.document_pdf(doc) as pdf_path:
+            return _process_pdf(session, doc, plan, label, str(pdf_path),
+                                force=force, plan_meta=plan_meta)
+    except FileNotFoundError:
+        console.print(f"  [yellow]{label}: no local file and nothing "
+                      f"retained[/yellow]")
         return "missing_file"
+
+
+def _process_pdf(session, doc: Document, plan: Plan, label: str,
+                 pdf_path: str, *, force: bool = False,
+                 plan_meta: dict | None = None) -> str:
+    """The body of `extract_one`, against a path that is known readable.
+
+    Split out so the retained copy and the local file follow the same code;
+    the caller owns deciding where the bytes came from.
+    """
 
     # cafr_format="standalone" marks a plan whose "CAFR" is actually a short
     # standalone investment-council annual report (e.g. Nebraska Investment
@@ -479,16 +498,16 @@ def extract_one(session, doc: Document, plan: Plan, *,
     # investment content — so feed all of it rather than searching for a
     # section header that doesn't exist.
     if plan_meta and plan_meta.get("cafr_format") == "standalone":
-        with fitz.open(doc.local_path) as pdf:
+        with fitz.open(pdf_path) as pdf:
             start, end = 1, pdf.page_count
     else:
-        rng = locate_investment_section(doc.local_path, plan_name=plan.name)
+        rng = locate_investment_section(pdf_path, plan_name=plan.name)
         if rng is None:
             console.print(f"  [yellow]{label}: Investment Section not found[/yellow]")
             return "no_section"
         start, end = rng
 
-    section_text = extract_section_text(doc.local_path, start, end)
+    section_text = extract_section_text(pdf_path, start, end)
     if len(section_text) < 1000:
         console.print(f"  [yellow]{label}: section text too short ({len(section_text)} chars)[/yellow]")
         return "too_short"

@@ -23,6 +23,7 @@ from pathlib import Path
 from rich.console import Console
 
 import costs
+import pdf_store
 from database import (
     as_utc,
     utcnow,
@@ -501,14 +502,38 @@ class ExtractOutcome:
 
 
 def extract_document(doc: Document) -> ExtractOutcome:
-    """Extract text from a document's local file."""
-    if not doc.local_path or not Path(doc.local_path).exists():
+    """Extract text from a document's PDF, wherever it lives.
+
+    Reads through ``pdf_store.document_pdf``, so a document whose local file
+    is gone but whose bytes were retained extracts normally. Before this,
+    extraction only ever worked on the machine that did the fetching — the
+    coupling CLAUDE.md records as having caused two separate defects, and the
+    reason 128 documents sit at `file_missing` with nothing to re-extract.
+
+    ``file_missing`` now means genuinely nowhere: not on disk *and* not in
+    the store.
+    """
+    try:
+        with pdf_store.document_pdf(doc) as pdf_path:
+            return _extract_from_path(doc, str(pdf_path))
+    except FileNotFoundError:
         return ExtractOutcome(reason="file_missing")
 
-    path = doc.local_path
-    ext = Path(path).suffix.lower()
 
-    console.print(f"  Extracting [cyan]{Path(path).name}[/cyan]")
+def _extract_from_path(doc: Document, path: str) -> ExtractOutcome:
+    """Extract from a readable path, whether local or pulled from the store.
+
+    Takes the path rather than reading ``doc.local_path`` so the retained
+    copy and the local file follow exactly the same code.
+    """
+    # From the document, never from `path`. A copy pulled out of the store is
+    # always written to a `.pdf` temp file regardless of what it holds, so
+    # reading the suffix off the resolved path would hand every retained
+    # .docx to the PDF extractor.
+    name = doc.filename or Path(doc.local_path or path).name
+    ext = Path(name).suffix.lower()
+
+    console.print(f"  Extracting [cyan]{name}[/cyan]")
 
     if ext == ".pdf":
         type_allows_ocr = doc.doc_type in OCR_DOC_TYPES
