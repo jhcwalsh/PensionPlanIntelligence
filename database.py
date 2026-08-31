@@ -1145,7 +1145,18 @@ class ExtractionDetail(Base):
                              rather than a property of the document —
                              ``scripts/pending_spend.py`` prices these.
     - ``ocr_gate_page_cap``  empty text layer; over MAX_VISION_OCR_DOC_PAGES
-    - ``ocr_empty``          vision OCR ran (or was unavailable) and produced no text
+    - ``ocr_empty``          vision OCR ran and the document genuinely yielded
+                             no text. A claim about the document.
+    - ``ocr_unavailable``    vision OCR was attempted and every page failed at
+                             the API, so nothing was learned about the
+                             document. The second reason here, with
+                             ``ocr_deferred``, that is not a property of the
+                             document — both are priced by
+                             ``scripts/pending_spend.py`` and both are worth
+                             retrying. Split out on 2026-08-31, when an
+                             exhausted credit balance recorded 30 deferred
+                             documents as ``ocr_empty`` and quietly removed
+                             them from the backlog.
     - ``extract_empty``      non-PDF (docx) extraction produced no text
     - ``ocr_partial``        doc is ``done`` but OCR stopped at the per-page
                              cap — pages_ocred < pages_total

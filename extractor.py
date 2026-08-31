@@ -127,7 +127,11 @@ def extract_pdf_pymupdf(path: str) -> tuple[str, int]:
 class OcrInfo:
     """How far vision OCR actually got (for the extraction_details index)."""
     pages_ocred: int = 0
-    reason: str | None = None  # 'page_cap' when the whole-doc gate fired
+    # 'page_cap'    the whole-doc gate fired
+    # 'api_error'   every page failed at the API, so nothing was learned about
+    #               the document. Distinct because the alternative is recording
+    #               'ocr_empty', which asserts the document has no text.
+    reason: str | None = None
 
 
 def extract_pdf_ocr(path: str) -> tuple[str, int, OcrInfo]:
@@ -189,6 +193,7 @@ def _extract_pdf_ocr(path: str) -> tuple[str, int, OcrInfo]:
         page_count = len(doc)
         pages_text = []
         pages_attempted = 0
+        api_errors = 0
         mat = fitz.Matrix(VISION_OCR_RENDER_SCALE, VISION_OCR_RENDER_SCALE)
         for i, page in enumerate(doc):
             if i >= MAX_VISION_OCR_PAGES:
@@ -223,14 +228,20 @@ def _extract_pdf_ocr(path: str) -> tuple[str, int, OcrInfo]:
                 page_text = msg.content[0].text if msg.content else ""
             except Exception as e:
                 console.print(f"  [red]Vision OCR failed on page {i + 1}: {e}[/red]")
+                api_errors += 1
                 continue
             if page_text.strip():
                 pages_text.append(f"[Page {i + 1}]\n{page_text}")
         full_text = "\n\n".join(pages_text)
+        # Every page failed at the API, so this run learned nothing about the
+        # document. Saying so is the difference between "retry when the key
+        # works" and "this document has no text in it".
+        if api_errors and api_errors == pages_attempted:
+            return "", page_count, OcrInfo(pages_ocred=0, reason="api_error")
         return full_text[:MAX_STORED_CHARS], page_count, OcrInfo(pages_ocred=pages_attempted)
     except Exception as e:
         console.print(f"  [red]Vision OCR failed: {e}[/red]")
-        return "", 0, OcrInfo()
+        return "", 0, OcrInfo(reason="api_error")
 
 
 def extract_pdf(path: str, allow_ocr: bool = True,
@@ -254,7 +265,17 @@ def extract_pdf(path: str, allow_ocr: bool = True,
     console.print("  [dim]Trying OCR...[/dim]")
     text, pages, info = extract_pdf_ocr(path)
     if not text.strip():
-        reason = "ocr_gate_page_cap" if info.reason == "page_cap" else "ocr_empty"
+        if info.reason == "page_cap":
+            reason = "ocr_gate_page_cap"
+        elif info.reason == "api_error":
+            # Not a fact about the document. On 2026-08-31 an exhausted
+            # Anthropic credit balance turned 30 ocr_deferred rows into
+            # ocr_empty, dropping them out of the priced backlog that
+            # scripts/pending_spend.py reports — the work became invisible
+            # rather than pending.
+            reason = "ocr_unavailable"
+        else:
+            reason = "ocr_empty"
         return text, pages, reason, info.pages_ocred
     if info.pages_ocred < pages:
         return text, pages, "ocr_partial", info.pages_ocred

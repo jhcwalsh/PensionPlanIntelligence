@@ -127,12 +127,21 @@ def summarization_backlog(session, plan_ids, ratio):
     return len(rows), by_model, total
 
 
+#: Reasons that mean "OCR is still owed on this document", as opposed to a
+#: property of the document itself. `ocr_deferred` is a funding decision;
+#: `ocr_unavailable` is the API having been unreachable when it was tried.
+#: Both are retryable and both must stay priced — on 2026-08-31 an exhausted
+#: credit balance rewrote 30 deferred rows as `ocr_empty`, which silently
+#: emptied this report of work that was still outstanding.
+OCR_OWED_REASONS = ("ocr_deferred", "ocr_unavailable")
+
+
 def ocr_backlog(session, plan_ids):
-    """Documents whose text layer is empty and whose OCR was deferred."""
+    """Documents whose text layer is empty and whose OCR is still owed."""
     q = session.query(Document.plan_id, Document.page_count,
                       ExtractionDetail.pages_total) \
         .join(ExtractionDetail, ExtractionDetail.document_id == Document.id) \
-        .filter(ExtractionDetail.reason == "ocr_deferred")
+        .filter(ExtractionDetail.reason.in_(OCR_OWED_REASONS))
     if plan_ids:
         q = q.filter(Document.plan_id.in_(plan_ids))
 
