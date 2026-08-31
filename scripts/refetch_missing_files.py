@@ -55,17 +55,34 @@ def _waf_blocked_plan_ids() -> set[str]:
     return blocked
 
 
-def missing_file_documents(session, plan_ids: list[str] | None):
-    """Rows whose local file is absent, whatever the recorded reason.
+def missing_file_documents(session, plan_ids: list[str] | None,
+                           only_unextracted: bool = True):
+    """Rows whose local file is absent *and* which have no text to show for it.
 
     Keyed on the file rather than on `extraction_details`, because a row can
     lose its file without anything having re-run to record why.
+
+    The text condition is not optional in practice. This script was written
+    when the pipeline ran locally, where an absent file meant lost work. The
+    pipeline is cloud-only now: GHA runners fetch, extract and discard, so
+    2,557 of 5,084 documents have no local file and nearly all of them are
+    perfectly fine — text extracted, summary written, nothing wrong. Without
+    this filter the script proposes re-downloading all of them, which would
+    hammer a hundred plan websites to recover nothing. The rows that actually
+    need their bytes back are the 121 that failed extraction because the file
+    was gone.
+
+    ``only_unextracted=False`` restores the original behaviour, for the case
+    where a document holds text but you want the PDF itself back — a
+    re-extraction at a higher page cap, or a retention backfill into R2.
     """
     q = (session.query(Document)
          .outerjoin(ExtractionDetail, ExtractionDetail.document_id == Document.id)
          .filter(Document.url.isnot(None)))
     if plan_ids:
         q = q.filter(Document.plan_id.in_(plan_ids))
+    if only_unextracted:
+        q = q.filter(Document.extracted_text.is_(None))
     out = []
     for doc in q:
         path = Path(doc.local_path) if doc.local_path else None
@@ -81,6 +98,10 @@ def main() -> int:
     ap.add_argument("--download", action="store_true",
                     help="actually download; without it this only reports")
     ap.add_argument("--limit", type=int)
+    ap.add_argument("--include-extracted", action="store_true",
+                    help="also re-download documents that already hold text. "
+                         "2,557 documents have no local file because the "
+                         "pipeline runs on GHA runners; almost all are fine.")
     args = ap.parse_args()
 
     from fetcher import DOWNLOADS_DIR, download_document
@@ -88,7 +109,9 @@ def main() -> int:
     blocked = _waf_blocked_plan_ids()
     session = database.SessionLocal()
     try:
-        docs = missing_file_documents(session, args.plan_ids or None)
+        docs = missing_file_documents(
+            session, args.plan_ids or None,
+            only_unextracted=not args.include_extracted)
         docs = [d for d in docs if d.plan_id not in blocked]
         if args.limit:
             docs = docs[:args.limit]
@@ -100,7 +123,9 @@ def main() -> int:
         by_plan: dict[str, int] = {}
         for d in docs:
             by_plan[d.plan_id] = by_plan.get(d.plan_id, 0) + 1
-        console.print(f"\n[bold]{len(docs)}[/bold] documents have a row but no file:")
+        scope = ("have a row but no file" if args.include_extracted
+                 else "have no file and no extracted text")
+        console.print(f"\n[bold]{len(docs)}[/bold] documents {scope}:")
         for plan, n in sorted(by_plan.items(), key=lambda x: -x[1]):
             console.print(f"   {plan:22}{n:>5}")
 

@@ -114,7 +114,8 @@ def _estimate_cost(n_windows: int) -> Decimal:
                         + Decimal(800) * price.output) / costs.MILLION
 
 
-def _worklist(docs, top: int, limit: int | None = None):
+def _worklist(docs, top: int, limit: int | None = None,
+              per_plan: int | None = None):
     """Rank documents for free. Returns (worklist, n_without_candidates).
 
     Documents with no candidate are counted and reported, never handed an
@@ -126,17 +127,38 @@ def _worklist(docs, top: int, limit: int | None = None):
     and the three newest documents in this corpus all have no candidate --
     so `--limit 3` read nothing at all, which is a verification run that
     verifies nothing.
+
+    ``per_plan`` caps documents read for any one plan, counting only those
+    with a candidate, and relies on ``backlog_documents`` ordering newest
+    first. This is the one that matters for cost. The view shows at most two
+    rows per plan -- its latest annual figures and its latest of any kind --
+    so reading a plan's whole back catalogue pays to hide almost all of it.
+    Measured on the first uncapped run: 510 documents across 121 plans, 111
+    windows on New York City alone, documents going back to 2004, and 85% of
+    everything read never reaching the view. 31% of the spend went on
+    documents dated before 2025.
+
+    Two is the natural default because two is what the view consumes. Raising
+    it buys history in ``document_section_read`` rather than anything visible,
+    which is a fine thing to want and should be asked for on purpose.
     """
     work, blank = [], 0
+    seen: dict[str, int] = {}
     for doc in docs:
+        if per_plan and seen.get(doc.plan_id, 0) >= per_plan:
+            continue
         text = doc.extracted_text or ""
         if len(text) <= SMART_TRUNCATE_TARGET:
             continue
         cands = section_finder.find_candidates(text)[:top]
         if not cands:
+            # Deliberately not counted against the plan's cap: a document with
+            # no returns table has not answered anything, so letting it use up
+            # the allowance would leave the plan unread on a technicality.
             blank += 1
             continue
         work.append((doc, text, cands))
+        seen[doc.plan_id] = seen.get(doc.plan_id, 0) + 1
         if limit and len(work) >= limit:
             break
     return work, blank
@@ -155,6 +177,9 @@ def main() -> int:
                          "section (counts readable documents, not scanned ones)")
     ap.add_argument("--top", type=int, default=1,
                     help="windows to read per document (default 1)")
+    ap.add_argument("--per-plan", type=int, default=2,
+                    help="documents to read per plan, newest first (default 2, "
+                         "which is what the view shows). 0 for no cap.")
     ap.add_argument("--workers", type=int, default=12,
                     help="concurrent reads (default 12). A window takes ~45s, "
                          "so serial is 12 hours for the full corpus.")
@@ -163,7 +188,8 @@ def main() -> int:
     session = database.SessionLocal()
     try:
         work, blank = _worklist(backlog_documents(session).yield_per(50),
-                                args.top, args.limit)
+                                args.top, args.limit,
+                                per_plan=args.per_plan or None)
 
         n_windows = sum(len(c) for _, _, c in work)
         if blank:
@@ -176,8 +202,9 @@ def main() -> int:
             return 0
 
         est = _estimate_cost(n_windows)
+        cap = f", max {args.per_plan}/plan" if args.per_plan else ""
         _say(f"\n[bold]{len(work)}[/bold] documents, "
-                      f"[bold]{n_windows}[/bold] windows to read")
+             f"[bold]{n_windows}[/bold] windows to read{cap}")
         _say(f"estimated cost   [bold]${est:.2f}[/bold]   "
                       f"({MODEL}, {section_finder.WINDOW:,} chars each)")
         _say(f"budget ceiling   ${args.budget:.2f}")

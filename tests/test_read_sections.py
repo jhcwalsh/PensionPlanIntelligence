@@ -131,8 +131,11 @@ def test_every_window_is_read_when_the_budget_allows(session, monkeypatch):
     _docs(session, n=9)
     monkeypatch.setattr(read_sections, "extract_window",
                         lambda t, c: ({"returns": []}, Decimal("0.0001")))
+    # --per-plan 0 because this is a test about the submitter, not about
+    # document selection; all nine documents belong to one plan.
     monkeypatch.setattr("sys.argv",
-                        ["read_sections", "--approve", "--workers", "4"])
+                        ["read_sections", "--approve", "--workers", "4",
+                         "--per-plan", "0"])
     read_sections.main()
 
     assert session.query(DocumentSectionRead).count() == 9
@@ -151,6 +154,59 @@ def test_already_read_documents_are_skipped(session, monkeypatch):
     read_sections.main()
 
     assert len(calls) == 1, "re-read a document that already had a section read"
+
+
+def test_only_the_newest_documents_per_plan_are_read(session, monkeypatch, capsys):
+    """The view shows one document per plan; reading forty is paying to hide 39.
+
+    Measured on the first corpus run: 510 documents read across 121 plans,
+    111 windows on one plan alone, and 85% of what was read never reached the
+    view. 31% of the spend went on documents dated before 2025.
+    """
+    from datetime import date
+    for i in range(6):
+        d = Document(plan_id="mcera", url=f"https://x/{i}.pdf",
+                     filename=f"{i}.pdf", extraction_status="done",
+                     extracted_text=LONG,
+                     meeting_date=date(2020 + i, 1, 1))
+        session.add(d)
+    session.commit()
+
+    monkeypatch.setattr(read_sections, "extract_window",
+                        lambda t, c: ({"returns": []}, Decimal("0.0001")))
+    monkeypatch.setattr("sys.argv", ["read_sections", "--approve",
+                                     "--per-plan", "2", "--workers", "1"])
+    read_sections.main()
+
+    rows = session.query(DocumentSectionRead).all()
+    assert len(rows) == 2, f"per-plan cap not applied ({len(rows)} read)"
+
+    # And it must keep the *newest*, not the first two the query happened to
+    # return — an old document is exactly what the cap exists to skip.
+    read_ids = {r.document_id for r in rows}
+    newest = {d.id for d in session.query(Document)
+              .order_by(Document.meeting_date.desc()).limit(2)}
+    assert read_ids == newest
+
+
+def test_the_per_plan_cap_counts_plans_separately(session, monkeypatch):
+    """Two plans with one document each are both read under a cap of 1."""
+    from datetime import date
+    session.add(Plan(id="other", name="Other", state="TX"))
+    session.commit()
+    for plan in ("mcera", "other"):
+        session.add(Document(plan_id=plan, url=f"https://x/{plan}.pdf",
+                             filename=f"{plan}.pdf", extraction_status="done",
+                             extracted_text=LONG, meeting_date=date(2026, 1, 1)))
+    session.commit()
+
+    monkeypatch.setattr(read_sections, "extract_window",
+                        lambda t, c: ({"returns": []}, Decimal("0.0001")))
+    monkeypatch.setattr("sys.argv", ["read_sections", "--approve",
+                                     "--per-plan", "1", "--workers", "1"])
+    read_sections.main()
+
+    assert session.query(DocumentSectionRead).count() == 2
 
 
 def test_short_documents_are_not_selected(session, monkeypatch, capsys):
@@ -222,7 +278,8 @@ def test_a_failed_read_does_not_stop_the_run(session, monkeypatch):
         return {"returns": []}, Decimal("0.0008")
 
     monkeypatch.setattr(read_sections, "extract_window", flaky)
-    monkeypatch.setattr("sys.argv", ["read_sections", "--approve"])
+    monkeypatch.setattr("sys.argv", ["read_sections", "--approve",
+                                     "--per-plan", "0"])
     read_sections.main()
 
     assert session.query(DocumentSectionRead).count() == 2
