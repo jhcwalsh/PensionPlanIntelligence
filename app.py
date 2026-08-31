@@ -3377,6 +3377,26 @@ def _collated_performance_rows() -> list[dict]:
     return queries.collated_performance_rows(get_db_session())
 
 
+def _percent_styler(df, numeric_cols):
+    """Returns as percentages to one decimal, with blanks where there is no
+    figure.
+
+    These are returns: the extra digits the extractors happen to carry
+    through (10.55, 6.72) are false precision, and a bare 12.6 beside a
+    column header that does not say "%" is ambiguous. `na_rep=""` is the
+    reason this is a Styler rather than `NumberColumn(format=...)` — that
+    path renders a missing value as the word "None", and these tables are
+    mostly empty by nature.
+    """
+    cols = [c for c in numeric_cols if c in df.columns]
+    return (df.style
+            # Blank every missing value, not only the numeric ones: a handful
+            # of rows carry no period label or no date, and "None" in a text
+            # cell reads as a bug rather than as "we don't know".
+            .format(na_rep="")
+            .format("{:.1f}%", subset=cols, na_rep=""))
+
+
 def _render_collated_performance():
     """Latest asset-class return per plan, from CAFRs and board documents.
 
@@ -3432,18 +3452,18 @@ def _render_collated_performance():
               df["As of"].dropna().max() if "As of" in df and df["As of"].notna().any()
               else "—")
 
-    # Force numeric dtype so a column that happens to be all-missing for the
-    # current filter still formats as a number rather than rendering "None".
     for c in class_cols:
         df[c] = pd.to_numeric(df[c], errors="coerce")
 
     st.dataframe(
-        df, width="stretch", hide_index=True,
+        # A Styler, not NumberColumn's format=, because most cells in this
+        # table are empty — a plan reports four asset classes, not thirteen —
+        # and NumberColumn renders a missing number as the literal word
+        # "None". Hundreds of them read as an error rather than as absence.
+        # na_rep is the only way to get a blank, and it lives on the Styler.
+        _percent_styler(df, class_cols),
+        width="stretch", hide_index=True,
         column_config={
-            # One decimal place, as a percentage: these are returns, and the
-            # extra digits the extractors happen to carry are false precision.
-            **{c: st.column_config.NumberColumn(c, format="%.1f%%")
-               for c in class_cols},
             # Period labels run long and verbatim — "FY2025 (year ending June
             # 30, 2025)" — and truncating them defeats the point of showing
             # the period at all.
@@ -3508,7 +3528,11 @@ def page_performance():
               int(latest_fy.max()) if not latest_fy.empty else "—")
 
     st.dataframe(
-        df,
+        # Same treatment as the collated table above: percentages to one
+        # decimal, blanks rather than "None". Two performance tables on one
+        # page formatting their numbers differently is its own small lie
+        # about whether they mean the same thing.
+        _percent_styler(df, [label for _, label in queries.PERFORMANCE_CLASSES]),
         width="stretch",
         hide_index=True,
         column_config={
