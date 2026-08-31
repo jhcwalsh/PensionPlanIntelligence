@@ -30,6 +30,13 @@ on macOS arm64, launchd, Neon Postgres, Resend (failure email).
   which in a fresh container is an empty SQLite file — the job reads nothing,
   writes nothing, and exits zero. This is the single most likely way for this
   stage to look like it works while doing nothing.
+- **All four `R2_*` values must be set on every invocation.** If any one is
+  missing, PDF retention is a silent no-op (CLAUDE.md): the run fetches,
+  extracts, goes green, and retains nothing. The second-most-likely way for
+  this stage to look like it works while throwing away the thing it exists to
+  collect — and worse than the `DATABASE_URL` case above, because these 14
+  plans are precisely the ones no other machine can re-fetch. `fetcher.py`
+  prints retention on/off at the start of every run; that line is the check.
 - **`LLM_MODE` and `INSIGHTS_MODE` must be unset in production.** They are
   independent flags; mock mode writing to committed data has already happened
   twice in this repo.
@@ -280,9 +287,35 @@ ANTHROPIC_API_KEY=<key>
 RESEND_API_KEY=<key>
 APPROVAL_EMAIL_FROM=<same value as the GHA secret>
 APPROVAL_EMAIL_RECIPIENT=<same value as the GHA secret>
+R2_ACCOUNT_ID=<same value as the GHA secret>
+R2_ACCESS_KEY_ID=<same value as the GHA secret>
+R2_SECRET_ACCESS_KEY=<same value as the GHA secret>
+R2_BUCKET=<same value as the GHA secret>
 ```
 
 `LLM_MODE` and `INSIGHTS_MODE` must be **absent**, not set to `live`.
+
+**The four `R2_*` values are not optional here, though nothing fails without
+them.** Per CLAUDE.md, if any one is missing PDF retention is a silent no-op:
+the run fetches, extracts, goes green, and retains nothing. These are the 14
+plans no other machine can reach, so their PDFs are the ones least likely to
+be recoverable later — discarding them is the most expensive version of that
+mistake, and it is invisible.
+
+The Mini's own disk is not a substitute. It keeps the file where a GHA runner
+would not, but it is one unbacked disk, which is the arrangement spec §5.4
+rejected when it declined to move the store here. ("no backups yet" is the
+first item on the runbook's own Outstanding list.)
+
+Since 2026-08-31 the extractors read through `pdf_store.document_pdf`, so a
+PDF the Mini retains is readable from GHA and Render too. Before that wiring
+this would have been write-only bookkeeping; now it is what decouples the
+fetch from the extract.
+
+`fetcher.py` prints one line at the start of every run saying whether
+retention is on. On the Mini's first run that line is the thing to read: it is
+the difference between working and silently discarding the 8.5% of AUM the
+machine was bought to reach.
 
 - [ ] **Step 4: Build the image**
 
