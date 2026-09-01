@@ -76,11 +76,29 @@ def test_the_mini_gets_a_subset_never_a_superset():
 
 
 def test_the_plans_a_residential_ip_cannot_reach_are_excluded():
-    """frs and pgcers_md return 403 from a residential IP too (probed
-    2026-09-01). The Mini must not be told to try them."""
+    """frs and pgcers_md return 403 on the listing page from a residential IP
+    too (probed 2026-09-01). The Mini must not be told to try them."""
     mini = set(waf_blocked_ids.all_ids())
     assert "frs" not in mini
     assert "pgcers_md" not in mini
+
+
+def test_a_plan_that_lists_but_will_not_download_is_excluded():
+    """The trap this whole classification exists to avoid.
+
+    asrs, corp_az, acrs_pa and strs_ohio render their listing pages perfectly
+    from a residential IP -- asrs yields 40 document links -- and then 403 on
+    every PDF those links point at, to plain requests, to a cookie-carrying
+    session, and to Playwright's own browser request context alike.
+
+    A probe that stops at "found 40 links" reads as a success and is not one.
+    The first pass of this classification made exactly that mistake, and would
+    have shipped a nightly job that discovers documents it can never fetch.
+    """
+    mini = set(waf_blocked_ids.all_ids())
+    for plan_id in ("asrs", "corp_az", "acrs_pa", "strs_ohio"):
+        assert plan_id not in mini, (
+            f"{plan_id} lists but cannot download -- the Mini gains nothing")
 
 
 def test_the_plan_that_was_never_blocked_is_excluded():
@@ -91,10 +109,20 @@ def test_the_plan_that_was_never_blocked_is_excluded():
 
 
 def test_unreachable_ids_names_exactly_the_residue():
-    """The only plans a paid proxy would still buy. If this set ever empties,
-    A4 in nextsteps.md is closed."""
+    """Everything Stage 1 does not fix, and therefore the real size of what is
+    left: nine of the fourteen. If this set ever empties, A4 is closed."""
     assert waf_blocked_ids.unreachable_ids() == [
-        "frs", "pgcers_md", "scers_suffolk"]
+        "acrs_pa", "asrs", "corp_az", "frs", "pgcers_md", "scers_suffolk",
+        "strs_ohio"]
+
+
+def test_stage_one_is_worth_five_materials_plans_and_two_cafrs():
+    """Pinned deliberately. The plan was written expecting fourteen, the first
+    probe suggested eleven, and downloads brought it to seven. Anything that
+    moves these numbers should have to say so in a diff."""
+    assert waf_blocked_ids.materials_ids() == [
+        "kpers_ks", "lasers_la", "mcera", "nmpera", "nv_pers"]
+    assert waf_blocked_ids.cafr_ids() == ["fwerf_tx", "pbpr_pa"]
 
 
 def test_an_unclassified_entry_is_excluded_rather_than_attempted(tmp_path, monkeypatch):

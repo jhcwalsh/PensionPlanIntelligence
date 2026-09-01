@@ -1,16 +1,16 @@
 {
   "_doc": "Plans whose board materials the cloud pipeline cannot fetch. These are SKIPPED EVERYWHERE by pipeline.py. Naming a blocked plan explicitly on the CLI still processes it, which is how the Mac Mini job fetches them from a residential IP. Materials coverage is 137 of 148 while every id here is skipped.",
-  "_blocked_by": "Why a plan is here, and therefore who can fetch it. Probed 2026-09-01 from a residential IP via the production fetch path; results recorded in docs/superpowers/plans/2026-08-30-mac-mini-waf-plans.md Task 1. 'datacentre_ip' -- a residential host gets through, so the Mac Mini job (Stage 1) fetches it. 'other' -- a hard 403 from a residential IP too, so the block is not IP reputation and no host we have reaches it; see A4 in nextsteps.md. 'scraper' -- NOT blocked at all: the site returns HTTP 200 and the discovery selector is stale. Fixable in the cloud pipeline, no Mini required, and the id comes off this list entirely once fixed.",
+  "_blocked_by": "Why a plan is here, and therefore who can fetch it. Probed 2026-09-01 from a residential IP. THERE ARE TWO INDEPENDENT AXES, and the first pass measured only one: rendering the listing page, and downloading the PDFs it links to. A plan is useful to the Mac Mini only if BOTH work. 'datacentre_ip' -- listing renders AND PDFs download, so Stage 1 fetches it. 'download_403' -- listing renders but the PDF path 403s, to plain requests, to a cookie-carrying session, and to Playwright's own browser request context alike; discovery without download is worthless, so the Mini cannot serve it. 'other' -- the listing page itself 403s from a residential IP, so the block is not IP reputation at all. 'scraper' -- NOT blocked: HTTP 200, stale discovery selector, fixable in the cloud pipeline with no Mini involved. Results in docs/superpowers/plans/2026-08-30-mac-mini-waf-plans.md Task 1.",
   "plans": [
     {
       "id": "asrs",
-      "reason": "Cloudflare 'Just a moment' challenge",
-      "blocked_by": "datacentre_ip"
+      "reason": "Listing page renders from a residential IP, but the PDF path returns 403 to requests, to a cookie-carrying session, and to Playwright's own browser request context (probed 2026-09-01). Discovery without download is worthless, so no host we have can serve this plan.",
+      "blocked_by": "download_403"
     },
     {
       "id": "corp_az",
-      "reason": "Cloudflare 'Just a moment' challenge",
-      "blocked_by": "datacentre_ip"
+      "reason": "Listing page renders from a residential IP, but the PDF path returns 403 to requests, to a cookie-carrying session, and to Playwright's own browser request context (probed 2026-09-01). Discovery without download is worthless, so no host we have can serve this plan.",
+      "blocked_by": "download_403"
     },
     {
       "id": "frs",
@@ -54,8 +54,8 @@
     },
     {
       "id": "strs_ohio",
-      "reason": "Cloudflare 'Just a moment' challenge on requests; Playwright fallback succeeds from a residential IP",
-      "blocked_by": "datacentre_ip"
+      "reason": "Listing page renders from a residential IP, but the PDF path returns 403 to requests, to a cookie-carrying session, and to Playwright's own browser request context (probed 2026-09-01). Discovery without download is worthless, so no host we have can serve this plan.",
+      "blocked_by": "download_403"
     }
   ],
   "_how_it_works": "Loaded by pipeline.py, which subtracts every id here from the default plan set on every run, local or hosted -- 'blocked_by' does not affect that, so a plan stays skipped in the cloud whatever its reason. Explicit positional plan_ids on the CLI bypass the filter. scripts/waf_blocked_ids.py reads 'blocked_by' to decide which ids the Mac Mini job should name."

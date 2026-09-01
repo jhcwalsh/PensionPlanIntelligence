@@ -243,22 +243,49 @@ Three consequences for the rest of this plan:
    fixing its selector restores it to the *cloud* pipeline, no Mini required.
    Tracked separately; do not fold it into this plan.
 
-The arithmetic, kept separate because materials and CAFR coverage are
-different axes. "137 of 148" counts *materials*, so the 11 excluded plans are
-exactly `data/waf_blocked_plans.json`:
+#### Correction, same day: the probe above measured the wrong thing
 
-- **Materials.** 8 of the 11 are reachable (`asrs`, `corp_az`, `kpers_ks`,
-  `lasers_la`, `mcera`, `nmpera`, `nv_pers`, `strs_ohio`). Stage 1 therefore
-  takes materials coverage **137 → 145**. `scers_suffolk`'s selector fix adds
-  one more, from the cloud, taking it to 146. `frs` and `pgcers_md` are the
-  last two, and only A4 reaches them.
-- **CAFR.** All 5 on `data/waf_blocked_cafr_plans.json` are reachable, so
-  Stage 1 restores that list **in full**.
+Everything above is about **rendering the listing page**. It says nothing
+about **downloading the PDFs that page links to**, and those are independent:
+a plan is only useful to the Mini if both work. The table's ticks were awarded
+for "Found N document links", which reads as success and is not one.
 
-So the runner's materials list is 8 ids, not 11, and its CAFR list is the full
-5. Both are still derived from the JSON rather than hardcoded (Task 3) — which
-means the three exclusions have to be expressed *in the block lists
-themselves*, not in the runner. See Task 3's follow-up below.
+Caught when Task 2's container ran the real command on the Mini. `asrs`
+discovered 40 links and then 403'd on every download. Re-tested from Windows:
+403 there too. So this was never a container or arm64 artefact — the first
+probe used `--min-year 2027` to stay read-only, which meant it never attempted
+a single download.
+
+Downloads, tested against known-good PDF URLs already in the corpus:
+
+| Plan | Listing | PDF download | Net |
+|---|---|---|---|
+| `kpers_ks`, `lasers_la`, `mcera`, `nmpera`, `nv_pers` | ✓ | ✓ 200 | **Stage 1** |
+| `pbpr_pa`, `fwerf_tx` | ✓ | ✓ 200 | **Stage 1** (CAFR) |
+| `asrs`, `corp_az`, `acrs_pa`, `strs_ohio` | ✓ | ✗ 403 | lists, cannot fetch |
+| `frs` | ✗ 403 | ✓ 200 | cannot discover |
+| `pgcers_md` | ✗ 403 | — | blocked |
+| `scers_suffolk` | ✓ 200 | ✓ 200 | stale selector, cloud-fixable |
+
+The 403 on the four is not a cookie problem, which was the obvious hypothesis
+and is worth recording as ruled out: it survives a `requests` call carrying
+the browser's cookie jar (only `__cf_bm` is issued, never `cf_clearance`), a
+`Referer` matching the listing page, and Playwright's own
+`APIRequestContext`, which shares the browser's TLS fingerprint and cookies.
+The PDF path has its own rule.
+
+**Revised arithmetic.** Stage 1 is worth **5 materials plans and 2 CAFRs**,
+not 14 and not 11. Materials coverage goes **137 → 142**; `scers_suffolk`'s
+selector fix adds a sixth from the cloud, with no Mini involved. The residue
+for A4 is seven plans, not two.
+
+Whether that is still worth an always-on host and a nightly job is a real
+question and is James's to answer — it is a different proposition from the one
+this plan was written against.
+
+The runner's lists are still derived from the JSON rather than hardcoded
+(Task 3), so these exclusions live in the block lists themselves as
+`blocked_by`, not in the runner.
 
 ---
 
