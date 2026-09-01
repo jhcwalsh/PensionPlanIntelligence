@@ -3,14 +3,23 @@
 # Not the Streamlit image and not a long-running service: this is built to be
 # invoked as `docker compose run --rm`, once a night, and to exit.
 #
-# Two decisions worth keeping:
+# Three decisions worth keeping:
 #   - PLAYWRIGHT_BROWSERS_PATH puts Chromium at /ms-playwright, OUTSIDE /app.
 #     docker-compose.pipeline.yml bind-mounts the repo over /app, which would
 #     otherwise mask a browser installed into the default ~/.cache location
 #     relative to the working tree.
 #   - requirements-pipeline.txt starts with `-r requirements.txt`, so BOTH
 #     files must be copied before the install or pip fails on the include.
-FROM python:3.12-slim
+#   - The base is pinned to **bookworm**, not bare `python:3.12-slim`. That
+#     tag now resolves to Debian trixie, where `ttf-unifont` and
+#     `ttf-ubuntu-font-family` have been renamed (fonts-unifont, fonts-ubuntu)
+#     -- and `playwright install --with-deps` asks for them by their old
+#     names, so the build dies with "Package has no installation candidate"
+#     and exit 100. playwright==1.49.0 is pinned by
+#     requirements-pipeline.txt and the plan's Global Constraints forbid
+#     bumping it here, so the base image is the thing that moves. Observed on
+#     the Mini 2026-09-01; the failure is Debian drift, not arm64.
+FROM python:3.12-slim-bookworm
 
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
     PYTHONUNBUFFERED=1 \
