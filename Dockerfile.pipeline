@@ -1,0 +1,28 @@
+# Pipeline image for the Mac Mini's WAF-blocked-plan job.
+#
+# Not the Streamlit image and not a long-running service: this is built to be
+# invoked as `docker compose run --rm`, once a night, and to exit.
+#
+# Two decisions worth keeping:
+#   - PLAYWRIGHT_BROWSERS_PATH puts Chromium at /ms-playwright, OUTSIDE /app.
+#     docker-compose.pipeline.yml bind-mounts the repo over /app, which would
+#     otherwise mask a browser installed into the default ~/.cache location
+#     relative to the working tree.
+#   - requirements-pipeline.txt starts with `-r requirements.txt`, so BOTH
+#     files must be copied before the install or pip fails on the include.
+FROM python:3.12-slim
+
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+    PYTHONUNBUFFERED=1 \
+    PYTHONIOENCODING=utf-8
+
+WORKDIR /app
+
+COPY requirements.txt requirements-pipeline.txt ./
+RUN pip install --no-cache-dir -r requirements-pipeline.txt
+
+# --with-deps installs the system libraries Chromium needs. On arm64 this is
+# the step that fails first if Playwright has no build for the platform.
+RUN python -m playwright install --with-deps chromium
+
+CMD ["python", "pipeline.py", "--status"]

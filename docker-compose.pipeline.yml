@@ -1,0 +1,21 @@
+# One-shot pipeline runner for the Mac Mini. Invoked as:
+#   docker compose -f docker-compose.pipeline.yml run --rm pipeline python pipeline.py asrs
+#
+# No `restart:` policy on purpose. The runbook's `restart: unless-stopped` is
+# what makes a long-running service survive a reboot; applying it to a batch
+# job would restart the pipeline in a loop.
+services:
+  pipeline:
+    build:
+      context: .
+      dockerfile: Dockerfile.pipeline
+    # If Playwright has no working arm64 Chromium, uncomment to build and run
+    # the image under Rosetta emulation instead. Correct but markedly slower.
+    # platform: linux/amd64
+    working_dir: /app
+    volumes:
+      # Bind-mounted so `git pull` on the host is picked up without a rebuild.
+      # Only a dependency change needs `--build`.
+      - .:/app
+    env_file:
+      - .env
