@@ -193,6 +193,73 @@ git commit -m "Stage 1 Task 1: record WAF probe results from the Mini"
 **Gate:** the 403 group must pass. The Cloudflare group is allowed to fail
 here.
 
+#### Result (2026-09-01): **GO**, with two plans dropped from scope
+
+Run from the Windows desktop at `10.0.0.181` rather than from the Mini at
+`10.0.0.42` — same LAN, therefore the same residential public IP, which is the
+only property under test. Method was stronger than this task specifies: rather
+than `probe_scrape`'s plain `requests`, the *production fetch path*
+(`pipeline.py --fetch-only --max-docs 1 --min-year 2027`, Playwright where the
+plan is configured for it), with a `requests` follow-up on the three that
+returned no links. `--min-year 2027` makes it read-only — discovery runs, but
+nothing qualifies for download, which matters because R2 retention is still
+off and these documents are irreplaceable.
+
+| Plan | Links found | Verdict |
+|---|---|---|
+| `nmpera` | 223 | ✓ |
+| `lasers_la` | 213 | ✓ |
+| `mcera` | 80 (40 sub-pages) | ✓ |
+| `kpers_ks` | 68 | ✓ |
+| `acrs_pa` | 63 | ✓ |
+| `asrs` | 40 | ✓ |
+| `nv_pers` | 38 | ✓ |
+| `corp_az` | 33 | ✓ |
+| `pbpr_pa` | 21 | ✓ |
+| `fwerf_tx` | 18 | ✓ |
+| `strs_ohio` | 1 | ✓ — `requests` 403, Playwright fallback succeeded |
+| `scers_suffolk` | 0 | **Not blocked.** HTTP 200, 108 anchors. Stale selector. |
+| `frs` | 0 | ✗ HTTP 403 from residential IP |
+| `pgcers_md` | 0 | ✗ HTTP 403 from residential IP |
+
+**Not one Cloudflare challenge fired**, on any of the eight plans listed as
+"Just a moment" or "Attention Required" — including from plain `requests` in
+the `strs_ohio` case. Whether the residential IP defeats them or the sites'
+WAF configuration changed since August is unresolved and does not matter to
+this decision: they are reachable.
+
+Three consequences for the rest of this plan:
+
+1. **Proceed.** Three of the five in the 403 group pass (`pbpr_pa`,
+   `fwerf_tx`, `acrs_pa`), so the stop condition — all five still 403 — is not
+   met.
+2. **`frs` and `pgcers_md` leave Stage 1's scope.** They block on something
+   other than IP reputation, so the Mini does not help them and shipping them
+   in the runner's list would produce a job that fails two plans every night.
+   They stay on the block lists with their reason corrected; A4's proxy
+   question survives for exactly these two.
+3. **`scers_suffolk` is a scraper bug, not a WAF block**, and was misfiled on
+   the block list. It is reachable from anywhere, including GitHub Actions —
+   fixing its selector restores it to the *cloud* pipeline, no Mini required.
+   Tracked separately; do not fold it into this plan.
+
+The arithmetic, kept separate because materials and CAFR coverage are
+different axes. "137 of 148" counts *materials*, so the 11 excluded plans are
+exactly `data/waf_blocked_plans.json`:
+
+- **Materials.** 8 of the 11 are reachable (`asrs`, `corp_az`, `kpers_ks`,
+  `lasers_la`, `mcera`, `nmpera`, `nv_pers`, `strs_ohio`). Stage 1 therefore
+  takes materials coverage **137 → 145**. `scers_suffolk`'s selector fix adds
+  one more, from the cloud, taking it to 146. `frs` and `pgcers_md` are the
+  last two, and only A4 reaches them.
+- **CAFR.** All 5 on `data/waf_blocked_cafr_plans.json` are reachable, so
+  Stage 1 restores that list **in full**.
+
+So the runner's materials list is 8 ids, not 11, and its CAFR list is the full
+5. Both are still derived from the JSON rather than hardcoded (Task 3) — which
+means the three exclusions have to be expressed *in the block lists
+themselves*, not in the runner. See Task 3's follow-up below.
+
 ---
 
 ### Task 2: A pipeline container that runs Playwright Chromium on arm64
