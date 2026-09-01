@@ -1017,7 +1017,16 @@ def _end_of_month(year: int, month: int) -> date | None:
 
 
 def _last_quarter_end(d: date) -> date:
-    """The most recent quarter end on or before ``d``."""
+    """The most recent quarter end on or before ``d``.
+
+    Accepts a ``datetime`` as well as a ``date``. The two derived tables store
+    a ``Date`` column so production always passes a ``date``, but the same
+    fallback is the obvious thing to hand a document's ``meeting_date``, which
+    is a ``DateTime`` -- and comparing the two raises TypeError rather than
+    doing anything sensible.
+    """
+    if isinstance(d, datetime):
+        d = d.date()
     month = ((d.month - 1) // 3) * 3 + 3
     end = _end_of_month(d.year, month)
     if end is not None and end <= d:
@@ -1109,6 +1118,29 @@ def quarter_label(d: date | None) -> str | None:
 def period_end_quarter(period_label: str | None,
                        fallback: date | None) -> str | None:
     return quarter_label(period_end(period_label, fallback))
+
+
+# Figures older than this are not shown in either performance table.
+#
+# Both tables claim to be current -- "Latest return by asset class" says so in
+# its title -- and the corpus reaches back to 1994Q4. A 2014 real-estate return
+# sitting in a column beside a 2026 one is not stale data a reader can discount;
+# it reads as this year's number unless they check the date on every row.
+#
+# A display rule, deliberately not a build rule: the underlying figures stay in
+# plan_asset_class_performance and plan_asset_class_horizon, and nothing is
+# deleted. Raise or lower this and the old readings come back.
+EARLIEST_PERIOD_END = "2025Q1"
+
+
+def _too_old(quarter: str | None) -> bool:
+    """True for a quarter before the cutoff. Unknown is not old.
+
+    A row whose period cannot be dated at all keeps its place: it is missing
+    information, not evidence of age, and dropping it would hide a plan for a
+    reason the reader cannot see.
+    """
+    return bool(quarter) and quarter < EARLIEST_PERIOD_END
 
 
 def span_label(quarters) -> str | None:
@@ -1213,7 +1245,9 @@ def collated_performance_rows(session) -> list[dict]:
         if label:
             entry[label] = rec.return_pct
 
-    out = list(by_source.values())
+    # Every figure in one of these rows shares a period, so age is a property
+    # of the whole row and the row goes or stays as one.
+    out = [r for r in by_source.values() if not _too_old(r["Period end"])]
     # Annual first within a plan, so the comparable row is the one a reader
     # meets first; plans ordered by how recent their newest source is.
     out.sort(key=lambda r: (r["As of"] or "", r["Frequency"] == "Annual"),
@@ -1279,11 +1313,16 @@ def asset_class_horizon_rows(session, asset_class: str) -> list[dict]:
     cell_quarters: dict[str, dict[str, str]] = {}
 
     for rec, plan_name, doc_url, doc_name in rows:
-        entry = by_plan.setdefault(rec.plan_id, {"Plan": plan_name})
         label = labels.get(rec.horizon_key)
+        quarter = period_end_quarter(rec.period_label, rec.as_of_date)
+        # Age is per cell here, not per row, so an old 10-year figure is
+        # dropped without taking its row's current 1-year figure with it.
+        if label and _too_old(quarter):
+            continue
+
+        entry = by_plan.setdefault(rec.plan_id, {"Plan": plan_name})
         if label:
             entry[label] = rec.return_pct
-            quarter = period_end_quarter(rec.period_label, rec.as_of_date)
             if quarter:
                 cell_quarters.setdefault(rec.plan_id, {})[label] = quarter
 
@@ -1296,7 +1335,14 @@ def asset_class_horizon_rows(session, asset_class: str) -> list[dict]:
                 newest[rec.plan_id] = (rec.as_of_date, doc_url, doc_name)
 
     out = []
+    display_labels = set(labels.values())
     for plan_id, entry in by_plan.items():
+        # A plan can reach here with no displayable figure at all -- every
+        # cell dropped for age, or its only readings on horizons this view
+        # has no column for (monthly, since-inception). An all-blank row
+        # reads as a plan that reported and did badly.
+        if not display_labels & entry.keys():
+            continue
         as_of, doc_url, doc_name = newest.get(plan_id, (None, None, None))
         quarters = cell_quarters.get(plan_id, {})
         entry["Period end"] = span_label(quarters.values())
@@ -1311,3 +1357,24 @@ def asset_class_horizon_rows(session, asset_class: str) -> list[dict]:
     out.sort(key=lambda r: (r.get(one_year) is None,
                             -(r.get(one_year) or 0)))
     return out
+
+
+def asset_class_horizon_quarters(session) -> list[str]:
+    """Every period-end quarter in the horizon table, newest first.
+
+    Deliberately **not** per asset class, and that is the whole point. The
+    picker beside this table keeps its selection in Streamlit session state
+    across an asset-class change, and Streamlit raises outright when a stored
+    selection is absent from the options it is handed. Cash has no 2026Q2
+    reading, so options derived from the selected class alone meant: choose
+    2026Q2 on real estate, switch to Cash, crash.
+
+    A stable list fixes that and is the better behaviour anyway -- "show me
+    2026Q1" is a question a reader asks across asset classes, not one they
+    expect to be silently forgotten when they change the class.
+    """
+    from database import PlanAssetClassHorizon as H
+
+    rows = session.query(H.period_label, H.as_of_date).all()
+    quarters = {period_end_quarter(label, as_of) for label, as_of in rows}
+    return sorted((q for q in quarters if q and not _too_old(q)), reverse=True)

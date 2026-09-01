@@ -3482,8 +3482,19 @@ def _render_collated_performance():
                + ["As of", "Source"])
     df = df[[c for c in ordered if c in df.columns]]
 
-    left, right = st.columns(2)
+    # Both option lists come from the UNFILTERED frame, and neither filter may
+    # narrow the other's options. Streamlit raises when a widget's stored
+    # selection is missing from the options it is handed, so deriving the
+    # quarter list from the already-frequency-filtered rows meant that picking
+    # a quarter and then changing frequency could delete that quarter from its
+    # own picker and crash the page.
+    # Newest first: a reader opening this wants the current quarter, and
+    # scrolling a picker to the bottom to find it is the wrong default.
+    quarters = (sorted(df["Period end"].dropna().unique(), reverse=True)
+                if "Period end" in df else [])
     freqs = sorted(df["Frequency"].dropna().unique()) if "Frequency" in df else []
+
+    left, right = st.columns(2)
     chosen = left.multiselect(
         "Frequency", freqs, default=[f for f in freqs if f == "Annual"] or freqs,
         help="Annual figures are comparable across plans. Quarterly and "
@@ -3492,10 +3503,6 @@ def _render_collated_performance():
     if chosen:
         df = df[df["Frequency"].isin(chosen)]
 
-    # Newest first: a reader opening this wants the current quarter, and
-    # scrolling a picker to the bottom to find it is the wrong default.
-    quarters = (sorted(df["Period end"].dropna().unique(), reverse=True)
-                if "Period end" in df else [])
     chosen_q = right.multiselect(
         "Period end", quarters, default=[],
         help="The quarter each row's period ends in. Empty shows every "
@@ -3547,6 +3554,16 @@ def _asset_class_horizon_rows(asset_class: str) -> list[dict]:
     short TTL buys nothing and costs egress.
     """
     return queries.asset_class_horizon_rows(get_db_session(), asset_class)
+
+
+@st.cache_data(ttl=900)
+def _asset_class_horizon_quarters() -> list[str]:
+    """The quarter picker's options, stable across asset-class changes.
+
+    Cached separately from the rows because it does not vary with the chosen
+    class -- that independence is the point, not an optimisation.
+    """
+    return queries.asset_class_horizon_quarters(get_db_session())
 
 
 def _keep_only_these_quarters(df, horizon_cols, cell_quarters, chosen):
@@ -3618,8 +3635,11 @@ def _render_asset_class_horizons():
     # frame -- a dict-valued column would break _percent_display's pd.isna.
     cell_quarters = [r.get("_period_ends") or {} for r in rows]
 
-    quarters = sorted({q for cells in cell_quarters for q in cells.values()},
-                      reverse=True)
+    # Every quarter in the table, not just this asset class's. The picker keeps
+    # its selection across an asset-class change and Streamlit raises when a
+    # stored selection is absent from the options -- Cash has no 2026Q2, so a
+    # per-class list crashed the page on exactly that move.
+    quarters = _asset_class_horizon_quarters()
     chosen_q = st.multiselect(
         "Period end", quarters, default=[],
         key="asset_class_horizon_quarter",
@@ -3641,6 +3661,14 @@ def _render_asset_class_horizons():
 
     if chosen_q:
         df = _keep_only_these_quarters(df, horizon_cols, cell_quarters, chosen_q)
+        if df.empty:
+            # Now reachable by design: the picker offers every quarter in the
+            # table, so a reader can legitimately ask for one this class has
+            # no reading for. Saying so beats an empty grid.
+            st.info(f"No {chosen_label} figures for "
+                    f"{', '.join(sorted(chosen_q))}. The quarter list covers "
+                    "every asset class, so not every class has every quarter.")
+            return
 
     c1, c2 = st.columns(2)
     c1.metric("Plans shown", len(df))

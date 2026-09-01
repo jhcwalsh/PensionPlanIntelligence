@@ -183,3 +183,14 @@ def test_year_to_date_does_not_end_in_december(label):
 
 def test_year_to_date_still_believes_a_date_it_states():
     assert period_end("YTD through 11/20/2025", date(2026, 7, 31)) == date(2025, 11, 20)
+
+
+def test_a_datetime_fallback_is_accepted_as_well_as_a_date():
+    """The two derived tables store a Date, so production always passes a
+    date. But `Document.meeting_date` is a DateTime and is the obvious thing
+    to hand this function when working outside those tables -- and comparing a
+    datetime to a date raises TypeError rather than doing anything sensible."""
+    from datetime import datetime
+
+    assert period_end("1 Year", datetime(2026, 5, 14, 9, 30)) == date(2026, 3, 31)
+    assert period_end_quarter("1 Year", datetime(2026, 5, 14, 9, 30)) == "2026Q1"

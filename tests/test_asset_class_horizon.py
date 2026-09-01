@@ -193,8 +193,12 @@ def test_asset_class_horizon_rows_shape_and_columns(session):
                  date(2026, 6, 1), document_id=d2.id)
     _seed_horizon(session, "mcera", "real_estate", "annual", 6.0,
                  date(2026, 8, 26), document_id=d1.id)
+    # 2025-04-01 rather than 2025-01-01: with no period label the period end
+    # falls back to the last quarter that had closed, and a 1 January date
+    # resolves to 2024Q4 -- behind queries.EARLIEST_PERIOD_END, so the plan
+    # would vanish and this test would be checking the cutoff by accident.
     _seed_horizon(session, "other", "real_estate", "3y", 9.0,
-                 date(2025, 1, 1))
+                 date(2025, 4, 1))
     session.commit()
 
     rows = queries.asset_class_horizon_rows(session, "real_estate")
@@ -244,18 +248,23 @@ def test_each_cell_carries_its_own_period_end(session):
     """The reason _period_ends exists. A row mixes documents across columns,
     so one Period end per row would be a claim about cells it does not
     describe: here the 1-year figure is a 2026Q1 reading and the 10-year one
-    is four years older."""
+    is three quarters older.
+
+    Both sit after queries.EARLIEST_PERIOD_END on purpose. A wider spread
+    would demonstrate the same point and then be silently dropped by the
+    staleness cutoff, testing that instead of this.
+    """
     _seed_horizon(session, "mcera", "real_estate", "annual", 6.0,
                   date(2026, 5, 14), period_label="1 Year")
     _seed_horizon(session, "mcera", "real_estate", "10y", 7.0,
-                  date(2022, 8, 10), period_label="10 Year")
+                  date(2025, 8, 10), period_label="10 Year")
     session.commit()
 
     row = queries.asset_class_horizon_rows(session, "real_estate")[0]
 
-    assert row["_period_ends"] == {"1 year": "2026Q1", "10 year": "2022Q2"}
+    assert row["_period_ends"] == {"1 year": "2026Q1", "10 year": "2025Q2"}
     # The row-level column says it spans, rather than picking one end.
-    assert row["Period end"] == "2022Q2-2026Q1"
+    assert row["Period end"] == "2025Q2-2026Q1"
 
 
 def test_a_row_whose_cells_agree_shows_one_quarter(session):

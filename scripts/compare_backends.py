@@ -137,6 +137,10 @@ CASES = {
     # The per-asset-class mirror of collated_performance_rows -- reads the
     # derived plan_asset_class_horizon table, same reasoning: no map to pass.
     "asset_class_horizon_rows": {"args": ("real_estate",)},
+    # The picker's option list. Reads the same table with no asset-class
+    # filter, so a backend that disagreed about period labels or as-of dates
+    # would show up here even where a single class happened to match.
+    "asset_class_horizon_quarters": {"args": ()},
     # Default 30-day window, matching the CAFR page.
     "cafr_fiscal_year_counts": {"args": ()},
 }
