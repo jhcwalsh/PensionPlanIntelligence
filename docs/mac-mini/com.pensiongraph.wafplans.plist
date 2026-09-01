@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Install to ~/Library/LaunchAgents/com.pensiongraph.wafplans.plist
+
+  A LaunchAgent, not a LaunchDaemon: OrbStack's Docker runs inside the user
+  session, so a daemon starting before login would find no docker socket.
+  Auto-login is on (runbook, "Host settings applied"), which is what makes a
+  user-session agent survive an unattended reboot.
+
+  07:30 local, after the GHA daily pipeline at 11:00 UTC. launchd calendar
+  intervals are local time and follow DST; the GHA cron is UTC and does not.
+  They do not interact -- both write to the same Postgres and neither reads
+  the other's output -- so the drift is harmless.
+
+  If the machine is asleep or off at 07:30, launchd runs the job at the next
+  wake. That is the intended best-effort behaviour.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.pensiongraph.wafplans</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/jameswalsh/apps/pensiongraph/scripts/run_waf_plans.sh</string>
+    </array>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key><integer>7</integer>
+        <key>Minute</key><integer>30</integer>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/Users/jameswalsh/apps/pensiongraph/logs/launchd.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/jameswalsh/apps/pensiongraph/logs/launchd.err.log</string>
+
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>
