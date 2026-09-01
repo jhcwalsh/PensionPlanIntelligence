@@ -6,7 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Two layered systems sharing one SQLite database (`db/pension.db`, ~64 MB, tracked in git):
 
-1. **Meeting-document pipeline** (`pipeline.py`, `fetcher.py`, `extractor.py`, `summarizer.py`) — fetches board materials and CAFRs from ~148 U.S. public pension plans, extracts text, summarizes with Claude per-document. Cloud-only: GHA cron handles 137 of 148 plans daily. The 14 WAF-blocked plans in `data/waf_blocked_plans.json` / `data/waf_blocked_cafr_plans.json` are skipped everywhere (no runner can reach them) — 8.5% of tracked AUM, though 4 of the 14 had no documents anyway.
+1. **Meeting-document pipeline** (`pipeline.py`, `fetcher.py`, `extractor.py`, `summarizer.py`) — fetches board materials and CAFRs from ~148 U.S. public pension plans, extracts text, summarizes with Claude per-document. Mostly cloud: GHA cron handles 137 of 148 plans daily. The plans in `data/waf_blocked_plans.json` / `data/waf_blocked_cafr_plans.json` are skipped by every cloud run — 8.5% of tracked AUM, though 4 of them had no documents anyway.
+
+   **"Blocked" means three different things**, established by probe on 2026-09-01 and recorded as `blocked_by` on each entry. Rendering a plan's listing page and downloading the PDFs it links to are independent problems, and a plan is only recoverable if both work:
+   - `datacentre_ip` (5 materials, 2 CAFR) — a residential IP gets through on both. These the Mac mini fetches nightly; see the cadence table below.
+   - `download_403` (`asrs`, `corp_az`, `acrs_pa`, `strs_ohio`) — the listing page renders fine and every PDF 403s, to plain `requests`, to a cookie-carrying session, and to Playwright's own browser request context alike. Discovery without download is worthless, so no host we have serves these.
+   - `other` (`frs`, `pgcers_md`) — the listing page itself 403s from a residential IP. `frs` is the mirror image of the group above: its PDFs download fine, it just cannot be discovered.
+   - `scraper` (`scers_suffolk`) — **not blocked at all.** HTTP 200, 108 anchors, and a stale discovery selector. Fixable in the cloud pipeline with no Mac mini involved, and the id comes off the list once fixed.
+
+   Never derive that split by reading the `reason` strings; `scripts/waf_blocked_ids.py` is the one source of truth, and anything not classified `datacentre_ip` is excluded from the mini's job so an unclassified new entry is skipped rather than failed nightly.
 2. **Insights automation** (`insights/` package) — composes monthly / quarterly / annual editorial briefings from the existing summaries, plus a daily digest. All auto-publish and email a copy; nothing waits on approval. The weekly cadence still runs but is **silent** (no email, no notes file) because monthly composes from weekly publications — see the cadence-cascade note below.
 
 The Streamlit app (`app.py`) reads from the same DB and surfaces both layers as tabs.
@@ -104,9 +112,26 @@ recorded it) is gone: rows are durable when written. What they still buy is
 that one plan's data quirk, which makes an extractor exit 1, does not leave the
 derived-data builds a day stale.
 
-Local Task Scheduler owns exactly one job: the weekly meeting-recordings
-catalogue (`scripts/run_recordings.bat`). It no longer commits or pushes
-anything, which is what removed its conflict-avoidance time slot.
+Two jobs run off machines rather than runners, on two different machines.
+Windows Task Scheduler owns the weekly meeting-recordings catalogue
+(`scripts/run_recordings.bat`); neither job commits or pushes anything, which
+is what removed the recordings job's conflict-avoidance time slot.
+
+The Mac mini owns `scripts/run_waf_plans.sh` — the plans no cloud runner can
+reach, fetched from a residential IP. It writes straight to Neon, so there is
+nothing to commit and nothing to deploy; if the mini is off for a month,
+coverage stops advancing on those plans and nothing else degrades. Everything
+it runs goes through the `Dockerfile.pipeline` container, so the host needs
+only `git` and `docker` on absolute paths — launchd does not source
+`.zprofile`, and a bare `docker` there is command-not-found.
+
+**Its launchd agent is installed but deliberately not loaded.** Load it with
+`launchctl load ~/Library/LaunchAgents/com.pensiongraph.wafplans.plist`, and
+only once the four `R2_*` values exist: these are the plans nothing else can
+re-fetch, so a run with retention off downloads the least recoverable PDFs in
+the corpus and discards them. The runner warns and continues rather than
+refusing, on the grounds that fetching without retention still beats fetching
+nothing — which makes not loading the agent the actual safeguard.
 
 **Re-extraction is no longer size-gated.** `MAX_STORED_CHARS` is 2,000,000 and
 450 documents were truncated at the old 150k cap. Re-extracting them would have
@@ -225,6 +250,7 @@ Render hosts one web service: Streamlit (`pension-plan-intelligence`), reading N
 | Monthly CAFR refresh + structured extraction (~92 plans) | cron 1st of month 15:00 UTC | GHA | `.github/workflows/monthly-cafr-refresh.yml` |
 | Monthly IPS refresh (auto-discover + verify via Haiku 4.5) | cron 1st of month 16:00 UTC | GHA | `.github/workflows/monthly-ips.yml` |
 | Weekly meeting-recordings catalogue (discover sources → poll via yt-dlp → email digest; no video downloads) | Task Scheduler Sat 08:00 local | local Windows | `scripts/run_recordings.bat --no-downloads` |
+| WAF-blocked plans (5 materials + 2 CAFR, from a residential IP) | launchd 07:30 local — **installed, not yet loaded** | Mac mini | `scripts/run_waf_plans.sh` |
 | Monthly insights composition + auto-publish | cron 1st of month 18:00 UTC | GHA | `.github/workflows/monthly-insights.yml` |
 | Quarterly insights composition + auto-publish | cron 1st of Jan/Apr/Jul/Oct 19:00 UTC | GHA | `.github/workflows/quarterly-insights.yml` |
 | Annual insights composition + auto-publish | cron Jan 5 19:00 UTC | GHA | `.github/workflows/annual-insights.yml` |

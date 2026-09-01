@@ -66,18 +66,48 @@ Private caps Actions at 2,000 min/month and the Playwright pipeline
 approaches it. Data is all public record. Going public makes Actions free but
 publishes code and history.
 
-### A4. WAF proxy for the 14 blocked plans?
+### A4. WAF proxy — now a 7-plan question, and a weaker one
 
-8.5% of tracked AUM (4 of the 14 had no documents anyway). Residential proxy
-is $10–75/month. Partly overtaken by A5 — a Mac mini on a residential line is
-a different answer to the same question.
+Probed 2026-09-01 (see A5). A residential IP recovers 7 of the 14, so a proxy
+would only ever buy the other 7 — and for 4 of those (`asrs`, `corp_az`,
+`acrs_pa`, `strs_ohio`) it probably would not, because their listing pages
+already render fine and it is the **PDF path** that 403s, to every technique
+tried including Playwright's own browser request context. A proxy changes the
+IP, which is not the axis those sites are refusing on.
 
-### A5. Mac mini as a host — runbook written, nothing moved
+The honest residue a proxy might actually fix is `frs` and `pgcers_md`, whose
+listing pages 403. `scers_suffolk` is not a proxy question at all — its
+selector is stale.
 
-`docs/superpowers/plans/2026-08-30-mac-mini-waf-plans.md`. A machine on a
-residential connection reaches plans that block datacentre IPs, and would take
-the Playwright pipeline off metered Actions minutes. Nothing depends on it;
-the decision is whether the always-on machine is worth the maintenance.
+So: **weaker than it looked.** $10–75/month for a plausible 2 plans.
+
+### A5. Mac mini — Stage 1 built, schedule installed but not loaded
+
+`docs/superpowers/plans/2026-08-30-mac-mini-waf-plans.md`. Tasks 1–6 done on
+2026-09-01: the probe, the arm64 container, `scripts/waf_blocked_ids.py`,
+`scripts/run_waf_plans.sh`, and the launchd agent. The mini has the repo, a
+least-privilege `.env` (five values; no Render key), a working Docker image,
+and both runner guards verified.
+
+**It is worth 5 materials plans and 2 CAFRs, not 14** — the plan was written
+expecting 14, the first probe suggested 11, and testing downloads rather than
+just discovery brought it to 7. Materials coverage 137 → 142 when it runs.
+
+**The agent is installed and deliberately not loaded**, because loading it
+schedules a nightly fetch of the plans nothing else can re-fetch, with
+retention off. One command once E1 lands:
+
+```
+launchctl load ~/Library/LaunchAgents/com.pensiongraph.wafplans.plist
+```
+
+### A6. `scers_suffolk`'s stale selector — cheap, and not a Mac mini job
+
+Misfiled as a WAF block for months. The site answers HTTP 200 with 108
+anchors from anywhere, GitHub Actions included; the discovery selector just
+finds no document links. Fixing it and removing the id from
+`data/waf_blocked_plans.json` is +1 plan of coverage for an hour's work and
+no infrastructure. Better value than anything in A4.
 
 ---
 
@@ -401,10 +431,16 @@ Sections A1, B1, B2 and D1–D10 are done. What's left:
    claim from the August outage. **Only James can see this.**
 4. **C2 local Streamlit hang** — development friction only, does not affect
    the live site. Worth an hour with a thread dump rather than more guessing.
-5. **`wsib`'s missing performance data** (D3) — needs a second section search
+5. **A5's one command** — `launchctl load ...wafplans.plist` on the mini, the
+   moment R2 is on. Everything else for it is built and verified; leaving it
+   unloaded is the only thing standing between the mini and 7 more plans.
+6. **A6 `scers_suffolk` selector** — +1 plan, an hour, no infrastructure, and
+   it lands in the cloud pipeline rather than on a machine in your house.
+7. **`wsib`'s missing performance data** (D3) — needs a second section search
    or a cross-section merge. Not urgent: it fails safe.
-6. **A2 Auth0**, **A3 public repo**, **A4 WAF proxy**, **A5 Mac mini** —
-   decisions only James can make, no urgency on any of them.
+8. **A2 Auth0**, **A3 public repo**, **A4 WAF proxy** — decisions only James
+   can make, no urgency on any of them. A4 is now worth less than it looks;
+   see the entry.
 
 Worth saying plainly: with D6, D7, D8 and D10 shipped, the performance data is
 in better shape than the extraction pipeline that feeds it. The binding
