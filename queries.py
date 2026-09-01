@@ -20,8 +20,10 @@ left for a follow-up rather than bundled into the extraction.
 
 from __future__ import annotations
 
+import calendar
 import json
-from datetime import datetime, timedelta
+import re
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from sqlalchemy import case, desc, distinct, func, or_
@@ -941,6 +943,191 @@ def cafr_fiscal_year_counts(session, prior_days: int = 30) -> list[dict]:
     ]
 
 
+# --------------------------------------------------------------------------
+# Which quarter does a figure refer to?
+#
+# The performance tables stored a verbatim period label and an as-of date, and
+# neither answers that. The label is whatever the PDF said -- "FY2025",
+# "1 Yr.", "12 months ended March 31, 2026" -- and 54% of the corpus states no
+# date at all. The as-of date is the *document's* date: a board pack presented
+# on 14 May 2026 reports figures through 31 March, so sorting on it files a
+# 2026Q1 return under 2026Q2 and mixes it with the following quarter's.
+#
+# So resolve both into one period-end date and bucket that. The precedence is
+# the whole design: what a label *states* always beats what a document date
+# *implies*, and the implied fallback rounds back to the last quarter that had
+# closed when the document was written -- never forward, so a figure is never
+# claimed to be fresher than the paper carrying it.
+#
+# Computed here at read time rather than stored: both derived tables already
+# carry period_label and as_of_date, this is a pure function of the two, and
+# the alternative is a schema change to two tables for a display concern.
+# --------------------------------------------------------------------------
+
+_MONTH_NAMES = (
+    "january february march april may june july august september "
+    "october november december"
+).split()
+_MONTH_BY_PREFIX = {name[:3]: i + 1 for i, name in enumerate(_MONTH_NAMES)}
+# Spelled out and abbreviated, because the corpus writes both -- "March 31,
+# 2026" and "Mar 31, 2026". Longest first so the alternation prefers the full
+# name, and matched with \b on both sides rather than a trailing [a-z]*, so
+# "Mar" matches and "marketing" does not.
+_MONTH_ALT = "|".join(sorted(
+    _MONTH_NAMES + [n[:3] for n in _MONTH_NAMES] + ["sept"],
+    key=len, reverse=True))
+
+# 12/31/25, 09/30/2025, 6-30-2025. Deliberately greedy about which one wins:
+# a range states both ends, and the period ends at the later one, so the LAST
+# match in the label is the answer.
+_NUMERIC_DATE = re.compile(r"\b(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})\b")
+# "March 31, 2026" / "Mar 31, 2026" / "June 30 2025"
+_NAMED_DATE = re.compile(
+    rf"\b({_MONTH_ALT})\.?\s+(\d{{1,2}})(?:st|nd|rd|th)?,?\s+((?:19|20)\d{{2}})\b",
+    re.I)
+# "ending May 2026" -- a month with no day ends when the month does.
+_MONTH_YEAR = re.compile(rf"\b({_MONTH_ALT})\.?,?\s+((?:19|20)\d{{2}})\b", re.I)
+# "Q1 2026" and "1Q 2026" -- both appear.
+_QUARTER_YEAR = re.compile(
+    r"\b(?:Q([1-4])|([1-4])Q)\s*,?\s*((?:19|20)\d{2})\b", re.I)
+_YEAR_Q = re.compile(r"\b((?:19|20)\d{2})\s*Q([1-4])\b", re.I)
+_FISCAL_YEAR = re.compile(
+    r"\b(?:FY|fiscal\s+year(?:\s+end(?:ed|ing))?)\s*((?:19|20)\d{2})\b", re.I)
+_CALENDAR_YEAR = re.compile(
+    r"\b(?:CY|calendar\s+year)\s*((?:19|20)\d{2})\b", re.I)
+_ANY_YEAR = re.compile(r"\b((?:19|20)\d{2})\b")
+# "YTD 2026" names the year the period runs *in*, not a period that ends in
+# December -- the run stops at whatever date the document was written. Reading
+# it as a bare year dated thirteen of these to 2026Q4, a quarter that had not
+# happened. When this fires, the year rules are skipped and the document's own
+# date answers instead.
+_YEAR_TO_DATE = re.compile(r"\b(?:[CF]?YTD|year[- ]to[- ]date)\b", re.I)
+
+# June 30 is the dominant US public-pension fiscal year end, and is already
+# what collect_from_cafr assumes when it stamps an as-of date on a CAFR row.
+# The two must not disagree about what FY2025 means.
+_FISCAL_YEAR_END = (6, 30)
+
+
+def _end_of_month(year: int, month: int) -> date | None:
+    try:
+        return date(year, month, calendar.monthrange(year, month)[1])
+    except (ValueError, calendar.IllegalMonthError):
+        return None
+
+
+def _last_quarter_end(d: date) -> date:
+    """The most recent quarter end on or before ``d``."""
+    month = ((d.month - 1) // 3) * 3 + 3
+    end = _end_of_month(d.year, month)
+    if end is not None and end <= d:
+        return end
+    # d falls before its own quarter's end -- step back one quarter.
+    month -= 3
+    year = d.year
+    if month < 1:
+        month, year = 12, year - 1
+    return _end_of_month(year, month)
+
+
+def period_end(period_label: str | None, fallback: date | None) -> date | None:
+    """The date a reported period ends, from the label if it says, else the
+    quarter that had closed when ``fallback`` (the document's date) was
+    written.
+
+    Returns ``None`` only when the label names no period and there is no
+    document date either.
+    """
+    label = (period_label or "").strip()
+
+    if label:
+        # A date spelled out beats every other reading, and the last one in
+        # the label wins so a range resolves to its end.
+        matches = list(_NUMERIC_DATE.finditer(label))
+        for m in reversed(matches):
+            month, day, year = (int(g) for g in m.groups())
+            if year < 100:
+                year += 2000
+            try:
+                return date(year, month, day)
+            except ValueError:
+                continue            # 31/31/2024 and friends: keep looking
+
+        m = _NAMED_DATE.search(label)
+        if m:
+            month = _MONTH_BY_PREFIX[m.group(1)[:3].lower()]
+            try:
+                return date(int(m.group(3)), month, int(m.group(2)))
+            except ValueError:
+                pass
+
+        m = _QUARTER_YEAR.search(label)
+        if m:
+            quarter = m.group(1) or m.group(2)
+            return _end_of_month(int(m.group(3)), int(quarter) * 3)
+
+        m = _YEAR_Q.search(label)
+        if m:
+            return _end_of_month(int(m.group(1)), int(m.group(2)) * 3)
+
+        m = _MONTH_YEAR.search(label)
+        if m:
+            return _end_of_month(int(m.group(2)),
+                                 _MONTH_BY_PREFIX[m.group(1)[:3].lower()])
+
+        # Everything below reads a year as a whole period. A year-to-date
+        # label names a year its period runs in but does not finish.
+        if not _YEAR_TO_DATE.search(label):
+            m = _FISCAL_YEAR.search(label)
+            if m:
+                return date(int(m.group(1)), *_FISCAL_YEAR_END)
+
+            m = _CALENDAR_YEAR.search(label)
+            if m:
+                return date(int(m.group(1)), 12, 31)
+
+            # A bare year, with nothing saying which kind. Calendar-year
+            # returns are what a bare year means in these tables; "FY" and
+            # "fiscal" are spelled out above when a plan means otherwise.
+            m = _ANY_YEAR.search(label)
+            if m:
+                return date(int(m.group(1)), 12, 31)
+
+    return _last_quarter_end(fallback) if fallback else None
+
+
+def quarter_label(d: date | None) -> str | None:
+    """``2026Q1`` -- the calendar quarter a period ends in.
+
+    Sortable as a string, which is what makes it usable as a filter value.
+    """
+    if d is None:
+        return None
+    return f"{d.year}Q{(d.month - 1) // 3 + 1}"
+
+
+def period_end_quarter(period_label: str | None,
+                       fallback: date | None) -> str | None:
+    return quarter_label(period_end(period_label, fallback))
+
+
+def span_label(quarters) -> str | None:
+    """One quarter, or the range a row's cells actually span.
+
+    A per-asset-class row mixes documents across its horizon columns on
+    purpose, so "which quarter is this row?" has no single answer. Showing
+    ``2025Q2-2026Q1`` says so, rather than picking one end and implying the
+    rest matches it. Quarter labels sort correctly as strings, which is why
+    they are formatted the way they are.
+    """
+    unique = sorted({q for q in quarters if q})
+    if not unique:
+        return None
+    if len(unique) == 1:
+        return unique[0]
+    return f"{unique[0]}-{unique[-1]}"
+
+
 # What a return covers, in words. The frequency is the first thing a reader
 # needs: a 2.1% quarter and a 2.1% year are not the same result, and the
 # number alone cannot say which it is.
@@ -1013,6 +1200,10 @@ def collated_performance_rows(session) -> list[dict]:
             # frequency and source are facts about the row rather than
             # per-cell footnotes.
             "Period": rec.period_label,
+            # The same period, bucketed so it can be sorted and filtered on.
+            # "Period" is verbatim and inconsistent; this is the column a
+            # reader uses to keep 2026Q1 rows away from 2025Q4 ones.
+            "Period end": period_end_quarter(rec.period_label, rec.as_of_date),
             "Frequency": FREQUENCY_LABELS.get(rec.horizon or "unclear", "Unclear"),
             "As of": rec.as_of_date.isoformat() if rec.as_of_date else None,
             "Source": doc_url,
@@ -1079,12 +1270,22 @@ def asset_class_horizon_rows(session, asset_class: str) -> list[dict]:
     by_plan: dict[str, dict] = {}
     newest: dict[str, tuple] = {}
     doc_ids: dict[str, set] = {}
+    # Period end is per *cell* here, not per row: a row's 10-year figure can
+    # be four years older than its 1-year one. Carried in a side dict under
+    # "_period_ends" rather than as five more columns, which would double the
+    # width of a table that is already thirteen columns of percentages.
+    # Leading underscore because it is not a display column -- app.py pops it
+    # to filter, then builds the DataFrame from what is left.
+    cell_quarters: dict[str, dict[str, str]] = {}
 
     for rec, plan_name, doc_url, doc_name in rows:
         entry = by_plan.setdefault(rec.plan_id, {"Plan": plan_name})
         label = labels.get(rec.horizon_key)
         if label:
             entry[label] = rec.return_pct
+            quarter = period_end_quarter(rec.period_label, rec.as_of_date)
+            if quarter:
+                cell_quarters.setdefault(rec.plan_id, {})[label] = quarter
 
         if rec.document_id is not None:
             doc_ids.setdefault(rec.plan_id, set()).add(rec.document_id)
@@ -1097,6 +1298,9 @@ def asset_class_horizon_rows(session, asset_class: str) -> list[dict]:
     out = []
     for plan_id, entry in by_plan.items():
         as_of, doc_url, doc_name = newest.get(plan_id, (None, None, None))
+        quarters = cell_quarters.get(plan_id, {})
+        entry["Period end"] = span_label(quarters.values())
+        entry["_period_ends"] = quarters
         entry["As of"] = as_of.isoformat() if as_of else None
         entry["Sources"] = len(doc_ids.get(plan_id, ()))
         entry["Source"] = doc_url

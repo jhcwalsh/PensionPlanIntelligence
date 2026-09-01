@@ -154,14 +154,29 @@ def test_datetimes_inside_a_row_are_normalised(tmp_path):
 
 def test_every_public_query_function_has_a_case():
     """The harness is only evidence if it covers the surface. A new query
-    function with no case must fail here rather than be silently unchecked."""
+    function with no case must fail here rather than be silently unchecked.
+
+    "Query" means it reads the database, which in this module means it takes a
+    session as its first argument. queries.py also holds pure helpers the
+    display layer needs -- period_end and its neighbours parse a period label
+    into a quarter -- and there is nothing for two backends to disagree about
+    in a function that never touches one. Selecting on the signature rather
+    than on a hand-kept exclusion list keeps that distinction honest: give a
+    helper a session and it is back in scope automatically.
+    """
     import inspect
 
     import queries
 
-    public = {n for n, f in vars(queries).items()
-              if inspect.isfunction(f) and not n.startswith("_")
-              and f.__module__ == "queries"}
+    public = set()
+    for name, fn in vars(queries).items():
+        if (not inspect.isfunction(fn) or name.startswith("_")
+                or fn.__module__ != "queries"):
+            continue
+        params = list(inspect.signature(fn).parameters)
+        if params and params[0] == "session":
+            public.add(name)
+
     assert public - set(CASES) == set(), \
         "queries.py functions with no comparison case: %s" % (public - set(CASES))
 

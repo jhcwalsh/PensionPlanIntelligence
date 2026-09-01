@@ -3385,6 +3385,19 @@ def _performance_rows() -> list[dict]:
         get_db_session(), _load_asset_class_mappings())
 
 
+# Both performance tables show a Period end and both filter on it, so both
+# owe the reader the same account of where it comes from. Said once.
+PERIOD_END_NOTE = (
+    "**Period end** is the quarter a figure's period ends in, taken from what "
+    "the source states — `FY2025` ends 30 June 2025, `12 months ended March "
+    "31, 2026` ends 2026Q1. Where a source says only `1 Year` or `3-Year` "
+    "(about half of them), it falls back to the last quarter that had closed "
+    "when the document was published, so a pack presented in May 2026 reads "
+    "as 2026Q1. That fallback rounds back, never forward: a figure is never "
+    "shown as fresher than the paper carrying it."
+)
+
+
 @st.cache_data(ttl=900)
 def _collated_performance_rows() -> list[dict]:
     """Reads the derived table, so this is a few hundred small rows.
@@ -3453,28 +3466,43 @@ def _render_collated_performance():
     st.caption(
         "Every figure in a row comes from **one document** — the plan's most "
         "recent source carrying an asset-class breakdown — so a row can be "
-        "read across. Period and Frequency describe the whole row: a 2.1% "
-        "quarter and a 2.1% year are not the same result, and the number "
-        "alone cannot tell you which it is. Sourced from CAFRs and from "
+        "read across. Period, Period end and Frequency describe the whole "
+        "row: a 2.1% quarter and a 2.1% year are not the same result, and the "
+        "number alone cannot tell you which it is. Sourced from CAFRs and from "
         "returns the summariser extracts out of board documents; class names "
         "are normalised, so 'US Equities', 'Domestic Equity' and 'S&P 500' "
         "land in one column."
     )
+    st.caption(PERIOD_END_NOTE)
 
     df = pd.DataFrame(rows)
     class_cols = [label for _, label in queries.COLLATED_CLASSES
                   if label in df.columns]
-    ordered = ["Plan", "Period", "Frequency"] + class_cols + ["As of", "Source"]
+    ordered = (["Plan", "Period", "Period end", "Frequency"] + class_cols
+               + ["As of", "Source"])
     df = df[[c for c in ordered if c in df.columns]]
 
+    left, right = st.columns(2)
     freqs = sorted(df["Frequency"].dropna().unique()) if "Frequency" in df else []
-    chosen = st.multiselect(
+    chosen = left.multiselect(
         "Frequency", freqs, default=[f for f in freqs if f == "Annual"] or freqs,
         help="Annual figures are comparable across plans. Quarterly and "
              "part-year ones are not, and are kept for plans that publish "
              "nothing else.")
     if chosen:
         df = df[df["Frequency"].isin(chosen)]
+
+    # Newest first: a reader opening this wants the current quarter, and
+    # scrolling a picker to the bottom to find it is the wrong default.
+    quarters = (sorted(df["Period end"].dropna().unique(), reverse=True)
+                if "Period end" in df else [])
+    chosen_q = right.multiselect(
+        "Period end", quarters, default=[],
+        help="The quarter each row's period ends in. Empty shows every "
+             "quarter; pick 2026Q1 to compare like with like rather than "
+             "reading a 2026Q1 return next to a 2025Q4 one.")
+    if chosen_q:
+        df = df[df["Period end"].isin(chosen_q)]
 
     c1, c2, c3 = st.columns(3)
     c1.metric("Plans shown", len(df))
@@ -3496,6 +3524,9 @@ def _render_collated_performance():
             # 30, 2025)" — and truncating them defeats the point of showing
             # the period at all.
             "Period": st.column_config.TextColumn("Period", width="medium"),
+            "Period end": st.column_config.TextColumn(
+                "Period end", width="small",
+                help="The quarter the reported period ends in"),
             "Frequency": st.column_config.TextColumn("Frequency", width="small"),
             "Source": st.column_config.LinkColumn(
                 "Source", display_text="open", width="small",
@@ -3505,7 +3536,6 @@ def _render_collated_performance():
         "Download CSV", df.to_csv(index=False).encode("utf-8"),
         "asset_class_performance.csv", "text/csv",
         key="collated_perf_csv")
-    st.divider()
 
 
 @st.cache_data(ttl=900)
@@ -3517,6 +3547,32 @@ def _asset_class_horizon_rows(asset_class: str) -> list[dict]:
     short TTL buys nothing and costs egress.
     """
     return queries.asset_class_horizon_rows(get_db_session(), asset_class)
+
+
+def _keep_only_these_quarters(df, horizon_cols, cell_quarters, chosen):
+    """Blank every cell whose period does not end in one of ``chosen``.
+
+    Cell by cell, not row by row, because a row's columns come from different
+    documents: keeping whole rows would keep a plan's 2025Q2 ten-year figure
+    alongside the 2026Q1 one that matched, which is the mixing the filter
+    exists to stop.
+
+    ``cell_quarters[i]`` maps a horizon column label to that cell's quarter,
+    positionally aligned with ``df`` — so this must run before any row is
+    dropped, which is why the drop happens here at the end and not before.
+    """
+    keep = set(chosen)
+    out = df.copy()
+    period_end = out.columns.get_loc("Period end")
+    for i, cells in enumerate(cell_quarters):
+        for col in horizon_cols:
+            if cells.get(col) not in keep:
+                out.iat[i, out.columns.get_loc(col)] = None
+        out.iat[i, period_end] = queries.span_label(
+            q for q in cells.values() if q in keep)
+    # A plan whose every cell fell outside the selection has nothing left to
+    # say; an all-blank row implies it reported and did badly.
+    return out[out[horizon_cols].notna().any(axis=1)]
 
 
 def _render_asset_class_horizons():
@@ -3548,19 +3604,43 @@ def _render_asset_class_horizons():
         "A row can mix documents across its columns -- a plan's 1-year "
         "figure might come from a 2026 board pack while its 10-year comes "
         "from an FY2023 CAFR. That's a deliberate choice (coverage over "
-        "single-source purity): **As of** is the newest of the cells "
-        "actually used, and **Sources** counts the distinct documents the "
-        "row draws on."
+        "single-source purity): **Period end** is per *cell* here, so it "
+        "shows a range when a row's columns span quarters; **As of** is the "
+        "newest of the cells actually used, and **Sources** counts the "
+        "distinct documents the row draws on."
+    )
+    st.caption(PERIOD_END_NOTE)
+
+    # The per-cell quarters travel beside the row rather than as five more
+    # columns (see queries.asset_class_horizon_rows). Read, never popped:
+    # `rows` came from a cached function and mutating it would edit the
+    # cache. The `ordered` projection below is what drops the key from the
+    # frame -- a dict-valued column would break _percent_display's pd.isna.
+    cell_quarters = [r.get("_period_ends") or {} for r in rows]
+
+    quarters = sorted({q for cells in cell_quarters for q in cells.values()},
+                      reverse=True)
+    chosen_q = st.multiselect(
+        "Period end", quarters, default=[],
+        key="asset_class_horizon_quarter",
+        help="Filters cell by cell, not row by row -- a row's columns come "
+             "from different documents, so keeping the whole row would keep "
+             "the other quarters with it. Pick 2026Q1 and every number left "
+             "on screen is a 2026Q1 figure.",
     )
 
     df = pd.DataFrame(rows)
     horizon_cols = [label for _, label in queries.ASSET_CLASS_HORIZONS
                     if label in df.columns]
-    ordered = ["Plan"] + horizon_cols + ["As of", "Sources", "Source"]
+    ordered = ["Plan"] + horizon_cols + ["Period end", "As of", "Sources",
+                                         "Source"]
     df = df[[c for c in ordered if c in df.columns]]
 
     for c in horizon_cols:
         df[c] = pd.to_numeric(df[c], errors="coerce")
+
+    if chosen_q:
+        df = _keep_only_these_quarters(df, horizon_cols, cell_quarters, chosen_q)
 
     c1, c2 = st.columns(2)
     c1.metric("Plans shown", len(df))
@@ -3573,6 +3653,9 @@ def _render_asset_class_horizons():
         _percent_display(df, horizon_cols),
         width="stretch", hide_index=True,
         column_config={
+            "Period end": st.column_config.TextColumn(
+                "Period end", width="small",
+                help="The quarter(s) this row's figures run to"),
             "Sources": st.column_config.NumberColumn("Sources", width="small"),
             "Source": st.column_config.LinkColumn(
                 "Source", display_text="open", width="small",
@@ -3582,11 +3665,10 @@ def _render_asset_class_horizons():
         "Download CSV", df.to_csv(index=False).encode("utf-8"),
         f"{asset_class}_horizon_performance.csv", "text/csv",
         key="asset_class_horizon_csv")
-    st.divider()
 
 
-def page_performance():
-    """Headline returns by asset class, one row per plan.
+def _render_cafr_fiscal_year():
+    """Headline returns by asset class, one row per plan, CAFR-only.
 
     Deliberately a table over a data structure rather than prose: the rows
     come back as dicts so charts, per-class rankings and time series can be
@@ -3594,19 +3676,16 @@ def page_performance():
     """
     import pandas as pd
 
-    st.title("Performance Reports")
-
-    _render_collated_performance()
-    _render_asset_class_horizons()
-
     rows = _performance_rows()
     if not rows:
         st.info("No extracted performance data yet.")
         return
 
+    st.subheader("Fiscal-year returns from CAFRs")
+
     # Say what the numbers are. The source is the CAFR, so these are
     # fiscal-year returns, not the latest quarter. A true quarterly source
-    # exists for one plan (see the section below) -- extract_performance_
+    # exists for one plan (the next tab over) -- extract_performance_
     # reports.py's docstring explains why the other 48-document plans don't
     # qualify. Labelling this precisely matters more than the column being
     # short: a reader comparing plans needs to know that "2025" and "2023"
@@ -3634,10 +3713,10 @@ def page_performance():
               int(latest_fy.max()) if not latest_fy.empty else "—")
 
     st.dataframe(
-        # Same treatment as the collated table above: percentages to one
-        # decimal, blanks rather than "None". Two performance tables on one
-        # page formatting their numbers differently is its own small lie
-        # about whether they mean the same thing.
+        # Same treatment as the collated table one tab over: percentages to
+        # one decimal, blanks rather than "None". Two performance tables
+        # formatting their numbers differently is its own small lie about
+        # whether they mean the same thing.
         _percent_display(df, [label for _, label in queries.PERFORMANCE_CLASSES]),
         width="stretch",
         hide_index=True,
@@ -3655,34 +3734,66 @@ def page_performance():
         mime="text/csv",
     )
 
+
+def _render_quarterly_reports(quarterly_rows):
+    import pandas as pd
+
+    st.subheader("Quarterly performance (where available)")
+    st.caption(
+        "True periodic total-fund returns, sourced from monthly "
+        "performance-review reports rather than the annual CAFR. "
+        "Currently only New York City's comptroller-published reports "
+        "qualify — one row per constituent system, since the reports "
+        "cover NYCERS/TRS/POLICE/FIRE/BERS separately rather than one "
+        "combined fund. '3 months' is the closest figure to a calendar "
+        "quarter these reports state."
+    )
+    qdf = pd.DataFrame(quarterly_rows)
+    qdf = qdf[[c for c in
+               ["Plan", "Fund", "As of", "1 month", "3 months", "FYTD",
+                "Source", "Source date"]
+               if c in qdf.columns]]
+    st.dataframe(
+        qdf,
+        width="stretch",
+        hide_index=True,
+        column_config={
+            "Source": st.column_config.LinkColumn("Source", display_text="Report"),
+            "Source date": st.column_config.DatetimeColumn(
+                "Source date", format="YYYY-MM-DD"),
+        },
+    )
+
+
+def page_performance():
+    """Four different answers to "how did it do", one per sub-tab.
+
+    They were stacked on one page and read as one long table with three
+    interruptions -- and each has its own filters, so a Frequency picker for
+    the first table sat a screen above the rows it controlled. A tab per
+    table puts each one's controls next to its own data.
+
+    The tabs are ordered by how much they cover: the collated view spans 126
+    plans, the CAFR-only one 84, and the quarterly reports a single city's
+    five systems. The last tab appears only when there is something in it --
+    an empty tab reads as a broken page rather than as an absent source.
+    """
+    st.title("Performance Reports")
+
     quarterly_rows = queries.quarterly_performance_rows(get_db_session())
+
+    specs = [
+        ("By plan", _render_collated_performance),
+        ("By asset class", _render_asset_class_horizons),
+        ("CAFR fiscal years", _render_cafr_fiscal_year),
+    ]
     if quarterly_rows:
-        st.divider()
-        st.subheader("Quarterly performance (where available)")
-        st.caption(
-            "True periodic total-fund returns, sourced from monthly "
-            "performance-review reports rather than the annual CAFR. "
-            "Currently only New York City's comptroller-published reports "
-            "qualify — one row per constituent system, since the reports "
-            "cover NYCERS/TRS/POLICE/FIRE/BERS separately rather than one "
-            "combined fund. '3 months' is the closest figure to a calendar "
-            "quarter these reports state."
-        )
-        qdf = pd.DataFrame(quarterly_rows)
-        qdf = qdf[[c for c in
-                   ["Plan", "Fund", "As of", "1 month", "3 months", "FYTD",
-                    "Source", "Source date"]
-                   if c in qdf.columns]]
-        st.dataframe(
-            qdf,
-            width="stretch",
-            hide_index=True,
-            column_config={
-                "Source": st.column_config.LinkColumn("Source", display_text="Report"),
-                "Source date": st.column_config.DatetimeColumn(
-                    "Source date", format="YYYY-MM-DD"),
-            },
-        )
+        specs.append(("Quarterly reports",
+                      lambda: _render_quarterly_reports(quarterly_rows)))
+
+    for tab, (_, render) in zip(st.tabs([label for label, _ in specs]), specs):
+        with tab:
+            render()
 
 
 def main():

@@ -240,6 +240,47 @@ def test_asset_class_horizon_rows_sorts_by_one_year_descending_nones_last(sessio
     assert plans_in_order == ["B Plan", "MCERA", "C Plan"]
 
 
+def test_each_cell_carries_its_own_period_end(session):
+    """The reason _period_ends exists. A row mixes documents across columns,
+    so one Period end per row would be a claim about cells it does not
+    describe: here the 1-year figure is a 2026Q1 reading and the 10-year one
+    is four years older."""
+    _seed_horizon(session, "mcera", "real_estate", "annual", 6.0,
+                  date(2026, 5, 14), period_label="1 Year")
+    _seed_horizon(session, "mcera", "real_estate", "10y", 7.0,
+                  date(2022, 8, 10), period_label="10 Year")
+    session.commit()
+
+    row = queries.asset_class_horizon_rows(session, "real_estate")[0]
+
+    assert row["_period_ends"] == {"1 year": "2026Q1", "10 year": "2022Q2"}
+    # The row-level column says it spans, rather than picking one end.
+    assert row["Period end"] == "2022Q2-2026Q1"
+
+
+def test_a_row_whose_cells_agree_shows_one_quarter(session):
+    _seed_horizon(session, "mcera", "real_estate", "annual", 6.0,
+                  date(2026, 5, 14), period_label="1 Year")
+    _seed_horizon(session, "mcera", "real_estate", "3y", 7.0,
+                  date(2026, 4, 30), period_label="3 Year")
+    session.commit()
+
+    row = queries.asset_class_horizon_rows(session, "real_estate")[0]
+    assert row["Period end"] == "2026Q1"
+
+
+def test_the_stated_period_beats_the_document_date(session):
+    """as_of_date is the *document's* date. A CAFR figure discussed at an
+    August meeting is still a June figure, and filing it under 2026Q3 would
+    put it in a bucket with the following year's quarters."""
+    _seed_horizon(session, "mcera", "real_estate", "annual", 6.0,
+                  date(2026, 8, 26), period_label="FY2025")
+    session.commit()
+
+    row = queries.asset_class_horizon_rows(session, "real_estate")[0]
+    assert row["_period_ends"]["1 year"] == "2025Q2"
+
+
 def test_asset_class_horizons_ordering():
     assert queries.ASSET_CLASS_HORIZONS == (
         ("quarter", "Quarter"),
