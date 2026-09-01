@@ -201,6 +201,67 @@ def test_horizon_of_classifies_the_measured_corpus_labels(label, expected):
     assert bpv.horizon_of(label) == expected
 
 
+# The "1 Yr" bug: _MULTI's negative lookahead only spelled out "1[- ]?year",
+# never the "yr" abbreviation, so a bare 1-year figure written as "1 Yr" (572
+# rows in the corpus) satisfied the multi-year pattern (digit "1" + "yr") and
+# was filed as multi_year -- indistinguishable from an actual 3- or 10-year
+# annualised figure. Fixed at the source (_MULTI itself) rather than patched
+# in horizon_key, because the mislabelling was already wrong in the existing
+# plan_asset_class_performance view, which reads horizon_of directly.
+def test_one_yr_abbreviation_is_not_mistaken_for_multi_year():
+    assert bpv.horizon_of("1 Yr") == "annual"
+    assert bpv.horizon_of("1yr") == "annual"
+    assert bpv.horizon_of("1-Yr") == "annual"
+
+
+# horizon_key -- the finer key the per-asset-class view needs. horizon_of's
+# "multi_year" bucket lumps 3/5/10/20/30-year together, which would make a
+# 3-year return and a 10-year return look comparable in the same column --
+# exactly the mistake horizon_of exists to prevent one level up. horizon_key
+# does not replace horizon_of (the existing collated view depends on it
+# unchanged); it is a second, finer read of the same label.
+@pytest.mark.parametrize("label, expected", [
+    # Digit forms, both the loose and hyphenated spelling.
+    ("3-Year", "3y"),
+    ("5 Year", "5y"),
+    ("10-Year", "10y"),
+    ("20 Year", "20y"),
+    ("30-Year", "30y"),
+    ("7 Year", "7y"),
+    ("2-Year", "2y"),
+    # Word forms attested in the corpus alongside the digit forms.
+    ("Three-Year", "3y"),
+    ("Five Year", "5y"),
+    ("Ten-Year", "10y"),
+    ("Twenty Year", "20y"),
+    # Everything else in horizon_of's non-multi-year vocabulary passes
+    # through unchanged.
+    ("Q1 2026", "quarter"),
+    ("Last Qtr", "quarter"),
+    ("FY2025", "annual"),
+    ("1 Year", "annual"),
+    ("1 Yr", "annual"),
+    ("1 Mo", "month"),
+    ("Last Month", "month"),
+    ("YTD", "partial"),
+    ("CYTD", "partial"),
+    ("Since Inception", "inception"),
+    # A bare period-end date is 'unclear' in horizon_of -- nothing keyed on
+    # an unknown horizon is usable, so horizon_key says so with None rather
+    # than inventing a bucket.
+    ("12/31/24", None),
+    (None, None),
+])
+def test_horizon_key_classifies_the_measured_corpus_labels(label, expected):
+    assert bpv.horizon_key(label) == expected
+
+
+def test_horizon_key_does_not_mutate_horizon_of():
+    """The existing view's horizon column must not move under this change."""
+    assert bpv.horizon_of("3-Year") == "multi_year"
+    assert bpv.horizon_of("Since Inception") == "inception"
+
+
 def test_an_actuarial_assumption_is_dropped_not_reclassified():
     """The extractor sometimes puts a forward-looking actuarial assumption --
     'Long-Term Expected Real Rate of Return' -- in the period field of a

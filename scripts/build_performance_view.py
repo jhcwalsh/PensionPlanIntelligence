@@ -39,7 +39,8 @@ from sqlalchemy import text
 
 import database
 from database import (CafrExtract, CafrPerformance, Document,
-                      DocumentSectionRead, PlanAssetClassPerformance, Summary)
+                      DocumentSectionRead, PlanAssetClassHorizon,
+                      PlanAssetClassPerformance, Summary)
 
 console = Console(legacy_windows=False)
 
@@ -56,11 +57,21 @@ _YEAR = re.compile(r"(19|20)\d{2}")
 # What a period label actually measures. Order matters: "FY2025 (1-Year ending
 # 12/31/25)" is both, and "3-Year as of June 2026" contains a year too, so the
 # narrower tests run first.
-_INCEPTION = re.compile(r"(?i)since inception|since \d{4}|inception")
+# "ITD" is inception-to-date, this corpus's abbreviation for what "Since
+# Inception" spells out (131 "ITD IRR%" rows). Word-bounded so it cannot fire
+# inside an unrelated word.
+_INCEPTION = re.compile(r"(?i)since inception|since \d{4}|inception|\bitd\b")
 # Any N-year window other than one. "20-Year Forward" and "3-Year as of" both
 # land here; a forward-looking assumption is not a return at all, but it is
 # certainly not this year's.
-_MULTI = re.compile(r"(?i)\b(?!1[- ]?year)(\d{1,2}|three|five|ten|twenty)[- ]?(year|yr)")
+#
+# The negative lookahead originally spelled out only "1[- ]?year", never the
+# "yr" abbreviation -- so "1 Yr" (572 rows in the corpus) satisfied this
+# pattern (digit "1" + "yr") and was filed as multi_year, indistinguishable
+# from an actual 3- or 10-year annualised figure. "(?:year|yr)" excludes
+# both spellings of one year, the same way _ONE_YEAR below now recognises
+# both when it picks up what this pattern excludes.
+_MULTI = re.compile(r"(?i)\b(?!1[- ]?(?:year|yr))(\d{1,2}|three|five|ten|twenty)[- ]?(year|yr)")
 _MONTH_NAMES = (r"january|february|march|april|may|june|july|august|"
                 r"september|october|november|december")
 # "Mo" is this corpus's abbreviation for "Month" (187 "1 Mo" rows) and "Last
@@ -69,6 +80,9 @@ _MONTH_NAMES = (r"january|february|march|april|may|june|july|august|"
 _MONTHLY = re.compile(
     r"(?i)\b1[- ]?month|\b1[- ]?mo\b|\blast month\b|\bmtd\b|\(1 month\)"
     r"|month[- ]?to[- ]?date"
+    # A column headed just "Month" (113 rows). Anchored to the whole label so
+    # it cannot swallow "3 Month", which _QUARTER must keep.
+    r"|^\s*month\s*$"
     rf"|^\s*({_MONTH_NAMES})\s+\d{{4}}\s*$")
 # "Qtr" (640 "Last Qtr" rows) and "Mo" (180 "3 Mo" rows) are this corpus's
 # abbreviations; QTD is bucketed with the other quarter-length readings
@@ -91,8 +105,15 @@ _FISCAL = re.compile(r"(?i)\bfy\s?\d{4}|\bfye\b|fiscal")
 # "CYE 12/31/24" is the calendar-year twin of FYE: calendar-year-*end*
 # followed by the end date, not `cy` directly against a 4-digit year. 146
 # rows.
+# "1[- ]?yr" is the abbreviation _MULTI's negative lookahead now excludes
+# (see the comment there); it has to be recognised here too, or those 572
+# rows go from wrongly "multi_year" to wrongly "unclear" instead of landing
+# on the "annual" they actually are. \b on both sides so it only matches the
+# standalone token, not the tail of "21 Yr" (which _MULTI already claims
+# first, since it runs before this in horizon_of's if-chain).
 _ONE_YEAR = re.compile(
-    r"(?i)1[- ]?year|12 month|twelve month|calendar year|\bcy\s?\d{4}|\bcye\b")
+    r"(?i)1[- ]?year|\b1[- ]?yr\b|12 month|twelve month|calendar year"
+    r"|\bcy\s?\d{4}|\bcye\b")
 # A bare four-digit year and nothing else -- "2023", "2024" etc, 368+328+
 # 317+316+299 rows in the corpus. Anchored to the whole (stripped) label so
 # it never fires on a year embedded in a longer, more specific label that
@@ -111,6 +132,48 @@ _BARE_YEAR = re.compile(r"^(19|20)\d{2}$")
 # Report") is never the one that gets dropped.
 _NOT_A_RETURN_PERIOD = re.compile(
     r"(?i)\b(expected|assumed)\b.*\brate of return\b")
+
+
+#: A period given as two dates rather than a length: "7/1/2024 - 6/30/2025".
+#: Both endpoints are stated, so the length is arithmetic. En dash and em dash
+#: appear as often as the hyphen, and a mangled PDF text layer turns either
+#: into U+FFFD, so that is accepted as a separator too.
+_DATE_RANGE = re.compile(
+    r"(\d{1,2}/\d{1,2}/\d{2,4})\s*(?:-|–|—|�|to)\s*"
+    r"(\d{1,2}/\d{1,2}/\d{2,4})")
+
+#: Day counts a period of each length can plausibly span, allowing for
+#: month-end and leap years. Deliberately narrow: a span that matches none of
+#: these is left unclear rather than rounded into the nearest bucket, because
+#: a six-month period has no bucket and calling it "annual" would be a
+#: fabrication rather than an approximation.
+_SPAN_BUCKETS = ((26, 35, "month"), (85, 96, "quarter"), (358, 375, "annual"))
+
+
+def _horizon_from_span(label: str) -> str | None:
+    """Length of an explicit date range, if it is one and the span is known.
+
+    Returns None rather than guessing. "4/1/2022 - 6/30/2022" is a quarter and
+    "7/1/2024 - 6/30/2025" a fiscal year, both by arithmetic; a 180-day range
+    is a real period this vocabulary has no name for, so it stays unclear.
+    """
+    m = _DATE_RANGE.search(label)
+    if not m:
+        return None
+    try:
+        start, end = (datetime.strptime(g, "%m/%d/%Y").date()
+                      if len(g.rsplit("/", 1)[-1]) == 4
+                      else datetime.strptime(g, "%m/%d/%y").date()
+                      for g in m.groups())
+    except ValueError:
+        return None
+    days = (end - start).days
+    if days <= 0:
+        return None
+    for low, high, bucket in _SPAN_BUCKETS:
+        if low <= days <= high:
+            return bucket
+    return None
 
 
 def horizon_of(period_label: str | None) -> str:
@@ -160,7 +223,60 @@ def horizon_of(period_label: str | None) -> str:
         return "partial"
     if _FISCAL.search(t) or _ONE_YEAR.search(t) or _BARE_YEAR.match(t):
         return "annual"
+    # Last, because it is the only rule that measures rather than matches, and
+    # every label above says what it is in words. A range gives both
+    # endpoints, so its length is arithmetic rather than a guess -- which is
+    # exactly what a bare end date like "12/31/24" cannot offer and why that
+    # one stays unclear.
+    spanned = _horizon_from_span(t)
+    if spanned:
+        return spanned
     return "unclear"
+
+
+# Word forms attested alongside the digit forms in the corpus (e.g.
+# "Three-Year", "Five Year"). Only the multi-year words horizon_of's _MULTI
+# pattern recognises need an entry here.
+_WORD_YEARS = {"three": 3, "five": 5, "ten": 10, "twenty": 20}
+
+
+def horizon_key(period_label: str | None) -> str | None:
+    """A finer horizon than horizon_of, for the per-asset-class view.
+
+    horizon_of's "multi_year" bucket exists to keep a quarterly return out
+    of the same column as an annual one -- but it does that by lumping every
+    N-year annualised figure (3, 5, 10, 20, 30) into one bucket, which
+    recreates the identical mistake one level down: a 3-year return and a
+    10-year return are not comparable either, and the per-asset-class view
+    is built entirely out of putting one horizon side by side across plans.
+
+    Does NOT replace horizon_of -- the existing plan_asset_class_performance
+    view and its 'horizon' column depend on horizon_of's coarser buckets
+    unchanged, so this is a second, finer read of the same label rather than
+    a modification of the first.
+
+    Returns '3y', '5y', '10y' etc. for a multi-year label (digits and the
+    words three/five/ten/twenty are both attested in the corpus), the
+    unchanged horizon_of bucket name for anything else horizon_of can place,
+    and None for 'unclear' -- nothing keyed on an unknown horizon is usable,
+    so a caller building a table keyed on this value must be able to drop
+    the row rather than invent a bucket for it.
+    """
+    h = horizon_of(period_label)
+    if h == "unclear":
+        return None
+    if h != "multi_year":
+        return h
+    # period_label is not None here: horizon_of("unclear") only for a falsy
+    # label, and multi_year requires _MULTI to have matched something.
+    m = _MULTI.search(period_label.strip())
+    if not m:
+        return None
+    token = m.group(1).lower()
+    n = _WORD_YEARS.get(token)
+    if n is None and token.isdigit():
+        n = int(token)
+    return f"{n}y" if n else None
 
 
 class ClassMap(dict):
@@ -438,6 +554,67 @@ def pick_latest(rows: list[dict]) -> list[dict]:
     return out
 
 
+# Tie-break order for pick_best_per_cell when two readings share an as_of
+# date: a targeted read saw the table the summariser only glimpsed in the
+# first 50,000 characters, and a CAFR figure is at least audited, so both
+# outrank the summariser. Higher wins.
+_SOURCE_RANK = {"targeted_read": 2, "cafr": 1, "board_doc": 0}
+
+
+def pick_best_per_cell(rows: list[dict]) -> list[dict]:
+    """Best available reading per (plan, asset_class, horizon_key) cell.
+
+    This is the selection rule for PlanAssetClassHorizon, and it is
+    deliberately not pick_latest. pick_latest's unit of selection is the
+    *document*, because plan_asset_class_performance is read across asset
+    classes for one plan and a row that mixed documents there would silently
+    claim to be a portfolio it is not. This table is read the other way --
+    one asset class, across plans -- so a row here never makes that claim in
+    the first place: mixing a 2024 CAFR's 10-year figure with a 2026 board
+    pack's quarter figure for the same plan is not "a portfolio as of one
+    date", it is two independent facts about that plan's real-estate
+    program, each stamped with its own as_of_date so a reader sees exactly
+    what is being mixed.
+
+    So the unit of selection is the CELL: for each (plan_id, asset_class,
+    horizon_key), keep the single reading with the most recent as_of_date.
+    Ties break toward the more direct source -- targeted_read, then cafr,
+    then the summariser (_SOURCE_RANK).
+
+    A row with no horizon_key (period_label classifies as 'unclear') is
+    dropped outright: nothing keyed on an unknown horizon is usable.
+    """
+    best: dict[tuple[str, str, str], dict] = {}
+    for r in rows:
+        key_h = horizon_key(r.get("period_label"))
+        if key_h is None:
+            continue
+        cell = (r["plan_id"], r["asset_class"], key_h)
+        candidate = {
+            "plan_id": r["plan_id"],
+            "asset_class": r["asset_class"],
+            "horizon_key": key_h,
+            "return_pct": r["return_pct"],
+            "period_label": r["period_label"],
+            "as_of_date": r["as_of_date"],
+            "source": r["source"],
+            "document_id": r["document_id"],
+        }
+        current = best.get(cell)
+        if current is None:
+            best[cell] = candidate
+            continue
+        cur_date = current["as_of_date"] or date.min
+        new_date = candidate["as_of_date"] or date.min
+        if new_date > cur_date:
+            best[cell] = candidate
+        elif new_date == cur_date and (
+                _SOURCE_RANK.get(candidate["source"], 0)
+                > _SOURCE_RANK.get(current["source"], 0)):
+            best[cell] = candidate
+    return list(best.values())
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -463,7 +640,8 @@ def main() -> int:
         read_docs = {r["document_id"] for r in targeted}
         board = [r for r in board if r["document_id"] not in read_docs]
 
-        chosen = pick_latest(cafr + targeted + board)
+        pool = cafr + targeted + board
+        chosen = pick_latest(pool)
 
         session.execute(text("DELETE FROM plan_asset_class_performance"))
         for r in chosen:
@@ -484,6 +662,28 @@ def main() -> int:
         console.print(f"[dim]candidates seen: {len(cafr)} CAFR, "
                       f"{len(targeted)} targeted, {len(board)} summariser "
                       f"(after {len(read_docs)} superseded documents)[/dim]")
+
+        # Same pool, a different (finer, per-cell) selection rule -- see
+        # pick_best_per_cell's docstring for why this is allowed to mix
+        # documents across horizons where pick_latest is not.
+        cells = pick_best_per_cell(pool)
+
+        session.execute(text("DELETE FROM plan_asset_class_horizon"))
+        for r in cells:
+            session.add(PlanAssetClassHorizon(**r))
+        session.commit()
+
+        h_plans = len({r["plan_id"] for r in cells})
+        h_classes = len({r["asset_class"] for r in cells})
+        hn = {}
+        for r in cells:
+            hn[r["source"]] = hn.get(r["source"], 0) + 1
+        console.print(
+            f"[green]{len(cells)}[/green] per-asset-class-horizon cells across "
+            f"[green]{h_plans}[/green] plans and {h_classes} asset classes "
+            f"({hn.get('targeted_read', 0)} targeted reads, "
+            f"{hn.get('board_doc', 0)} summariser, {hn.get('cafr', 0)} CAFR)"
+        )
         return 0
     finally:
         session.close()

@@ -3489,6 +3489,83 @@ def _render_collated_performance():
     st.divider()
 
 
+@st.cache_data(ttl=900)
+def _asset_class_horizon_rows(asset_class: str) -> list[dict]:
+    """Reads the derived ``plan_asset_class_horizon`` table.
+
+    Same TTL and same reasoning as ``_collated_performance_rows`` above: the
+    source is a nightly build (``scripts/build_performance_view.py``), so a
+    short TTL buys nothing and costs egress.
+    """
+    return queries.asset_class_horizon_rows(get_db_session(), asset_class)
+
+
+def _render_asset_class_horizons():
+    """One asset class, every plan, across time horizons.
+
+    The mirror of ``_render_collated_performance`` above: that one fixes the
+    plan and shows every asset class; this fixes the asset class and shows
+    every plan. Sits below it because "what does this plan hold" is the
+    more common question and keeps the top slot.
+    """
+    import pandas as pd
+
+    st.subheader("One asset class, every plan")
+
+    keys = [k for k, _ in queries.COLLATED_CLASSES]
+    labels = [label for _, label in queries.COLLATED_CLASSES]
+    default_index = keys.index("real_estate") if "real_estate" in keys else 0
+    chosen_label = st.selectbox(
+        "Asset class", labels, index=default_index,
+        key="asset_class_horizon_picker")
+    asset_class = dict(zip(labels, keys))[chosen_label]
+
+    rows = _asset_class_horizon_rows(asset_class)
+    if not rows:
+        st.info(f"No performance data yet for {chosen_label}.")
+        return
+
+    st.caption(
+        "A row can mix documents across its columns -- a plan's 1-year "
+        "figure might come from a 2026 board pack while its 10-year comes "
+        "from an FY2023 CAFR. That's a deliberate choice (coverage over "
+        "single-source purity): **As of** is the newest of the cells "
+        "actually used, and **Sources** counts the distinct documents the "
+        "row draws on."
+    )
+
+    df = pd.DataFrame(rows)
+    horizon_cols = [label for _, label in queries.ASSET_CLASS_HORIZONS
+                    if label in df.columns]
+    ordered = ["Plan"] + horizon_cols + ["As of", "Sources", "Source"]
+    df = df[[c for c in ordered if c in df.columns]]
+
+    for c in horizon_cols:
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+
+    c1, c2 = st.columns(2)
+    c1.metric("Plans shown", len(df))
+    three_year = dict(queries.ASSET_CLASS_HORIZONS).get("3y")
+    c2.metric("With a 3-year figure",
+              int(df[three_year].notna().sum())
+              if three_year and three_year in df else 0)
+
+    st.dataframe(
+        _percent_display(df, horizon_cols),
+        width="stretch", hide_index=True,
+        column_config={
+            "Sources": st.column_config.NumberColumn("Sources", width="small"),
+            "Source": st.column_config.LinkColumn(
+                "Source", display_text="open", width="small",
+                help="The newest document behind this row"),
+        })
+    st.download_button(
+        "Download CSV", df.to_csv(index=False).encode("utf-8"),
+        f"{asset_class}_horizon_performance.csv", "text/csv",
+        key="asset_class_horizon_csv")
+    st.divider()
+
+
 def page_performance():
     """Headline returns by asset class, one row per plan.
 
@@ -3501,6 +3578,7 @@ def page_performance():
     st.title("Performance Reports")
 
     _render_collated_performance()
+    _render_asset_class_horizons()
 
     rows = _performance_rows()
     if not rows:

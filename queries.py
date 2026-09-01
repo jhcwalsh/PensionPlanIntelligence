@@ -1029,3 +1029,81 @@ def collated_performance_rows(session) -> list[dict]:
              reverse=True)
     out.sort(key=lambda r: r["Plan"])
     return out
+
+
+# Display order and labels for the per-asset-class view's horizon columns.
+# Only the horizons a reader can usefully compare across plans side by side --
+# 2y/7y/20y/30y exist in the corpus but are thin and are left off the picker,
+# same reasoning COLLATED_CLASSES already applies to asset classes with no
+# canonical mapping.
+ASSET_CLASS_HORIZONS = (
+    ("quarter", "Quarter"),
+    ("annual", "1 year"),
+    ("3y", "3 year"),
+    ("5y", "5 year"),
+    ("10y", "10 year"),
+)
+
+
+def asset_class_horizon_rows(session, asset_class: str) -> list[dict]:
+    """One asset class, every plan, every horizon -- the mirror read of
+    collated_performance_rows above, which fixes the plan and shows every
+    asset class. This fixes the asset class and shows every plan.
+
+    Reads the derived ``plan_asset_class_horizon`` table, which
+    ``scripts/build_performance_view.py`` rebuilds alongside
+    ``plan_asset_class_performance`` in the same run. Not computed here for
+    the same reason that table is derived rather than queried live: half the
+    source data lives in ``summaries.performance_data``, and parsing that
+    behind a Streamlit cache is the read shape that exhausted Neon's
+    transfer quota on 2026-08-25 (see CLAUDE.md).
+
+    A row can mix documents across its horizon columns -- a plan's 1-year
+    figure might come from a 2026 board pack while its 10-year figure comes
+    from an FY2023 CAFR. That is deliberate (see
+    ``build_performance_view.pick_best_per_cell``), so ``As of`` reports the
+    newest of the cells actually used and ``Sources`` reports how many
+    distinct documents the row draws on, rather than presenting the row as
+    if it came from one paper.
+    """
+    from database import Document, Plan
+    from database import PlanAssetClassHorizon as H
+
+    rows = (session.query(H, Plan.name, Document.url, Document.filename)
+            .join(Plan, Plan.id == H.plan_id)
+            .outerjoin(Document, Document.id == H.document_id)
+            .filter(H.asset_class == asset_class)
+            .all())
+
+    labels = dict(ASSET_CLASS_HORIZONS)
+    by_plan: dict[str, dict] = {}
+    newest: dict[str, tuple] = {}
+    doc_ids: dict[str, set] = {}
+
+    for rec, plan_name, doc_url, doc_name in rows:
+        entry = by_plan.setdefault(rec.plan_id, {"Plan": plan_name})
+        label = labels.get(rec.horizon_key)
+        if label:
+            entry[label] = rec.return_pct
+
+        if rec.document_id is not None:
+            doc_ids.setdefault(rec.plan_id, set()).add(rec.document_id)
+
+        if rec.as_of_date:
+            cur = newest.get(rec.plan_id)
+            if cur is None or rec.as_of_date > cur[0]:
+                newest[rec.plan_id] = (rec.as_of_date, doc_url, doc_name)
+
+    out = []
+    for plan_id, entry in by_plan.items():
+        as_of, doc_url, doc_name = newest.get(plan_id, (None, None, None))
+        entry["As of"] = as_of.isoformat() if as_of else None
+        entry["Sources"] = len(doc_ids.get(plan_id, ()))
+        entry["Source"] = doc_url
+        entry["Document"] = doc_name
+        out.append(entry)
+
+    one_year = labels["annual"]
+    out.sort(key=lambda r: (r.get(one_year) is None,
+                            -(r.get(one_year) or 0)))
+    return out

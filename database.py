@@ -1043,6 +1043,65 @@ class PlanAssetClassPerformance(Base):
     )
 
 
+class PlanAssetClassHorizon(Base):
+    """Best available return per (plan, asset class, horizon), for the
+    per-asset-class view -- the mirror of PlanAssetClassPerformance above:
+    that table fixes the plan and shows every asset class; this one fixes
+    the asset class and shows every plan, across quarter/1y/3y/5y/10y at
+    once.
+
+    It cannot be built from PlanAssetClassPerformance, and is not a
+    redundant second copy of the same rows. pick_latest, which builds that
+    table, deliberately prunes each plan down to at most two rows (its
+    latest annual figure and its latest figure of any kind) so that a row
+    reads as "this plan's return across asset classes" without silently
+    mixing documents. That is exactly the information this view needs and
+    does not have: a 3-year real-estate figure and a 10-year real-estate
+    figure for the same plan are two different cells here, and pick_latest
+    keeps at most one of them (whichever belongs to the single document it
+    picked), discarding the horizons this table exists to show side by
+    side.
+
+    So this table is built from the same three collected sources
+    (scripts/build_performance_view.py's collect_from_*) but with a
+    different, finer selection rule -- see pick_best_per_cell there. A row
+    HERE may mix documents across cells for the same plan; that is
+    deliberate and does not contradict pick_latest's single-document rule,
+    because the comparison this view runs is across plans within one asset
+    class, not across asset classes within one plan, so a row was never
+    claiming to be a portfolio in the first place. ``as_of_date`` is kept
+    per cell (not just per row) so a reader can see what a row is mixing.
+
+    ``horizon_key`` is the finer key from build_performance_view.horizon_key
+    -- 'quarter', 'annual', '3y', '5y', '10y', etc -- not the coarser
+    'horizon' column above, because 3-year and 10-year annualised figures
+    are not comparable and must not share a column.
+
+    Derived data, rebuilt wholesale by scripts/build_performance_view.py in
+    the same run that rebuilds plan_asset_class_performance. Uniqueness on
+    (plan_id, asset_class, horizon_key) IS the selection rule: it is what
+    keeps this to one reading per cell.
+    """
+
+    __tablename__ = "plan_asset_class_horizon"
+
+    id = Column(Integer, primary_key=True)
+    plan_id = Column(String, ForeignKey("plans.id"), nullable=False, index=True)
+    asset_class = Column(String(64), nullable=False)     # canonical key
+    horizon_key = Column(String(16), nullable=False)      # 'quarter'|'annual'|'3y'|'5y'|'10y'...
+    return_pct = Column(Float)
+    period_label = Column(String(64))
+    as_of_date = Column(Date)
+    source = Column(String(16), nullable=False)          # 'cafr' | 'board_doc' | 'targeted_read'
+    document_id = Column(Integer, ForeignKey("documents.id"))
+    built_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("plan_id", "asset_class", "horizon_key",
+                         name="uq_plan_class_horizon"),
+    )
+
+
 class DocumentCatalogue(Base):
     """What a document contains — not what it says.
 

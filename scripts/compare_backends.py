@@ -134,6 +134,9 @@ CASES = {
     # Canonicalisation happens in scripts/build_performance_view.py, not here:
     # this reads the derived table the build writes, so there is no map to pass.
     "collated_performance_rows": {"args": ()},
+    # The per-asset-class mirror of collated_performance_rows -- reads the
+    # derived plan_asset_class_horizon table, same reasoning: no map to pass.
+    "asset_class_horizon_rows": {"args": ("real_estate",)},
     # Default 30-day window, matching the CAFR page.
     "cafr_fiscal_year_counts": {"args": ()},
 }
