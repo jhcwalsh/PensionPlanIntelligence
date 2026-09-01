@@ -963,7 +963,24 @@ def _notes_md_to_html(content: str) -> str:
         i += 1
 
     flush()
-    return "\n".join(parts)
+    # Neutralise dollar signs last, over the finished HTML.
+    #
+    # These briefings are about money, so they are dense with "$19B", "$150
+    # million", "$75 million". st.markdown runs its own Markdown pass over
+    # whatever it is given -- unsafe_allow_html permits the tags, it does not
+    # skip the parse -- and that pass treats $...$ as LaTeX. Two dollar
+    # amounts in one paragraph become a maths span, so a sentence reading
+    # "$19B) led the week's largest single-plan commitment tranche, approving
+    # up to $150 million" rendered as run-together italics with the words
+    # jammed together. Every weekly briefing on the site looked like that.
+    #
+    # &#36; rather than the \$ that _safe_md uses: this string is HTML by the
+    # time it gets here, so a backslash escape would have to survive the
+    # Markdown pass intact to reach the browser, while the entity is simply
+    # not a dollar sign as far as the LaTeX scanner is concerned and the
+    # browser renders it as one. Applied here rather than at the call site so
+    # every caller of this function is covered by construction.
+    return "\n".join(parts).replace("$", "&#36;")
 
 
 def _render_ai_disclaimer():
@@ -1076,7 +1093,9 @@ def page_insights():
             st.warning(
                 "AI-generated summary — figures and attributions may be wrong; "
                 "verify against the linked source documents.")
-            st.markdown(chosen.draft_markdown or "_No content._")
+            # _safe_md, like the Archive tab two tabs over: raw markdown here,
+            # so the same dollar amounts become LaTeX without it.
+            st.markdown(_safe_md(chosen.draft_markdown or "_No content._"))
 
 
 _DEPLOYMENT_ACTIONS = {"hire", "fire", "commitment"}
