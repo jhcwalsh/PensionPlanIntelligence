@@ -35,9 +35,11 @@ import sys
 from datetime import date, datetime
 
 from rich.console import Console
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy import text
 
 import database
+import queries
 from database import (CafrExtract, CafrPerformance, Document,
                       DocumentSectionRead, PlanAssetClassHorizon,
                       PlanAssetClassPerformance, Summary)
@@ -576,20 +578,37 @@ def pick_best_per_cell(rows: list[dict]) -> list[dict]:
     program, each stamped with its own as_of_date so a reader sees exactly
     what is being mixed.
 
-    So the unit of selection is the CELL: for each (plan_id, asset_class,
-    horizon_key), keep the single reading with the most recent as_of_date.
-    Ties break toward the more direct source -- targeted_read, then cafr,
-    then the summariser (_SOURCE_RANK).
+    So the unit of selection is the CELL, and a cell is per QUARTER: for each
+    (plan_id, asset_class, horizon_key, period_end), keep the single reading
+    with the most recent as_of_date. Ties break toward the more direct source
+    -- targeted_read, then cafr, then the summariser (_SOURCE_RANK).
+
+    period_end is in the key deliberately, and was not always. Without it the
+    table held one reading per cell full stop -- the latest -- so a plan with
+    both a 2025Q4 and a 2026Q1 private-equity figure kept only 2026Q1 and
+    vanished from any sweep of 2025Q4. It was a snapshot being asked history
+    questions: 26 plans reported a 2025Q4 private-equity return and the view
+    could show 17. Keying on the quarter as well costs 2.7x the rows (2,514 ->
+    6,761) and answers "how did everyone do in 2025Q4" properly.
+
+    Two readings of the SAME quarter still collapse to one, which is the point
+    of keeping the date and source tie-breaks: a figure restated in a later
+    pack supersedes the earlier printing of the same period.
 
     A row with no horizon_key (period_label classifies as 'unclear') is
-    dropped outright: nothing keyed on an unknown horizon is usable.
+    dropped outright: nothing keyed on an unknown horizon is usable. A row
+    with no resolvable period_end is kept under a NULL quarter rather than
+    discarded -- it is one cell, not a series, and dropping it would lose a
+    figure the previous key retained.
     """
-    best: dict[tuple[str, str, str], dict] = {}
+    best: dict[tuple[str, str, str, str | None], dict] = {}
     for r in rows:
         key_h = horizon_key(r.get("period_label"))
         if key_h is None:
             continue
-        cell = (r["plan_id"], r["asset_class"], key_h)
+        period_end = queries.period_end_quarter(r.get("period_label"),
+                                                r.get("as_of_date"))
+        cell = (r["plan_id"], r["asset_class"], key_h, period_end)
         candidate = {
             "plan_id": r["plan_id"],
             "asset_class": r["asset_class"],
@@ -597,6 +616,7 @@ def pick_best_per_cell(rows: list[dict]) -> list[dict]:
             "return_pct": r["return_pct"],
             "period_label": r["period_label"],
             "as_of_date": r["as_of_date"],
+            "period_end": period_end,
             "source": r["source"],
             "document_id": r["document_id"],
         }
@@ -613,6 +633,46 @@ def pick_best_per_cell(rows: list[dict]) -> list[dict]:
                 > _SOURCE_RANK.get(current["source"], 0)):
             best[cell] = candidate
     return list(best.values())
+
+
+def _recreate_horizon_table_if_stale(session) -> bool:
+    """Drop and recreate plan_asset_class_horizon when its columns have moved.
+
+    There is no migration framework here, and `init_db()` cannot help:
+    `create_all` skips a table that already exists, so a column added to the
+    model appears in Python and not in Postgres, and the first insert fails on
+    the missing column. For a *derived* table that is not a problem worth a
+    migration -- nothing here is a source of record, every row is rebuilt from
+    summaries, section reads and CAFR extracts a few lines above -- so the
+    honest answer is to drop it and let create_all build the current shape.
+
+    Deliberately narrow. It compares the live columns against the model and
+    acts only when they differ, so an ordinary rebuild does not drop and
+    recreate a table for no reason. It is also the only table in this repo
+    where dropping is safe, which is why this is not a general helper.
+    """
+    inspector = sa_inspect(session.get_bind())
+    if not inspector.has_table(PlanAssetClassHorizon.__tablename__):
+        database.Base.metadata.create_all(
+            session.get_bind(),
+            tables=[PlanAssetClassHorizon.__table__])
+        return True
+
+    live = {c["name"] for c in
+            inspector.get_columns(PlanAssetClassHorizon.__tablename__)}
+    wanted = {c.name for c in PlanAssetClassHorizon.__table__.columns}
+    if live == wanted:
+        return False
+
+    console.print(
+        f"[yellow]plan_asset_class_horizon shape changed "
+        f"(missing {sorted(wanted - live)}, extra {sorted(live - wanted)}) "
+        f"-- dropping and recreating[/yellow]")
+    session.commit()          # close any open transaction before DDL
+    PlanAssetClassHorizon.__table__.drop(session.get_bind(), checkfirst=True)
+    database.Base.metadata.create_all(
+        session.get_bind(), tables=[PlanAssetClassHorizon.__table__])
+    return True
 
 
 def main() -> int:
@@ -668,6 +728,7 @@ def main() -> int:
         # documents across horizons where pick_latest is not.
         cells = pick_best_per_cell(pool)
 
+        _recreate_horizon_table_if_stale(session)
         session.execute(text("DELETE FROM plan_asset_class_horizon"))
         for r in cells:
             session.add(PlanAssetClassHorizon(**r))

@@ -1046,63 +1046,85 @@ def period_end(period_label: str | None, fallback: date | None) -> date | None:
 
     Returns ``None`` only when the label names no period and there is no
     document date either.
+
+    Whatever the label claims, the answer is capped at ``fallback``: a
+    document cannot report a period ending after it was written. Without that
+    cap, "Calendar Year 2026" in a May 2026 board pack resolves to 31 December
+    2026 and files a figure in a quarter that has not happened -- and so do
+    "Fiscal 2026" and "1-year ending Feb-2026", by two different routes
+    through the year rules. One cap catches all three, and any future variant,
+    where three regex patches would not.
     """
     label = (period_label or "").strip()
+    stated = _stated_period_end(label) if label else None
 
-    if label:
-        # A date spelled out beats every other reading, and the last one in
-        # the label wins so a range resolves to its end.
-        matches = list(_NUMERIC_DATE.finditer(label))
-        for m in reversed(matches):
-            month, day, year = (int(g) for g in m.groups())
-            if year < 100:
-                year += 2000
-            try:
-                return date(year, month, day)
-            except ValueError:
-                continue            # 31/31/2024 and friends: keep looking
-
-        m = _NAMED_DATE.search(label)
-        if m:
-            month = _MONTH_BY_PREFIX[m.group(1)[:3].lower()]
-            try:
-                return date(int(m.group(3)), month, int(m.group(2)))
-            except ValueError:
-                pass
-
-        m = _QUARTER_YEAR.search(label)
-        if m:
-            quarter = m.group(1) or m.group(2)
-            return _end_of_month(int(m.group(3)), int(quarter) * 3)
-
-        m = _YEAR_Q.search(label)
-        if m:
-            return _end_of_month(int(m.group(1)), int(m.group(2)) * 3)
-
-        m = _MONTH_YEAR.search(label)
-        if m:
-            return _end_of_month(int(m.group(2)),
-                                 _MONTH_BY_PREFIX[m.group(1)[:3].lower()])
-
-        # Everything below reads a year as a whole period. A year-to-date
-        # label names a year its period runs in but does not finish.
-        if not _YEAR_TO_DATE.search(label):
-            m = _FISCAL_YEAR.search(label)
-            if m:
-                return date(int(m.group(1)), *_FISCAL_YEAR_END)
-
-            m = _CALENDAR_YEAR.search(label)
-            if m:
-                return date(int(m.group(1)), 12, 31)
-
-            # A bare year, with nothing saying which kind. Calendar-year
-            # returns are what a bare year means in these tables; "FY" and
-            # "fiscal" are spelled out above when a plan means otherwise.
-            m = _ANY_YEAR.search(label)
-            if m:
-                return date(int(m.group(1)), 12, 31)
+    if stated is not None:
+        if fallback is None:
+            return stated
+        ceiling = fallback.date() if isinstance(fallback, datetime) else fallback
+        if stated <= ceiling:
+            return stated
+        # The label describes a period still running. Fall through to the
+        # document's own date, which is as far as its figures can reach.
 
     return _last_quarter_end(fallback) if fallback else None
+
+
+def _stated_period_end(label: str) -> date | None:
+    """What the label itself claims, before any sanity cap."""
+    # A date spelled out beats every other reading, and the last one in
+    # the label wins so a range resolves to its end.
+    matches = list(_NUMERIC_DATE.finditer(label))
+    for m in reversed(matches):
+        month, day, year = (int(g) for g in m.groups())
+        if year < 100:
+            year += 2000
+        try:
+            return date(year, month, day)
+        except ValueError:
+            continue            # 31/31/2024 and friends: keep looking
+
+    m = _NAMED_DATE.search(label)
+    if m:
+        month = _MONTH_BY_PREFIX[m.group(1)[:3].lower()]
+        try:
+            return date(int(m.group(3)), month, int(m.group(2)))
+        except ValueError:
+            pass
+
+    m = _QUARTER_YEAR.search(label)
+    if m:
+        quarter = m.group(1) or m.group(2)
+        return _end_of_month(int(m.group(3)), int(quarter) * 3)
+
+    m = _YEAR_Q.search(label)
+    if m:
+        return _end_of_month(int(m.group(1)), int(m.group(2)) * 3)
+
+    m = _MONTH_YEAR.search(label)
+    if m:
+        return _end_of_month(int(m.group(2)),
+                             _MONTH_BY_PREFIX[m.group(1)[:3].lower()])
+
+    # Everything below reads a year as a whole period. A year-to-date
+    # label names a year its period runs in but does not finish.
+    if not _YEAR_TO_DATE.search(label):
+        m = _FISCAL_YEAR.search(label)
+        if m:
+            return date(int(m.group(1)), *_FISCAL_YEAR_END)
+
+        m = _CALENDAR_YEAR.search(label)
+        if m:
+            return date(int(m.group(1)), 12, 31)
+
+        # A bare year, with nothing saying which kind. Calendar-year
+        # returns are what a bare year means in these tables; "FY" and
+        # "fiscal" are spelled out above when a plan means otherwise.
+        m = _ANY_YEAR.search(label)
+        if m:
+            return date(int(m.group(1)), 12, 31)
+
+    return None
 
 
 def quarter_label(d: date | None) -> str | None:
@@ -1270,7 +1292,26 @@ ASSET_CLASS_HORIZONS = (
 )
 
 
-def asset_class_horizon_rows(session, asset_class: str) -> list[dict]:
+def _newest_per_cell(rows):
+    """One reading per (plan, horizon), the latest period end.
+
+    The table keeps a row per quarter now, so an unfiltered read returns a
+    plan's 1-year figure once for every quarter it has ever reported one.
+    Collapsing here rather than in SQL keeps the ordering rule in one readable
+    place, and the input is a few thousand small rows.
+    """
+    best: dict[tuple[str, str], tuple] = {}
+    for row in rows:
+        rec = row[0]
+        key = (rec.plan_id, rec.horizon_key)
+        current = best.get(key)
+        if current is None or (rec.period_end or "") > (current[0].period_end or ""):
+            best[key] = row
+    return list(best.values())
+
+
+def asset_class_horizon_rows(session, asset_class: str,
+                             quarters=None) -> list[dict]:
     """One asset class, every plan, every horizon -- the mirror read of
     collated_performance_rows above, which fixes the plan and shows every
     asset class. This fixes the asset class and shows every plan.
@@ -1290,15 +1331,39 @@ def asset_class_horizon_rows(session, asset_class: str) -> list[dict]:
     newest of the cells actually used and ``Sources`` reports how many
     distinct documents the row draws on, rather than presenting the row as
     if it came from one paper.
+
+    ``quarters`` selects which period ends to read, and changes what the
+    question means rather than merely narrowing the answer:
+
+    - **None** (the default) -- "how is everyone doing now": one reading per
+      cell, the latest. The old behaviour, and the only one the table could
+      support before it kept history.
+    - **a list of 'YYYYQn'** -- "how did everyone do in these quarters": every
+      plan that reported one, whether or not it has since reported a newer
+      one. This is the sweep the latest-only table could not answer -- 26
+      plans reported a 2025Q4 private-equity figure and it could show 17.
+
+    Filtering here rather than in the caller matters: the rows a plan is
+    dropped by never load, so a sweep of an old quarter costs a small query
+    rather than the whole table.
     """
     from database import Document, Plan
     from database import PlanAssetClassHorizon as H
 
-    rows = (session.query(H, Plan.name, Document.url, Document.filename)
-            .join(Plan, Plan.id == H.plan_id)
-            .outerjoin(Document, Document.id == H.document_id)
-            .filter(H.asset_class == asset_class)
-            .all())
+    q = (session.query(H, Plan.name, Document.url, Document.filename)
+         .join(Plan, Plan.id == H.plan_id)
+         .outerjoin(Document, Document.id == H.document_id)
+         .filter(H.asset_class == asset_class))
+    if quarters:
+        q = q.filter(H.period_end.in_(list(quarters)))
+    rows = q.all()
+
+    if not quarters:
+        # No quarter asked for, so answer the "how are they doing now"
+        # question: one reading per cell, the most recent. The table holds
+        # every quarter since it became a time series, and showing all of them
+        # at once would stack four readings of the same horizon into one cell.
+        rows = _newest_per_cell(rows)
 
     labels = dict(ASSET_CLASS_HORIZONS)
     by_plan: dict[str, dict] = {}
@@ -1314,7 +1379,10 @@ def asset_class_horizon_rows(session, asset_class: str) -> list[dict]:
 
     for rec, plan_name, doc_url, doc_name in rows:
         label = labels.get(rec.horizon_key)
-        quarter = period_end_quarter(rec.period_label, rec.as_of_date)
+        # Stored by the builder, not recomputed: it is part of this table's
+        # key, so a value derived differently here could disagree with the
+        # row it came from.
+        quarter = rec.period_end
         # Age is per cell here, not per row, so an old 10-year figure is
         # dropped without taking its row's current 1-year figure with it.
         if label and _too_old(quarter):
@@ -1375,6 +1443,5 @@ def asset_class_horizon_quarters(session) -> list[str]:
     """
     from database import PlanAssetClassHorizon as H
 
-    rows = session.query(H.period_label, H.as_of_date).all()
-    quarters = {period_end_quarter(label, as_of) for label, as_of in rows}
-    return sorted((q for q in quarters if q and not _too_old(q)), reverse=True)
+    rows = session.query(H.period_end).distinct().all()
+    return sorted((q for (q,) in rows if q and not _too_old(q)), reverse=True)

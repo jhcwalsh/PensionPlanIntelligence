@@ -31,11 +31,19 @@ def session(tmp_db):
     s.close()
 
 
-def _horizon(session, plan_id, asset_class, horizon_key, pct, period_label):
+def _horizon(session, plan_id, asset_class, horizon_key, pct, period_label,
+             as_of=date(2026, 5, 14)):
+    """`as_of` is the *document's* date and doubles as period_end's ceiling: a
+    pack cannot report a period ending after it was written. Cases naming a
+    period later than mid-May have to pass a later document date, or they are
+    testing that cap instead of what they meant to."""
     session.add(PlanAssetClassHorizon(
         plan_id=plan_id, asset_class=asset_class, horizon_key=horizon_key,
         return_pct=pct, period_label=period_label,
-        as_of_date=date(2026, 5, 14), source="board_doc"))
+        # Derived exactly as pick_best_per_cell derives it -- it is part of
+        # this table's key, and the read layer trusts the stored value.
+        period_end=queries.period_end_quarter(period_label, as_of),
+        as_of_date=as_of, source="board_doc"))
 
 
 def _collated(session, plan_id, asset_class, pct, period_label):
@@ -112,7 +120,8 @@ def test_the_quarter_options_do_not_depend_on_asset_class(session):
     the selected class would drop 2026Q2 on the switch to cash, and Streamlit
     raises when session state holds an option it was not offered.
     """
-    _horizon(session, "mcera", "real_estate", "quarter", 1.0, "Q2 2026")
+    _horizon(session, "mcera", "real_estate", "quarter", 1.0, "Q2 2026",
+             as_of=date(2026, 8, 26))
     _horizon(session, "other", "cash_short_term", "annual", 2.0, "Q1 2026")
     session.commit()
 

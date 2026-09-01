@@ -3546,14 +3546,16 @@ def _render_collated_performance():
 
 
 @st.cache_data(ttl=900)
-def _asset_class_horizon_rows(asset_class: str) -> list[dict]:
+def _asset_class_horizon_rows(asset_class: str,
+                              quarters: tuple[str, ...] = ()) -> list[dict]:
     """Reads the derived ``plan_asset_class_horizon`` table.
 
     Same TTL and same reasoning as ``_collated_performance_rows`` above: the
     source is a nightly build (``scripts/build_performance_view.py``), so a
     short TTL buys nothing and costs egress.
     """
-    return queries.asset_class_horizon_rows(get_db_session(), asset_class)
+    return queries.asset_class_horizon_rows(
+        get_db_session(), asset_class, quarters or None)
 
 
 @st.cache_data(ttl=900)
@@ -3564,32 +3566,6 @@ def _asset_class_horizon_quarters() -> list[str]:
     class -- that independence is the point, not an optimisation.
     """
     return queries.asset_class_horizon_quarters(get_db_session())
-
-
-def _keep_only_these_quarters(df, horizon_cols, cell_quarters, chosen):
-    """Blank every cell whose period does not end in one of ``chosen``.
-
-    Cell by cell, not row by row, because a row's columns come from different
-    documents: keeping whole rows would keep a plan's 2025Q2 ten-year figure
-    alongside the 2026Q1 one that matched, which is the mixing the filter
-    exists to stop.
-
-    ``cell_quarters[i]`` maps a horizon column label to that cell's quarter,
-    positionally aligned with ``df`` — so this must run before any row is
-    dropped, which is why the drop happens here at the end and not before.
-    """
-    keep = set(chosen)
-    out = df.copy()
-    period_end = out.columns.get_loc("Period end")
-    for i, cells in enumerate(cell_quarters):
-        for col in horizon_cols:
-            if cells.get(col) not in keep:
-                out.iat[i, out.columns.get_loc(col)] = None
-        out.iat[i, period_end] = queries.span_label(
-            q for q in cells.values() if q in keep)
-    # A plan whose every cell fell outside the selection has nothing left to
-    # say; an all-blank row implies it reported and did badly.
-    return out[out[horizon_cols].notna().any(axis=1)]
 
 
 def _render_asset_class_horizons():
@@ -3612,9 +3588,26 @@ def _render_asset_class_horizons():
         key="asset_class_horizon_picker")
     asset_class = dict(zip(labels, keys))[chosen_label]
 
-    rows = _asset_class_horizon_rows(asset_class)
+    # Every quarter in the table, not just this asset class's. The picker keeps
+    # its selection across an asset-class change and Streamlit raises when a
+    # stored selection is absent from the options -- Cash has no 2026Q2, so a
+    # per-class list crashed the page on exactly that move.
+    chosen_q = st.multiselect(
+        "Period end", _asset_class_horizon_quarters(), default=[],
+        key="asset_class_horizon_quarter",
+        help="Empty means each plan's most recent reading per horizon. Choose "
+             "quarters to sweep those instead -- every plan that reported one, "
+             "including plans that have since reported something newer.",
+    )
+
+    rows = _asset_class_horizon_rows(asset_class, tuple(chosen_q))
     if not rows:
-        st.info(f"No performance data yet for {chosen_label}.")
+        if chosen_q:
+            st.info(f"No {chosen_label} figures for "
+                    f"{', '.join(sorted(chosen_q))}. The quarter list covers "
+                    "every asset class, so not every class has every quarter.")
+        else:
+            st.info(f"No performance data yet for {chosen_label}.")
         return
 
     st.caption(
@@ -3628,27 +3621,6 @@ def _render_asset_class_horizons():
     )
     st.caption(PERIOD_END_NOTE)
 
-    # The per-cell quarters travel beside the row rather than as five more
-    # columns (see queries.asset_class_horizon_rows). Read, never popped:
-    # `rows` came from a cached function and mutating it would edit the
-    # cache. The `ordered` projection below is what drops the key from the
-    # frame -- a dict-valued column would break _percent_display's pd.isna.
-    cell_quarters = [r.get("_period_ends") or {} for r in rows]
-
-    # Every quarter in the table, not just this asset class's. The picker keeps
-    # its selection across an asset-class change and Streamlit raises when a
-    # stored selection is absent from the options -- Cash has no 2026Q2, so a
-    # per-class list crashed the page on exactly that move.
-    quarters = _asset_class_horizon_quarters()
-    chosen_q = st.multiselect(
-        "Period end", quarters, default=[],
-        key="asset_class_horizon_quarter",
-        help="Filters cell by cell, not row by row -- a row's columns come "
-             "from different documents, so keeping the whole row would keep "
-             "the other quarters with it. Pick 2026Q1 and every number left "
-             "on screen is a 2026Q1 figure.",
-    )
-
     df = pd.DataFrame(rows)
     horizon_cols = [label for _, label in queries.ASSET_CLASS_HORIZONS
                     if label in df.columns]
@@ -3658,17 +3630,6 @@ def _render_asset_class_horizons():
 
     for c in horizon_cols:
         df[c] = pd.to_numeric(df[c], errors="coerce")
-
-    if chosen_q:
-        df = _keep_only_these_quarters(df, horizon_cols, cell_quarters, chosen_q)
-        if df.empty:
-            # Now reachable by design: the picker offers every quarter in the
-            # table, so a reader can legitimately ask for one this class has
-            # no reading for. Saying so beats an empty grid.
-            st.info(f"No {chosen_label} figures for "
-                    f"{', '.join(sorted(chosen_q))}. The quarter list covers "
-                    "every asset class, so not every class has every quarter.")
-            return
 
     c1, c2 = st.columns(2)
     c1.metric("Plans shown", len(df))

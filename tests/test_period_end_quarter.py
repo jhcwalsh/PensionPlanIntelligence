@@ -18,7 +18,12 @@ import pytest
 from queries import period_end, period_end_quarter, quarter_label
 
 
-MEETING = date(2026, 5, 14)          # a real mid-quarter board meeting
+# A real mid-quarter board meeting, and deliberately later than every period
+# named in the cases below. period_end caps its answer at the document's own
+# date -- a pack cannot report a period ending after it was written -- so a
+# fixture dated before the period it names tests the cap rather than the rule
+# it meant to test.
+MEETING = date(2026, 8, 26)
 
 
 # --------------------------------------------------------------------------
@@ -168,8 +173,12 @@ def test_shapes_the_corpus_uses_that_a_first_pass_missed(label, expected):
 
 def test_a_month_name_must_be_a_whole_word():
     """The month alternation is bounded on both sides. "mar" inside a longer
-    word is not March, and matching it would date a row from a stray noun."""
-    assert period_end("marketing 2026 review", date(2026, 6, 30)) == date(2026, 12, 31)
+    word is not March, and matching it would date a row from a stray noun.
+
+    No document date, so the answer is the label's own reading with no cap
+    applied -- the bare-year rule, not March.
+    """
+    assert period_end("marketing 2026 review", None) == date(2026, 12, 31)
 
 
 @pytest.mark.parametrize("label", ["YTD 2026", "Year to Date 2026",
@@ -183,6 +192,43 @@ def test_year_to_date_does_not_end_in_december(label):
 
 def test_year_to_date_still_believes_a_date_it_states():
     assert period_end("YTD through 11/20/2025", date(2026, 7, 31)) == date(2025, 11, 20)
+
+
+@pytest.mark.parametrize("label, doc_date, expected", [
+    # A calendar year still running when the pack was written.
+    ("Calendar Year 2026", date(2026, 5, 1), date(2026, 3, 31)),
+    # "Fiscal 2026" misses the fiscal-year pattern (no "year"), falls to the
+    # bare-year rule, and would land on 31 December.
+    ("Fiscal 2026", date(2026, 7, 15), date(2026, 6, 30)),
+    # A hyphenated month-year the month rule does not match.
+    ("1-year ending Feb-2026", date(2026, 4, 3), date(2026, 3, 31)),
+    # Long-Term Capital Market Assumptions: a forecast, not a return, and the
+    # bare year sends it to the end of a year that has not happened.
+    ("2026 LTCMA", date(2026, 2, 20), date(2025, 12, 31)),
+])
+def test_a_period_cannot_end_after_the_document_that_reports_it(
+        label, doc_date, expected):
+    """The cap, and the reason it is a cap rather than three regex patches.
+
+    Each of these reached 2026Q4 -- a quarter that had not happened -- by a
+    different route through the year rules. All nine such rows in the corpus
+    are explained by one rule: a document cannot report a period ending after
+    it was written.
+    """
+    assert period_end(label, doc_date) == expected
+
+
+def test_the_cap_does_not_disturb_a_period_that_really_has_ended():
+    """It must only ever pull a date backwards, and only when the label
+    outruns its document."""
+    assert period_end("FY2025", date(2026, 8, 26)) == date(2025, 6, 30)
+    assert period_end("Q1 2026", date(2026, 5, 14)) == date(2026, 3, 31)
+    assert period_end("12 months ended March 31, 2026",
+                      date(2026, 6, 25)) == date(2026, 3, 31)
+
+
+def test_a_stated_period_survives_with_no_document_date_to_cap_it():
+    assert period_end("Calendar Year 2026", None) == date(2026, 12, 31)
 
 
 def test_a_datetime_fallback_is_accepted_as_well_as_a_date():

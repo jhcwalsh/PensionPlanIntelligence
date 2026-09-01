@@ -1079,8 +1079,17 @@ class PlanAssetClassHorizon(Base):
 
     Derived data, rebuilt wholesale by scripts/build_performance_view.py in
     the same run that rebuilds plan_asset_class_performance. Uniqueness on
-    (plan_id, asset_class, horizon_key) IS the selection rule: it is what
-    keeps this to one reading per cell.
+    (plan_id, asset_class, horizon_key, period_end) IS the selection rule: one
+    reading per cell **per quarter**, so the table holds history rather than
+    only the latest state.
+
+    **The schema of a derived table changes by drop-and-recreate**, not by an
+    ALTER: everything here is rebuilt from summaries, section reads and CAFR
+    extracts, none of which this table is the source of. `init_db()` alone
+    will not do it -- `create_all` skips a table that already exists, so a
+    column added here appears in the model and not in the database, and the
+    first insert fails on the missing column. build_performance_view drops the
+    table when its shape no longer matches.
     """
 
     __tablename__ = "plan_asset_class_horizon"
@@ -1092,13 +1101,24 @@ class PlanAssetClassHorizon(Base):
     return_pct = Column(Float)
     period_label = Column(String(64))
     as_of_date = Column(Date)
+    # The quarter the reported period ENDS in, as 'YYYYQn' -- derived from
+    # period_label and as_of_date by queries.period_end_quarter, and stored
+    # rather than recomputed because it is part of the key below.
+    #
+    # Adding it to the key is what turns this table from a snapshot into a
+    # time series. Before, uniqueness was (plan, class, horizon) and the
+    # builder kept only the most recent reading per cell -- so a plan with
+    # both a 2025Q4 and a 2026Q1 private-equity figure kept only 2026Q1, and
+    # asking the table for 2025Q4 found nothing for it. That is why a sweep
+    # across 2025Q4 private equity showed 17 plans when 26 had reported one.
+    period_end = Column(String(8), index=True)
     source = Column(String(16), nullable=False)          # 'cafr' | 'board_doc' | 'targeted_read'
     document_id = Column(Integer, ForeignKey("documents.id"))
     built_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
 
     __table_args__ = (
-        UniqueConstraint("plan_id", "asset_class", "horizon_key",
-                         name="uq_plan_class_horizon"),
+        UniqueConstraint("plan_id", "asset_class", "horizon_key", "period_end",
+                         name="uq_plan_class_horizon_period"),
     )
 
 

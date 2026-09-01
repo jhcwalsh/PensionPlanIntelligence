@@ -61,9 +61,18 @@ def _row(plan_id="mcera", asset_class="real_estate", return_pct=1.0,
 
 
 def test_the_newer_reading_wins_the_cell():
-    older = _row(return_pct=5.0, as_of=date(2025, 1, 1), document_id=1)
-    newer = _row(return_pct=7.0, as_of=date(2026, 1, 1), document_id=2)
+    """Within one quarter. Since period_end joined the key, two readings of
+    *different* quarters are two cells and both survive -- that is
+    test_two_quarters_of_the_same_cell_both_survive below. This is the
+    narrower rule that still holds: same period, later paper wins.
+
+    Both dates sit in 2025Q4 (the label states no period, so the quarter comes
+    from the document date rounded back).
+    """
+    older = _row(return_pct=5.0, as_of=date(2026, 1, 5), document_id=1)
+    newer = _row(return_pct=7.0, as_of=date(2026, 2, 20), document_id=2)
     out = bpv.pick_best_per_cell([older, newer])
+    assert {r["period_end"] for r in out} == {"2025Q4"}
     assert len(out) == 1
     assert out[0]["return_pct"] == 7.0
     assert out[0]["document_id"] == 2
@@ -177,9 +186,17 @@ def test_horizon_table_survives_a_rebuild_without_duplicate_key_errors(
 
 def _seed_horizon(session, plan_id, asset_class, horizon_key, return_pct,
                   as_of_date, document_id=None, period_label=None):
+    """period_end is derived here exactly as pick_best_per_cell derives it.
+
+    It is part of this table's key and the read layer trusts the stored value
+    rather than recomputing, so a fixture that left it NULL would be seeding a
+    row the builder cannot produce -- and the tests would pass against data
+    that cannot exist.
+    """
     session.add(PlanAssetClassHorizon(
         plan_id=plan_id, asset_class=asset_class, horizon_key=horizon_key,
         return_pct=return_pct, period_label=period_label,
+        period_end=queries.period_end_quarter(period_label, as_of_date),
         as_of_date=as_of_date, source="board_doc", document_id=document_id))
 
 
@@ -288,6 +305,91 @@ def test_the_stated_period_beats_the_document_date(session):
 
     row = queries.asset_class_horizon_rows(session, "real_estate")[0]
     assert row["_period_ends"]["1 year"] == "2025Q2"
+
+
+# --------------------------------------------------------------------------
+# History: the table keeps a reading per quarter, not just the latest
+# --------------------------------------------------------------------------
+
+def test_two_quarters_of_the_same_cell_both_survive():
+    """The change that made a 2025Q4 sweep possible.
+
+    Keyed on (plan, class, horizon) alone, the 2026Q1 reading replaced the
+    2025Q4 one and the plan simply vanished from any question about 2025Q4.
+    26 plans reported a 2025Q4 private-equity figure; the view could show 17.
+    """
+    rows = [
+        _row(period_label="1 Year", return_pct=5.0, as_of=date(2026, 2, 10),
+             document_id=1),
+        _row(period_label="1 Year", return_pct=7.0, as_of=date(2026, 5, 14),
+             document_id=2),
+    ]
+    out = bpv.pick_best_per_cell(rows)
+
+    assert {r["period_end"] for r in out} == {"2025Q4", "2026Q1"}
+    assert {r["return_pct"] for r in out} == {5.0, 7.0}
+
+
+def test_two_readings_of_the_SAME_quarter_still_collapse():
+    """History, not duplication. A figure restated in a later pack supersedes
+    the earlier printing of the same period -- which is why the date and
+    source tie-breaks survive the key change."""
+    rows = [
+        _row(period_label="1 Year", return_pct=5.0, as_of=date(2026, 4, 2),
+             document_id=1),
+        _row(period_label="1 Year", return_pct=5.5, as_of=date(2026, 5, 14),
+             document_id=2),
+    ]
+    out = bpv.pick_best_per_cell(rows)
+
+    assert len(out) == 1
+    assert out[0]["return_pct"] == 5.5          # the restatement wins
+    assert out[0]["period_end"] == "2026Q1"     # same quarter throughout
+
+
+def test_a_reading_with_no_resolvable_period_is_kept_under_a_null_quarter():
+    """One cell, not a series. Dropping it would lose a figure the old key
+    retained, and the standing rule here is not to discard data."""
+    out = bpv.pick_best_per_cell([_row(period_label="3-Year", as_of=None)])
+    assert len(out) == 1
+    assert out[0]["period_end"] is None
+
+
+def test_the_default_read_still_answers_how_are_they_doing_now(session):
+    """With no quarter chosen the view must not stack every quarter a plan
+    has ever reported into one cell."""
+    d = _doc(session)
+    for q, pct in (("Q4 2025", 5.0), ("Q1 2026", 7.0)):
+        session.add(PlanAssetClassHorizon(
+            plan_id="mcera", asset_class="real_estate", horizon_key="annual",
+            return_pct=pct, period_label=q, period_end=bpv.queries.
+            period_end_quarter(q, date(2026, 5, 14)),
+            as_of_date=date(2026, 5, 14), source="board_doc",
+            document_id=d.id))
+    session.commit()
+
+    rows = queries.asset_class_horizon_rows(session, "real_estate")
+    assert len(rows) == 1
+    assert rows[0]["1 year"] == 7.0             # the newer quarter
+    assert rows[0]["Period end"] == "2026Q1"
+
+
+def test_asking_for_an_older_quarter_returns_it(session):
+    """The sweep. The plan has a newer reading and must still appear."""
+    d = _doc(session)
+    for q, pct in (("Q4 2025", 5.0), ("Q1 2026", 7.0)):
+        session.add(PlanAssetClassHorizon(
+            plan_id="mcera", asset_class="real_estate", horizon_key="annual",
+            return_pct=pct, period_label=q, period_end=bpv.queries.
+            period_end_quarter(q, date(2026, 5, 14)),
+            as_of_date=date(2026, 5, 14), source="board_doc",
+            document_id=d.id))
+    session.commit()
+
+    rows = queries.asset_class_horizon_rows(session, "real_estate", ["2025Q4"])
+    assert len(rows) == 1
+    assert rows[0]["1 year"] == 5.0
+    assert rows[0]["Period end"] == "2025Q4"
 
 
 def test_asset_class_horizons_ordering():
