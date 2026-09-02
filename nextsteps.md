@@ -1,6 +1,6 @@
 # Next steps
 
-**As of 2026-09-01.** Working doc. Supersedes the 2026-08-19 migration
+**As of 2026-09-02.** Working doc. Supersedes the 2026-08-19 migration
 edition (in git history at `e66d56d`) — that migration is complete.
 
 Specs: `docs/superpowers/specs/2026-08-16-low-maintenance-app-design.md`,
@@ -9,7 +9,7 @@ Specs: `docs/superpowers/specs/2026-08-16-low-maintenance-app-design.md`,
 
 ---
 
-## Done (2026-08-21 → 2026-09-01)
+## Done (2026-08-21 → 2026-09-02)
 
 | | |
 |---|---|
@@ -35,8 +35,9 @@ Specs: `docs/superpowers/specs/2026-08-16-low-maintenance-app-design.md`,
 | **`horizon_of` label repair (D7)** | ~3,350 rows reclaimed from `unclear` |
 | **Per-asset-class view (D6)** | 2,437 cells, 126 plans, 13 classes |
 | **Horizon table keeps history (D11)** | 6,196 cells; 2025Q4 PE 17 → 22 plans |
+| **Neon transfer verified (C1)** | 0.68 GB against a 500 GB allowance |
 | **Scraper + extraction repairs (D9)** | OCR backlog, `not_a_pdf`, Playwright, new domain |
-| **PDF retention code (E1)** | R2 store built and wired — **but inert, see E1** |
+| **PDF retention live (E1)** | 4,882 of 5,109 PDFs in R2; 172 lost to link rot |
 | **Dollar amounts read as LaTeX** | every weekly briefing's figures rendered as italics |
 | **Period end + Performance sub-tabs (D10)** | which quarter a figure is, and a page per table |
 
@@ -77,8 +78,8 @@ tried including Playwright's own browser request context. A proxy changes the
 IP, which is not the axis those sites are refusing on.
 
 The honest residue a proxy might actually fix is `frs` and `pgcers_md`, whose
-listing pages 403. `scers_suffolk` is not a proxy question at all — its
-selector is stale.
+listing pages 403. `scers_suffolk` is not a proxy question at all — it
+publishes nothing (A6).
 
 So: **weaker than it looked.** $10–75/month for a plausible 2 plans.
 
@@ -94,13 +95,11 @@ and both runner guards verified.
 expecting 14, the first probe suggested 11, and testing downloads rather than
 just discovery brought it to 7. Materials coverage 137 → 142 when it runs.
 
-**The agent is installed and deliberately not loaded**, because loading it
-schedules a nightly fetch of the plans nothing else can re-fetch, with
-retention off. One command once E1 lands:
-
-```
-launchctl load ~/Library/LaunchAgents/com.pensiongraph.wafplans.plist
-```
+**Loaded 2026-09-02**, once E1 made retention real — the agent was held back
+deliberately until then, because scheduling a nightly fetch of the plans
+nothing else can re-fetch, with retention off, is the most expensive way to
+look busy. First run 07:30 local. R2 was verified from inside the mini's
+pipeline container, not merely configured.
 
 ### A6. `scers_suffolk` — **dissolved 2026-09-02, there was no task**
 
@@ -152,11 +151,24 @@ James repointed it (Namecheap, `dns1/dns2.registrar-servers.com`) to
 
 ## C. Verification outstanding
 
-### C1. Neon transfer meter — nobody has looked
+### C1. Neon transfer meter — **CLOSED 2026-09-02, with a number**
 
-The egress fix eliminated the largest *measured* consumer, but Neon's usage
-dashboard was never available while diagnosing, so a second contributor cannot
-be ruled out. **Only James can see this.** Now a week of post-fix data.
+0.68 GB network transfer against **500 GB per project per month** on Launch —
+0.14% of the allowance. Storage 133.82 MB (~$0.05/month).
+
+The August outage blew the *free* tier's 5 GB. Launch is 100× that, so the
+failure is structurally out of reach at anything like current usage: it would
+take a sustained 16 GB/day for a month, and the worst bug ever measured in
+this codebase managed 1.5 GB/day.
+
+Worth recording that the 0.68 GB briefly looked alarming when read against the
+old 5 GB ceiling, and that it was measured on the heaviest day this database
+has ever had — a table rebuilt several times, the R2 backfill reading every
+document row, and a dozen full-corpus probes. The allowance is what settles
+it, not the usage.
+
+No second-contributor hunt needed. Even if one exists it has no consequence at
+this headroom.
 
 ### C2. The Streamlit app hangs mid-rerun locally — not root-caused
 
@@ -420,35 +432,68 @@ can check.
 
 ## E. Carried-forward loose ends
 
-### E1. PDF retention — **built, and currently doing nothing**
+### E1. PDF retention — **DONE 2026-09-02. The archive exists.**
 
-The R2 PDF store is written and wired: `pdf_store.py` (content-addressed by
-SHA-256), `documents.content_sha256` / `r2_uploaded_at` / `retention_status`,
-`scripts/backfill_pdf_store.py` for the existing corpus, and
-`pdf_store.document_pdf` now wrapping both extractors so they read from R2 when
-the local file is gone. Spec:
-`docs/superpowers/specs/2026-08-29-pdf-retention-design.md`.
+Built on 2026-08-29 and inert until today: the four `R2_*` values did not
+exist, and a missing credential makes retention a silent no-op — fetch,
+extract, go green, keep nothing. `retention_status` was NULL for all 5,095
+documents, which is what "built" was worth.
 
-**It has never retained a single file.** `retention_status` is NULL for all
-5,095 documents and `content_sha256` for all 5,095. The four `R2_*` values do
-not exist in `.env` and, on the evidence, not in the `daily-pipeline.yml`
-secrets either — and when they are missing, retention is a **silent no-op**:
-the pipeline fetches, extracts, goes green, and keeps nothing. `fetcher.py`
-prints one line per run saying whether retention is on; that line is the thing
-to check.
+James created the bucket and the account-scoped token. Retention is now on in
+three places, each verified rather than assumed:
 
-**This is the top item on the list, and only James can start it:** create the
-Cloudflare R2 bucket, then set `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,
-`R2_SECRET_ACCESS_KEY` and `R2_BUCKET` in `.env` and as GHA secrets on
-`daily-pipeline.yml`. Everything downstream is already written and tested.
+- **`.env`** — round-tripped a test object: write, read back with matching
+  bytes, delete.
+- **GitHub Actions** — four secrets set via `gh secret set` over stdin;
+  `daily-pipeline.yml` already declared them at job level.
+- **The Mac mini** — verified *from inside the pipeline container*, not just
+  by checking the variables were present. That distinction is the whole point:
+  a green run that keeps nothing looks exactly like a green run that works.
 
-What stays broken until then, unchanged from when this was first diagnosed:
+**Backfill: 4,882 of 5,109 documents retained (95.6%).**
 
-- 5 of the 7 CAFRs stuck at "pending extract" (D3)
-- the 450 documents truncated at the old 150k cap — no longer size-gated
-  (`MAX_STORED_CHARS` is 2,000,000 against Postgres), only source-gated
-- any future structured extraction that needs the original document
-- ~4 GB of archivable material accumulating and being discarded daily
+| | |
+|---|---|
+| `stored_local` | 2,431 — PDF still on disk, free |
+| `stored_refetch` | 2,411 — re-downloaded from source |
+| `unrecoverable` | **172 — source link dead, gone permanently** |
+| `skipped_waf` | 55 — the Mac mini reaches 7 of those plans from 07:30 |
+
+**The 172 are the price of not doing this sooner.** Their text survives; the
+PDFs do not, and the links have rotted. When this was first diagnosed a
+20-URL sample suggested 19 of 20 were still fetchable; the real figure was
+93% of 2,583. Better than the sample implied, and every day of delay moved it
+the wrong way.
+
+Consequences now unblocked:
+
+- The 449 documents truncated at the old 150k cap — see D12.
+- Structured extraction that needs the original document, at any point in the
+  future, on any machine: `pdf_store.document_pdf` means the extractors no
+  longer have to run on the machine that did the fetching.
+- The 5 CAFRs stuck at "pending extract" (D3), for whichever of them was a
+  `missing_file`.
+
+### D12. Re-extracting the truncated 449 — driver written 2026-09-02
+
+`scripts/reextract_truncated.py`. `MAX_STORED_CHARS` was 150,000 while the
+database was a SQLite file in git; it is 2,000,000 now and the PDFs are
+retained, so the text is simply read again. **No model, no cost** — PyMuPDF's
+text layer, locally.
+
+Sampled ten documents: 4,207,781 characters recovered, `smcera` 150,000 →
+1,301,665, `me_pers` → 1,348,495. Across all 449 that suggests 150–200M
+characters, against a corpus currently holding 157M.
+
+It never shrinks a document: a shorter or non-`done` re-read keeps the stored
+text and reports why. A truncated 150,000 characters is worth more than a
+complete 400, and a PDF that re-reads short means a bad retained copy or a
+changed source — something to investigate, never to overwrite.
+
+What this does **not** change: summaries. The summariser reads the first
+~50,000 characters, so existing summaries are unaffected. The gain is search,
+and the targeted read (D8), which scans the whole document and is where the
+extra text actually gets used.
 
 ### Others
 
@@ -471,30 +516,36 @@ What stays broken until then, unchanged from when this was first diagnosed:
 
 ## Suggested order
 
-Sections A1, B1, B2 and D1–D10 are done. What's left:
+Sections A1, A6, B1, B2, C1, D1–D12 and E1 are done. Everything that was
+blocking something else has landed. What's left is genuinely optional, which
+is a different position from any previous edition of this document.
 
-1. **E1 R2 credentials** — the only item where the code is finished and the
-   work is a config change. Until it lands, every PDF the pipeline downloads is
-   thrown away, and the archive this was all building toward does not exist.
-   **Only James can do this.**
-2. **E1 backfill**, immediately after — `scripts/backfill_pdf_store.py` over
-   the existing corpus, ~4 GB. Cheap, and it stops the loss compounding.
-3. **C1 transfer meter** — one dashboard glance, closes the last unverified
-   claim from the August outage. **Only James can see this.**
-4. **C2 local Streamlit hang** — development friction only, does not affect
-   the live site. Worth an hour with a thread dump rather than more guessing.
-5. **A5's one command** — `launchctl load ...wafplans.plist` on the mini, the
-   moment R2 is on. Everything else for it is built and verified; leaving it
-   unloaded is the only thing standing between the mini and 7 more plans.
-6. **A6 `scers_suffolk` selector** — +1 plan, an hour, no infrastructure, and
-   it lands in the cloud pipeline rather than on a machine in your house.
-7. **`wsib`'s missing performance data** (D3) — needs a second section search
-   or a cross-section merge. Not urgent: it fails safe.
-8. **A2 Auth0**, **A3 public repo**, **A4 WAF proxy** — decisions only James
-   can make, no urgency on any of them. A4 is now worth less than it looks;
-   see the entry.
+1. **The 130 failed extractions** — the last real backlog. Their failure
+   reasons were never recorded, so nobody knows how many are image-only
+   (needing OCR, which costs) versus broken downloads (free to retry). Triage
+   first, then price. Recording a reason on failure is worth doing anyway.
+2. **OCR is the only expensive model path left.** `extractor.py:211` pins
+   vision OCR to Sonnet. Haiku 4.5 has vision and is far cheaper, but OCR is
+   exactly where a cheaper model degrades quietly — worth an A/B on a few
+   pages before switching, not a blind swap. Everything else is already on the
+   cheap option: the targeted read runs DeepSeek V4 Flash, the summariser
+   routes to Haiku by default.
+3. **Re-run the targeted read (D8)** over the documents D12 grew. The summariser
+   only ever reads the first ~50k characters, so the recovered text is
+   currently invisible to everything except search; the targeted read is what
+   consumes it. ~$1 last time, and it should be quoted again first.
+4. **The horizon view's missing columns** — four plans report 2025Q4 private
+   equity only as since-inception / 20-year / monthly / part-year, which have
+   no column. Small, and it is the remainder of the question that produced D11.
+5. **C2 local Streamlit hang** — development friction only, does not affect the
+   live site. Worth an hour with a thread dump rather than more guessing.
+6. **`wsib`'s missing performance data** (D3) — needs a second section search
+   or a cross-section merge. Not urgent: it fails safe, showing fewer rows
+   rather than wrong ones.
+7. **A2 Auth0**, **A3 public repo**, **A4 WAF proxy** — decisions only James
+   can make. A4 is now worth about two plans; see the entry.
 
-Worth saying plainly: with D6, D7, D8 and D10 shipped, the performance data is
-in better shape than the extraction pipeline that feeds it. The binding
-constraint has moved from "can we read the numbers" to "are we keeping the
-documents" — which is E1.
+Worth saying plainly: the constraint that shaped this whole document — "we are
+throwing away the documents" — is gone. 95.6% of the corpus is archived, every
+future fetch is retained, and extraction no longer has to happen on the machine
+that did the fetching. What remains is improvement rather than repair.
