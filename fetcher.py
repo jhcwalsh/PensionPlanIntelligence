@@ -134,7 +134,8 @@ def load_plans() -> list[dict]:
 
 def fetch_page_requests(url: str) -> BeautifulSoup | None:
     try:
-        resp = requests.get(url, headers=HEADERS, timeout=30)
+        resp = requests.get(url, headers=HEADERS, timeout=30,
+                            verify=_verify_tls(url))
         resp.raise_for_status()
         return BeautifulSoup(resp.text, "lxml")
     except Exception as e:
@@ -159,6 +160,11 @@ def fetch_page_playwright(url: str, wait_selector: str = None,
             context = browser.new_context(
                 user_agent=HEADERS["User-Agent"],
                 viewport={"width": 1280, "height": 900},
+                # Same host-scoped exception as _verify_tls, for the same
+                # reason: a browser context is per-fetch, so this stays as
+                # narrow as the requests path rather than becoming a
+                # browser-wide setting.
+                ignore_https_errors=not _verify_tls(url),
             )
             page = context.new_page()
 
@@ -528,6 +534,63 @@ def _sole_pdf_link(html: bytes, base_url: str) -> str | None:
     return resolved.pop() if len(resolved) == 1 else None
 
 
+_JS_LOCATION_REPLACE = re.compile(
+    r"window\.location\s*=\s*window\.location\.toString\(\)\s*\.replace\("
+    r"\s*[\"']([^\"']+)[\"']\s*,\s*[\"']([^\"']+)[\"']\s*\)")
+
+
+def _js_redirect_target(html: bytes, url: str) -> str | None:
+    """The URL a "Downloading, please wait..." interstitial sends you to.
+
+    San Diego's OnBase Agenda Online answers every ``DownloadFile`` link with
+    1,435 bytes of HTML holding a spinner and one line of jQuery that rewrites
+    its own address to ``DownloadFileBytes``. It is a redirect implemented in
+    JavaScript rather than a status code, so every non-browser fetch stores the
+    spinner -- which is what made SDCERS look blocked for weeks when nothing
+    was blocking it. The interstitial was never read; only its size was.
+
+    The rewrite is taken from the page rather than hardcoded. OnBase is one
+    vendor among many and the next such interstitial will name different
+    routes; reading the instruction the page actually gives works for all of
+    them, and refuses when the page does not give one.
+    """
+    try:
+        text = html.decode("utf-8", "ignore")
+    except Exception:                                       # noqa: BLE001
+        return None
+    m = _JS_LOCATION_REPLACE.search(text)
+    if not m:
+        return None
+    old, new = m.group(1), m.group(2)
+    # The page guards its own rewrite with indexOf(new) < 0, and it has to:
+    # "DownloadFileBytes" contains "DownloadFile", so re-applying the replace
+    # yields "DownloadFileBytesBytes" and a 404. Mirror the guard rather than
+    # test target != url, which does not catch a substring rewrite.
+    if new in url or old not in url:
+        return None
+    target = url.replace(old, new)
+    return target if target != url else None
+
+
+# Hosts whose TLS chain is incomplete, where verification is skipped.
+#
+# board.sdcers.gov serves its leaf certificate without the intermediate, so
+# every verifying client fails: requests raises SSLError, Playwright reports
+# "unable to verify the first certificate". The server is at fault and we
+# cannot fix it, but these are public board minutes, and the fetched bytes are
+# content-hashed into R2 regardless -- so the exposure is a man-in-the-middle
+# feeding us the wrong public agenda, not credential loss.
+#
+# Scoped to exact hostnames on purpose. A global verify=False would silently
+# disable verification for all 148 plans, which is a far larger change than
+# the one plan that needs it, and invisible once merged.
+TLS_INCOMPLETE_CHAIN_HOSTS = frozenset({"board.sdcers.gov"})
+
+
+def _verify_tls(url: str) -> bool:
+    return urlparse(url).hostname not in TLS_INCOMPLETE_CHAIN_HOSTS
+
+
 def download_document(url: str, dest_dir: Path, filename: str,
                       _follow_once: bool = True) -> tuple[Path | None, int]:
     dest_dir.mkdir(parents=True, exist_ok=True)
@@ -547,7 +610,8 @@ def download_document(url: str, dest_dir: Path, filename: str,
             return dest, dest.stat().st_size
 
     try:
-        resp = requests.get(url, headers=HEADERS, timeout=60, stream=True)
+        resp = requests.get(url, headers=HEADERS, timeout=60, stream=True,
+                            verify=_verify_tls(url))
         resp.raise_for_status()
 
         cd = resp.headers.get("Content-Disposition", "")
@@ -573,6 +637,17 @@ def download_document(url: str, dest_dir: Path, filename: str,
             # actual PDF once. Following that link is the difference between
             # nine recoverable documents and nine dead ones.
             if _follow_once:
+                # A JavaScript interstitial is checked first: it names its own
+                # target exactly, where _sole_pdf_link only guesses from links
+                # that happen to end in .pdf. The spinner page has no such
+                # link, so the order matters only for pages that have both.
+                jump = _js_redirect_target(html, url)
+                if jump:
+                    console.print(f"  [dim]Download interstitial; following "
+                                  f"its redirect[/dim]")
+                    return download_document(jump, dest_dir, filename,
+                                             _follow_once=False)
+
                 target = _sole_pdf_link(html, url)
                 if target and target != url:
                     console.print(f"  [dim]Landing page; following its PDF "
