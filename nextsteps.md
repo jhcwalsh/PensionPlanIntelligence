@@ -630,9 +630,54 @@ Worth doing because OnBase Agenda Online is a vendor platform, not a
 one-off — before building it, check how many other tracked plans use it, since
 the same scraper would serve all of them.
 
-### D15. Review the top 200 US public pension plans against the database
+### D15. Review the top 200 US public pension plans — **DONE 2026-09-02**
 
-**Requested by James, 2026-09-02. Not started.**
+**Full review: `docs/superpowers/notes/2026-09-02-ppd-coverage-review.md`.**
+Reproduce with `python -m scripts.ppd_coverage` (`--states` for the
+side-by-side).
+
+**Benchmark chosen: the Public Plans Database**, not the P&I Top 200. "Top
+200" normally means P&I's, which is mostly *corporate* DB plans — GM, Boeing,
+IBM — so scoring against it would count plans this project deliberately does
+not track. PPD (Boston College CRR) is 248 state and local plans holding ~95%
+of US state/local assets, FY2025 for 186 of them: the universe this registry
+is trying to be a subset of.
+
+**PPD $5,856B / 248 plans against our $5,689B / 148.** Every state and DC has
+at least one tracked plan; there is no state-shaped hole.
+
+**Three findings.**
+
+1. **One large genuine gap: the University of California Retirement Plan,
+   $110.8B.** It would rank #11 nationally, above Oregon PERS and Arizona SRS,
+   both tracked. The only omission that changes the shape of the corpus.
+2. **The rest is ~$60B across ~50 municipal funds**, none above $12B —
+   Arkansas PERS $11.9B, the four Chicago city funds $12.5B, three Louisiana
+   funds $9.5B, the Kansas City and St. Louis funds $8B, then a long tail of
+   city police-and-fire plans. Cheap to add, cheap to skip: the case for them
+   is *board-materials* coverage, not assets.
+3. **`aum_billions` is systematically ~12% low.** Median ratio 0.881 across 32
+   hand-verified pairs, 26 of 32 understated, one-directional — a vintage lag,
+   not rounding. Philadelphia −37%, Connecticut Teachers −35%, CalPERS −11%.
+   **This makes CLAUDE.md's "8.5% of tracked AUM" approximate**, since that
+   percentage is computed from this column and the lag differs per plan.
+
+**Name matching cannot do this, and two attempts proving it are in git
+history.** PPD's unit is the plan, ours is the investing entity, so six
+"Washington … Plan 1/2/3" rows are one WSIB portfolio. Stripping boilerplate
+called four tracked Houston and Austin funds missing; stripping the state name
+instead scored *University of California* as covered by CalPERS on the shared
+word "California" — the $110.8B finding, hidden by a tokeniser. So
+`scripts/ppd_coverage.py` prints state totals and a side-by-side and refuses to
+classify; the verdicts were read by hand.
+
+**Recommended next:** add UC; build a `plan_id` → `ppd_id` map and refresh
+`aum_billions` from it; leave the municipal tail unless document coverage is
+the goal — that one is James's call, not a default.
+
+---
+
+**Original brief, kept for the reasoning:**
 
 The corpus grew by accretion: 148 plans, added when someone noticed them.
 Nobody has ever checked that list against an external ranking, so the honest
@@ -673,10 +718,11 @@ Sections A1, A6, B1, B2, C1, D1–D12 and E1 are done. Everything that was
 blocking something else has landed. What's left is genuinely optional, which
 is a different position from any previous edition of this document.
 
-1. **D15, the top-200 review** — the only item that changes what everything
-   else is worth. Nobody has checked the 148 tracked plans against an external
-   ranking, so "do we cover the largest US plans?" is currently unanswerable,
-   and the Performance views invite readers to assume we do.
+1. ~~**D15, the top-200 review**~~ **DONE 2026-09-02.** Coverage is broad —
+   every state, 97% of PPD assets. Two things came out of it that are now the
+   real work: **add the University of California ($110.8B, the one large
+   omission)**, and **refresh `aum_billions`, which is systematically ~12%
+   low** and is what CLAUDE.md's AUM-weighted claims are computed from.
 2. **D14, `sdcers_ca` OnBase downloading** — discovery is fixed; the download
    stub is not. Check first how many other plans use OnBase, since the same
    scraper would serve all of them.
