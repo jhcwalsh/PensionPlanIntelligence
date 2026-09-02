@@ -1278,17 +1278,37 @@ def collated_performance_rows(session) -> list[dict]:
     return out
 
 
-# Display order and labels for the per-asset-class view's horizon columns.
-# Only the horizons a reader can usefully compare across plans side by side --
-# 2y/7y/20y/30y exist in the corpus but are thin and are left off the picker,
-# same reasoning COLLATED_CLASSES already applies to asset classes with no
-# canonical mapping.
+# Display order and labels for the per-asset-class view's horizon columns,
+# shortest period first and since-inception last.
+#
+# This list was five columns until 2026-09-02, on the reasoning that a reader
+# can only usefully compare horizons that many plans report. The cost of that
+# was not a thinner table: a plan reporting an asset class in *no* listed
+# horizon vanishes from the view entirely, taking its whole row with it.
+# Measured before the change, 48 (plan, asset_class) cells were invisible, 9 of
+# them private equity -- `atrs_ar`, `derp_co` and `sjcera_ca` publish since
+# inception, `lafpp` monthly, `epcp_tx` and `jaxpf_fl` part-year, `nhrs` and
+# `nmerb` only a 30-year figure.
+#
+# So the five added here are not a wish for completeness. Each one is carrying
+# plans that were silently absent: partial and month 19 cells each, 30y 10,
+# inception 6, 20y 3. A sparse column is visibly sparse; a missing row is not
+# visible at all, which is the worse failure for a view whose whole purpose is
+# comparison across plans.
+#
+# 2y/4y/7y/9y/14y/15y/25y/29y/35y/53y remain off the list: together they are
+# under 250 cells and no (plan, asset_class) depends on one of them alone.
 ASSET_CLASS_HORIZONS = (
+    ("month", "Month"),
     ("quarter", "Quarter"),
+    ("partial", "Part-year"),
     ("annual", "1 year"),
     ("3y", "3 year"),
     ("5y", "5 year"),
     ("10y", "10 year"),
+    ("20y", "20 year"),
+    ("30y", "30 year"),
+    ("inception", "Since inception"),
 )
 
 

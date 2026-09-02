@@ -200,6 +200,45 @@ def _seed_horizon(session, plan_id, asset_class, horizon_key, return_pct,
         as_of_date=as_of_date, source="board_doc", document_id=document_id))
 
 
+def test_a_plan_reporting_only_since_inception_still_appears(session):
+    """The 2026-09-02 bug: no column meant no row, not a blank cell.
+
+    asset_class_horizon_rows drops a plan with no displayable figure, on the
+    sound reasoning that an all-blank row reads as "reported and did badly".
+    The unsound half was the column list: a plan publishing private equity
+    only since inception had every reading dropped and vanished from a view
+    whose purpose is comparing plans. Nine private-equity plans were absent
+    this way, and nothing on the page said so.
+    """
+    _seed_horizon(session, "mcera", "private_equity", "inception", 11.5,
+                  date(2026, 5, 14), period_label="Since Inception")
+    session.commit()
+
+    rows = queries.asset_class_horizon_rows(session, "private_equity")
+    assert [r["Plan"] for r in rows] == ["MCERA"]
+    assert rows[0]["Since inception"] == 11.5
+
+
+@pytest.mark.parametrize("horizon_key,label,period_label", [
+    ("month", "Month", "Month"),
+    ("partial", "Part-year", "Fiscal Year to Date"),
+    ("20y", "20 year", "20-Year"),
+    ("30y", "30 year", "30-Year"),
+    ("inception", "Since inception", "Since Inception"),
+])
+def test_every_horizon_added_carries_plans_that_were_invisible(
+        session, horizon_key, label, period_label):
+    """Each of the five was measured to be hiding real cells, not added for
+    symmetry: partial and month 19 cells each, 30y 10, inception 6, 20y 3."""
+    _seed_horizon(session, "mcera", "private_equity", horizon_key, 7.25,
+                  date(2026, 5, 14), period_label=period_label)
+    session.commit()
+
+    rows = queries.asset_class_horizon_rows(session, "private_equity")
+    assert len(rows) == 1, f"{horizon_key} still has no column"
+    assert rows[0][label] == 7.25
+
+
 def test_asset_class_horizon_rows_shape_and_columns(session):
     session.add(Plan(id="other", name="Other Plan", state="TX"))
     d1 = _doc(session, plan_id="mcera", name="a.pdf")
@@ -393,12 +432,19 @@ def test_asking_for_an_older_quarter_returns_it(session):
 
 
 def test_asset_class_horizons_ordering():
+    """Shortest period first, since-inception last. app.py renders in this
+    order, so the tuple is the table's layout, not just its membership."""
     assert queries.ASSET_CLASS_HORIZONS == (
+        ("month", "Month"),
         ("quarter", "Quarter"),
+        ("partial", "Part-year"),
         ("annual", "1 year"),
         ("3y", "3 year"),
         ("5y", "5 year"),
         ("10y", "10 year"),
+        ("20y", "20 year"),
+        ("30y", "30 year"),
+        ("inception", "Since inception"),
     )
 
 
