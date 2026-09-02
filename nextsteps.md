@@ -586,7 +586,41 @@ given — and the URLs themselves are wrong. Re-fetching would re-archive the
 same HTML. The fix is in discovery for that one plan, and it is worth doing:
 11 documents is most of what `sdcers_ca` has failed on.
 
-### D14. `sdcers_ca` OnBase — discovery fixed, downloading still blocked
+### D14. `sdcers_ca` OnBase — **DONE 2026-09-02. It was never blocked.**
+
+**The 1,435-byte stub was a spinner, not a 403.** Four probes recorded its
+size; none decoded it. It is a "Downloading, please wait…" interstitial holding
+one line of jQuery that rewrites its own address from `DownloadFile` to
+`DownloadFileBytes`. That route serves the PDF — 171,442 bytes, `%PDF-`,
+`application/pdf`. Weeks of "no host we have serves these", and the answer was
+in the bytes we already had.
+
+`fetcher._js_redirect_target` reads the rewrite **from the page** rather than
+hardcoding OnBase's route names, so the next vendor's interstitial works
+without a code change and a page offering no such instruction is refused rather
+than guessed at. It mirrors the page's own `indexOf` guard, because
+`DownloadFileBytes` contains `DownloadFile` and a naive second pass yields
+`DownloadFileBytesBytes`; a test caught that before it shipped.
+
+TLS is a separate, real fault: the host serves its leaf without the
+intermediate. `fetcher.TLS_INCOMPLETE_CHAIN_HOSTS` is an **exact hostname set**
+checked against `urlparse().hostname` — a suffix match would pass
+`board.sdcers.gov.evil.test`, and there is a test for that.
+
+**Result: 1 → 61 documents extracted.** 50 of the 80 failures recovered; the
+other 30 are `www.sdcers.org` URLs stored before the migration, which soft-404
+to the .gov homepage and are gone from this source.
+
+**Only one plan uses OnBase** — 90 URLs, all `sdcers_ca`. The "vendor platform,
+so the scraper serves many plans" argument this entry rested on was wrong, and
+checking it first would have cost five minutes. It was still worth doing, but
+on the merits of one $12B plan, not a platform.
+
+---
+
+**Original entry, kept because the diagnosis it records was half right:**
+
+### D14 (original). `sdcers_ca` OnBase — discovery fixed, downloading blocked
 
 **Half done, and the half that is done is the half that was unknown.**
 
@@ -723,6 +757,14 @@ is a different position from any previous edition of this document.
    real work: **add the University of California ($110.8B, the one large
    omission)**, and **refresh `aum_billions`, which is systematically ~12%
    low** and is what CLAUDE.md's AUM-weighted claims are computed from.
+2. ~~**D14, `sdcers_ca` OnBase downloading**~~ **DONE 2026-09-02.** The stub
+   was a "Downloading, please wait…" spinner, not a block; following the
+   redirect it names took SDCERS from 1 to 61 documents. Only one plan uses
+   OnBase, so there is no platform win — checking that first would have cost
+   five minutes.
+
+**Superseded, kept for the reasoning:**
+
 2. **D14, `sdcers_ca` OnBase downloading** — discovery is fixed; the download
    stub is not. Check first how many other plans use OnBase, since the same
    scraper would serve all of them.
@@ -735,6 +777,15 @@ is a different position from any previous edition of this document.
 4. ~~**Re-run the targeted read (D8)** over the documents D12 grew.~~
    **DONE 2026-09-02 — see D16.** $0.7827, 587 windows, and 2025Q4 private
    equity went 22 → 33 plans.
+5. ~~**The horizon view's missing columns**~~ **DONE 2026-09-02.** Bigger than
+   the brief: the missing columns were hiding **48 (plan, asset_class) cells,
+   9 of them private equity**, because a plan with no displayable figure is
+   dropped entirely rather than shown blank. `month`, `partial`, `20y`, `30y`
+   and `inception` added — `30y` on the evidence, not in the original brief.
+   Private equity 59 → 63 rows; nothing hidden now.
+
+**Superseded, kept for the reasoning:**
+
 5. **The horizon view's missing columns** — four plans report 2025Q4 private
    equity only as since-inception / 20-year / monthly / part-year, which have
    no column. Small, and it is the remainder of the question that produced D11.
