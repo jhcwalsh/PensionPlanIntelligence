@@ -218,7 +218,7 @@ off and these documents are irreplaceable.
 | `pbpr_pa` | 21 | ✓ |
 | `fwerf_tx` | 18 | ✓ |
 | `strs_ohio` | 1 | ✓ — `requests` 403, Playwright fallback succeeded |
-| `scers_suffolk` | 0 | **Not blocked.** HTTP 200, 108 anchors. Stale selector. |
+| `scers_suffolk` | 0 | **Not blocked, and empty.** HTTP 200; the page is a department directory with no agendas or minutes on it (re-verified 2026-09-02). |
 | `frs` | 0 | ✗ HTTP 403 from residential IP |
 | `pgcers_md` | 0 | ✗ HTTP 403 from residential IP |
 
@@ -238,7 +238,7 @@ Three consequences for the rest of this plan:
    in the runner's list would produce a job that fails two plans every night.
    They stay on the block lists with their reason corrected; A4's proxy
    question survives for exactly these two.
-3. **`scers_suffolk` is a scraper bug, not a WAF block**, and was misfiled on
+3. **`scers_suffolk` has nothing to fetch**, and was misfiled on
    the block list. It is reachable from anywhere, including GitHub Actions —
    fixing its selector restores it to the *cloud* pipeline, no Mini required.
    Tracked separately; do not fold it into this plan.
@@ -265,7 +265,7 @@ Downloads, tested against known-good PDF URLs already in the corpus:
 | `asrs`, `corp_az`, `acrs_pa`, `strs_ohio` | ✓ | ✗ 403 | lists, cannot fetch |
 | `frs` | ✗ 403 | ✓ 200 | cannot discover |
 | `pgcers_md` | ✗ 403 | — | blocked |
-| `scers_suffolk` | ✓ 200 | ✓ 200 | stale selector, cloud-fixable |
+| `scers_suffolk` | ✓ 200 | ✓ 200 | page is empty of materials |
 
 The 403 on the four is not a cookie problem, which was the obvious hypothesis
 and is worth recording as ruled out: it survives a `requests` call carrying
@@ -275,9 +275,16 @@ the browser's cookie jar (only `__cf_bm` is issued, never `cf_clearance`), a
 The PDF path has its own rule.
 
 **Revised arithmetic.** Stage 1 is worth **5 materials plans and 2 CAFRs**,
-not 14 and not 11. Materials coverage goes **137 → 142**; `scers_suffolk`'s
-selector fix adds a sixth from the cloud, with no Mini involved. The residue
-for A4 is seven plans, not two.
+not 14 and not 11. Materials coverage goes **137 → 142**. The residue for A4
+is seven plans, not two.
+
+*Corrected again 2026-09-02:* an earlier revision of this paragraph promised a
+sixth plan from fixing `scers_suffolk`'s selector. There is no selector to
+fix — its page carries no materials at all, which `known_plans.json` had
+recorded on 2026-08-29 and this table's author had not read. Materials
+coverage tops out at **144 of 148**, not 148: `frs` and `pgcers_md` need
+something A4 might buy, `scers_suffolk` needs Suffolk to start publishing, and
+the four `download_403` plans need something nobody has.
 
 Whether that is still worth an always-on host and a nightly job is a real
 question and is James's to answer — it is a different proposition from the one

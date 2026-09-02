@@ -1,6 +1,6 @@
 {
   "_doc": "Plans whose board materials the cloud pipeline cannot fetch. These are SKIPPED EVERYWHERE by pipeline.py. Naming a blocked plan explicitly on the CLI still processes it, which is how the Mac Mini job fetches them from a residential IP. Materials coverage is 137 of 148 while every id here is skipped.",
-  "_blocked_by": "Why a plan is here, and therefore who can fetch it. Probed 2026-09-01 from a residential IP. THERE ARE TWO INDEPENDENT AXES, and the first pass measured only one: rendering the listing page, and downloading the PDFs it links to. A plan is useful to the Mac Mini only if BOTH work. 'datacentre_ip' -- listing renders AND PDFs download, so Stage 1 fetches it. 'download_403' -- listing renders but the PDF path 403s, to plain requests, to a cookie-carrying session, and to Playwright's own browser request context alike; discovery without download is worthless, so the Mini cannot serve it. 'other' -- the listing page itself 403s from a residential IP, so the block is not IP reputation at all. 'scraper' -- NOT blocked: HTTP 200, stale discovery selector, fixable in the cloud pipeline with no Mini involved. Results in docs/superpowers/plans/2026-08-30-mac-mini-waf-plans.md Task 1.",
+  "_blocked_by": "Why a plan is here, and therefore who can fetch it. Probed 2026-09-01 from a residential IP. THERE ARE TWO INDEPENDENT AXES, and the first pass measured only one: rendering the listing page, and downloading the PDFs it links to. A plan is useful to the Mac Mini only if BOTH work. 'datacentre_ip' -- listing renders AND PDFs download, so Stage 1 fetches it. 'download_403' -- listing renders but the PDF path 403s, to plain requests, to a cookie-carrying session, and to Playwright's own browser request context alike; discovery without download is worthless, so the Mini cannot serve it. 'other' -- the listing page itself 403s from a residential IP, so the block is not IP reputation at all. 'no_materials' -- NOT blocked and not fixable: the page renders from anywhere and simply has no agendas, minutes or packets on it. Nothing to do until the plan starts publishing, and a change of host or selector buys nothing. Results in docs/superpowers/plans/2026-08-30-mac-mini-waf-plans.md Task 1.",
   "plans": [
     {
       "id": "asrs",
@@ -49,8 +49,8 @@
     },
     {
       "id": "scers_suffolk",
-      "reason": "Not blocked: HTTP 200 with 108 anchors on 2026-09-01. Discovery selector finds no document links -- stale scraper config, misfiled here as a WAF block.",
-      "blocked_by": "scraper"
+      "reason": "Not blocked, and nothing to fetch. The board page renders fine from anywhere (HTTP 200) but is a department directory: 92 anchors, every one of them site navigation, and the words 'agenda', 'minutes' and 'meeting' appear zero times. The single PDF is an unrelated social-services form. Re-verified 2026-09-02, confirming the known_plans.json note of 2026-08-29. Stays on this list so the cloud pipeline does not spend a Playwright run a day on a directory page.",
+      "blocked_by": "no_materials"
     },
     {
       "id": "strs_ohio",

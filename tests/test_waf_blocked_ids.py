@@ -102,9 +102,17 @@ def test_a_plan_that_lists_but_will_not_download_is_excluded():
 
 
 def test_the_plan_that_was_never_blocked_is_excluded():
-    """scers_suffolk answers HTTP 200 with 108 anchors. Its problem is a stale
-    selector, which is fixable in the cloud pipeline -- sending the Mini after
-    it would hide a scraper bug behind an infrastructure workaround."""
+    """scers_suffolk answers HTTP 200 from anywhere and has nothing on it.
+
+    The board page is a department directory: 92 anchors, all navigation, and
+    the words agenda, minutes and meeting appear zero times. First recorded in
+    known_plans.json on 2026-08-29, re-verified 2026-09-02.
+
+    It was briefly classified 'scraper' on the strength of "renders fine, we
+    find no documents" -- a conclusion drawn from counting anchors without
+    looking at what they were. Sending the Mini after it, or rewriting the
+    selector, both buy exactly nothing.
+    """
     assert "scers_suffolk" not in set(waf_blocked_ids.all_ids())
 
 

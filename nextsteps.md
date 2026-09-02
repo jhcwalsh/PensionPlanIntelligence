@@ -102,13 +102,26 @@ retention off. One command once E1 lands:
 launchctl load ~/Library/LaunchAgents/com.pensiongraph.wafplans.plist
 ```
 
-### A6. `scers_suffolk`'s stale selector — cheap, and not a Mac mini job
+### A6. `scers_suffolk` — **dissolved 2026-09-02, there was no task**
 
-Misfiled as a WAF block for months. The site answers HTTP 200 with 108
-anchors from anywhere, GitHub Actions included; the discovery selector just
-finds no document links. Fixing it and removing the id from
-`data/waf_blocked_plans.json` is +1 plan of coverage for an hour's work and
-no infrastructure. Better value than anything in A4.
+Written up as "a stale selector, +1 plan for an hour's work". Wrong. The board
+page renders fine from anywhere and has nothing on it: 92 anchors, every one
+site navigation, and "agenda", "minutes" and "meeting" appear zero times. The
+only PDF is an unrelated social-services form.
+
+`known_plans.json` has said so since 2026-08-29 — *"publishes no board
+materials... nothing to scrape until Suffolk starts publishing"*. The A6
+entry was created by reading "HTTP 200, 108 anchors, we find no documents" as
+a scraper bug, without checking what the anchors were, and without reading the
+note already on the plan.
+
+Reclassified `blocked_by: "no_materials"`. It stays on the block list so the
+daily pipeline does not spend a Playwright run on a directory page. Nothing to
+do until Suffolk publishes something; the ACFR still arrives from osc.ny.gov.
+
+**Coverage arithmetic, corrected again:** materials tops out at 142 + `frs` +
+`pgcers_md` = 144 of 148, not 148. Four plans have no reachable materials at
+all and one of them has none to reach.
 
 ---
 
