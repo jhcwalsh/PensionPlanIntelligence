@@ -1841,7 +1841,7 @@
     "state": "CA",
     "aum_billions": 12.0,
     "website": "https://www.sdcers.gov",
-    "materials_url": "https://www.sdcers.gov/about/board-of-administration/board-meeting-agendas-minutes",
+    "materials_url": "https://board.sdcers.gov/OnBaseAgendaOnline/Meetings/Search?dropid=1",
     "materials_type": "playwright",
     "investment_only": false,
     "doc_types": [
@@ -1850,9 +1850,9 @@
       "minutes"
     ],
     "extra_pages": [
-      "https://www.sdcers.gov/board-meeting-agendas/board-agenda"
+      "https://board.sdcers.gov/OnBaseAgendaOnline/Meetings/Search?dropid=7"
     ],
-    "notes": "Site migrated sdcers.org -> sdcers.gov in 2026; the old .org URLs soft-404 to the homepage, which is why 30 stored documents became unfetchable. Agendas now live in OnBase at board.sdcers.gov/OnBaseAgendaOnline, whose list populates only after a search is submitted and whose TLS chain omits its intermediate (requests fails; a browser recovers). Discovery there needs an interaction step, not just rendering.",
+    "notes": "Site migrated sdcers.org -> sdcers.gov in 2026. The 30 stored .org URLs soft-404 to the .gov homepage (81,038 bytes of HTML), which is why 12 documents were recorded not_a_pdf: the fetcher archived the homepage. Re-fetching them is pointless -- re-probed 2026-09-02, all 11 reachable ones still return text/html. DISCOVERY IS SOLVED. Agendas are in OnBase at board.sdcers.gov. The listing renders nothing useful (4 future meetings, empty Links cells) but Meetings/Search takes a date-range preset as ?dropid=N: dropid=1 ('Last Year') yields 29 meetings and 174 document links, dropid=7 ('This Year') 23 meetings and 114. Those two are the materials_url and extra_pages above. Other values return 0-4. DOWNLOADING IS NOT SOLVED, and is the remaining blocker. Every DownloadFile href returns an identical 1,435-byte stub beginning b'\\r\\n\\r\\n\\r' -- via requests, via requests with verify=False, and via Playwright's own request context carrying the page's cookies. Clicking the anchor times out (not visible until its row is expanded), so the page evidently does something more than follow the href. That interaction is what a fix has to reproduce. TLS: board.sdcers.gov omits its intermediate certificate. requests raises SSLError and Playwright raises 'unable to verify the first certificate'; ignore_https_errors=True works. Any fix needs a host-scoped tolerance, not a global one.",
     "fiscal_year_end": "06-30",
     "cafr_url_template": "https://content.sdcers.org/wp-content/uploads/2024/12/fy-{year}-sdcers-acfr.pdf"
   },

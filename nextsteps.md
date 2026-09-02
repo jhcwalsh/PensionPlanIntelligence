@@ -545,34 +545,119 @@ given — and the URLs themselves are wrong. Re-fetching would re-archive the
 same HTML. The fix is in discovery for that one plan, and it is worth doing:
 11 documents is most of what `sdcers_ca` has failed on.
 
+### D14. `sdcers_ca` OnBase — discovery fixed, downloading still blocked
+
+**Half done, and the half that is done is the half that was unknown.**
+
+San Diego migrated `sdcers.org` -> `sdcers.gov` in 2026 and moved agendas into
+OnBase at `board.sdcers.gov`. The 30 stored `.org` URLs soft-404 to the .gov
+homepage, so the fetcher archived 81,038 bytes of HTML under a `.pdf` name --
+that is the whole of D13's `not_a_pdf` bucket, and re-fetching them is
+pointless (re-probed 2026-09-02: still `text/html`).
+
+**Discovery solved.** The OnBase landing page shows nothing useful — four
+future meetings with empty Links cells — but `Meetings/Search` takes a
+date-range preset as `?dropid=N`:
+
+| dropid | Meetings | Document links |
+|---|---|---|
+| **1** ("Last Year") | 29 | **174** |
+| **7** ("This Year") | 23 | **114** |
+| 0, 2–6, 8 | 0–4 | 0 |
+
+Those two are now the plan's `materials_url` and `extra_pages`.
+
+**Downloading not solved, and it is the remaining blocker.** Every
+`DownloadFile` href returns an identical **1,435-byte stub** beginning
+`b'
+
+
+
+
+'` — via `requests`, via `requests` with `verify=False`, and via
+Playwright's own request context carrying the page's cookies. Clicking the
+anchor times out because it is not visible until its row is expanded, so the
+page does something beyond following the href. Reproducing that interaction is
+what a fix has to do.
+
+**TLS, separately:** `board.sdcers.gov` omits its intermediate certificate.
+`requests` raises `SSLError`; Playwright raises "unable to verify the first
+certificate"; `ignore_https_errors=True` works. Any fix needs a **host-scoped**
+tolerance, never a global one.
+
+Worth doing because OnBase Agenda Online is a vendor platform, not a
+one-off — before building it, check how many other tracked plans use it, since
+the same scraper would serve all of them.
+
+### D15. Review the top 200 US public pension plans against the database
+
+**Requested by James, 2026-09-02. Not started.**
+
+The corpus grew by accretion: 148 plans, added when someone noticed them.
+Nobody has ever checked that list against an external ranking, so the honest
+answer to "do we cover the largest US plans?" is that we do not know. The
+Performance and Allocation views invite exactly that reading — a reader
+comparing real-estate returns across 126 plans will assume the set is the
+market, and nothing on the page says otherwise.
+
+The work:
+
+1. **Get a defensible ranking.** Public Plans Data (Boston College CRR) and
+   the P&I 1000 are the usual sources; the NASRA public-fund listing is
+   another. Pick one, record which and as of when, because the ranking moves.
+2. **Match it against `data/known_plans.json`.** Matching on name is the
+   hard part -- "Teacher Retirement System of Texas" against `trs_texas`,
+   and the several systems that share a sponsor. Expect to do this
+   semi-manually and to store the mapping, so the comparison is repeatable
+   rather than a one-off spreadsheet.
+3. **Produce three numbers**: how many of the top 200 we track, what share of
+   their combined AUM that is, and the list of the largest plans we miss.
+4. **Then decide what to add.** A missing plan is not free -- each one needs
+   a `known_plans.json` entry with a working `materials_url`, and the WAF and
+   OnBase work above shows what "working" can cost.
+
+Two things to be careful about. `plans.aum_billions` is already in the
+registry but was hand-entered and is not sourced or dated, so it should be
+checked against the external ranking rather than trusted as the basis for it.
+And coverage should be reported by **AUM**, not plan count: 148 of 200 sounds
+adequate while missing the largest five would not be.
+
+Worth doing before any further per-plan scraper work. It is the question that
+tells you whether `sdcers_ca` ($12B) is worth a day, or whether that day
+belongs to a plan we do not have at all.
+
 ## Suggested order
 
 Sections A1, A6, B1, B2, C1, D1–D12 and E1 are done. Everything that was
 blocking something else has landed. What's left is genuinely optional, which
 is a different position from any previous edition of this document.
 
-1. **`sdcers_ca`'s document URLs are wrong** — the only actionable thing the
-   failure triage turned up. See D13. One plan, 11 documents, and the fix is
-   in discovery rather than fetching.
-2. **OCR is the only expensive model path left**, and it is now a 5-document
+1. **D15, the top-200 review** — the only item that changes what everything
+   else is worth. Nobody has checked the 148 tracked plans against an external
+   ranking, so "do we cover the largest US plans?" is currently unanswerable,
+   and the Performance views invite readers to assume we do.
+2. **D14, `sdcers_ca` OnBase downloading** — discovery is fixed; the download
+   stub is not. Check first how many other plans use OnBase, since the same
+   scraper would serve all of them.
+3. **OCR is the only expensive model path left**, and it is now a 5-document
    question. `extractor.py:211` pins vision OCR to Sonnet; Haiku 4.5 has
    vision and is far cheaper, but OCR is exactly where a cheaper model
    degrades quietly — worth an A/B before switching, not a blind swap.
    Everything else is already on the cheap option: the targeted read runs
    DeepSeek V4 Flash, the summariser routes to Haiku by default.
-3. **Re-run the targeted read (D8)** over the documents D12 grew. The summariser
+4. **Re-run the targeted read (D8)** over the documents D12 grew. The summariser
    only ever reads the first ~50k characters, so the recovered text is
    currently invisible to everything except search; the targeted read is what
    consumes it. ~$1 last time, and it should be quoted again first.
-4. **The horizon view's missing columns** — four plans report 2025Q4 private
+5. **The horizon view's missing columns** — four plans report 2025Q4 private
    equity only as since-inception / 20-year / monthly / part-year, which have
    no column. Small, and it is the remainder of the question that produced D11.
-5. **C2 local Streamlit hang** — development friction only, does not affect the
+6. **C2 local Streamlit hang** — development friction only, does not affect the
    live site. Worth an hour with a thread dump rather than more guessing.
-6. **`wsib`'s missing performance data** (D3) — needs a second section search
+7. **`wsib`'s missing performance data** (D3) — needs a second section search
    or a cross-section merge. Not urgent: it fails safe, showing fewer rows
    rather than wrong ones.
-7. **A2 Auth0**, **A3 public repo**, **A4 WAF proxy** — decisions only James
+8. **A2 Auth0**, **A3 public repo**, **A4 WAF proxy** — decisions only James
    can make. A4 is now worth about two plans; see the entry.
 
 Worth saying plainly: the constraint that shaped this whole document — "we are
