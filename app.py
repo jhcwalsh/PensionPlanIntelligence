@@ -3568,6 +3568,31 @@ def _asset_class_horizon_quarters() -> list[str]:
     return queries.asset_class_horizon_quarters(get_db_session())
 
 
+def _drop_stale_selection(key: str, options) -> None:
+    """Remove anything session state holds for ``key`` that is no longer on
+    offer, before the widget is asked to render it.
+
+    A keyed widget's selection survives in session state across reruns, and
+    Streamlit raises outright when it is handed a stored value missing from
+    its options -- the page dies rather than the selection being ignored.
+    Nothing in a user's open browser tab notices that the options changed
+    underneath it, and the quarter list changes for ordinary reasons: a
+    nightly rebuild retires the oldest quarter, or a staleness cutoff moves.
+
+    Fixing the option list to be stable (which is why these options now cover
+    every asset class rather than the selected one) removes the cause we knew
+    about. This removes the failure mode, which is the part that matters to
+    someone whose tab was open across a deploy.
+    """
+    stored = st.session_state.get(key)
+    if not stored:
+        return
+    allowed = set(options)
+    kept = [v for v in stored if v in allowed]
+    if len(kept) != len(stored):
+        st.session_state[key] = kept
+
+
 def _render_asset_class_horizons():
     """One asset class, every plan, across time horizons.
 
@@ -3592,8 +3617,10 @@ def _render_asset_class_horizons():
     # its selection across an asset-class change and Streamlit raises when a
     # stored selection is absent from the options -- Cash has no 2026Q2, so a
     # per-class list crashed the page on exactly that move.
+    quarter_options = _asset_class_horizon_quarters()
+    _drop_stale_selection("asset_class_horizon_quarter", quarter_options)
     chosen_q = st.multiselect(
-        "Period end", _asset_class_horizon_quarters(), default=[],
+        "Period end", quarter_options, default=[],
         key="asset_class_horizon_quarter",
         help="Empty means each plan's most recent reading per horizon. Choose "
              "quarters to sweep those instead -- every plan that reported one, "

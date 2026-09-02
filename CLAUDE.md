@@ -179,6 +179,23 @@ What this means when you touch document code:
 `IpsDocument.extracted_text` is deliberately left eager: 37 rows, 0.64 MB, read
 by a monthly job. Not worth the N+1 risk.
 
+### Reshaping a derived table drops it, and the live app must be restarted
+
+`plan_asset_class_horizon` (and only it) changes shape by drop-and-recreate:
+`build_performance_view._recreate_horizon_table_if_stale` compares the live
+columns against the model and drops when they differ. That is the right call
+for a table nothing is the source of record for — every row is rebuilt from
+summaries, section reads and CAFR extracts in the same run — and `init_db()`
+cannot substitute, because `create_all` skips a table that already exists, so
+a new column lands in the model and not in Postgres and the first insert fails.
+
+**The cost is that the drop happens under whatever is reading.** Render's
+Streamlit holds a long-lived Session (`@st.cache_resource`) over a connection
+pool, and Postgres raises on a cached plan whose relation has been dropped and
+recreated — which surfaces as the page crashing on the Performance tab rather
+than as anything that names DDL. Restart the Render service after a run that
+reports "shape changed"; the line is printed for that reason.
+
 ### Layered packages, one DB, idempotent schema
 `database.py` defines all 15 tables in one module. There is no migration framework. `init_db()` calls `Base.metadata.create_all(engine)` — adding a new model class and re-running `init_db()` on an existing DB just creates the missing tables. **Never write SQL ALTER TABLE migrations**; just add the SQLAlchemy class and call `init_db()`. Existing-row backfill is a one-off script.
 
