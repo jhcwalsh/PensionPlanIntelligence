@@ -77,8 +77,41 @@ def _say(msg: str) -> None:
             pass
 
 
-def backlog_documents(session):
+def read_offsets(session) -> dict[int, set[int]]:
+    """Every (document, offset) already read, so a re-run never pays twice.
+
+    Two columns over ~500 rows -- cheap enough to load whole, and the thing
+    that makes ``--reread`` cost only what is genuinely new.
+
+    ``offset`` is a position in the text *as it stood at the time of the read*.
+    The 2026-09-01 re-extraction raised MAX_STORED_CHARS and appended the tail
+    the old 150,000-char cap had cut, leaving the prefix byte-identical, so
+    offsets recorded before it still name the same passage. That holds because
+    the cap was the only thing that changed; a future re-extraction that alters
+    how the text is produced would break it, and the symptom would be paying to
+    re-read a passage under a new offset rather than anything incorrect.
+    """
+    rows = session.query(DocumentSectionRead.document_id,
+                         DocumentSectionRead.offset).all()
+    seen: dict[int, set[int]] = {}
+    for doc_id, off in rows:
+        seen.setdefault(doc_id, set()).add(off)
+    return seen
+
+
+def backlog_documents(session, reread: bool = False):
     """Documents the summariser truncated, with no section read yet.
+
+    With ``reread=True`` the "no section read yet" clause is dropped and every
+    long document is a candidate, because the interesting unit stops being the
+    document and becomes the window: the re-extraction recovered 122.8M
+    characters that sat beyond the old cap, and the documents holding them were
+    all read already, at an offset inside the truncated prefix. Excluding them
+    by document hides exactly the new material. _worklist then drops candidate
+    offsets that ``read_offsets`` already knows, so nothing is bought twice.
+
+    The join is dropped rather than kept in that mode: a document with two
+    recorded reads would otherwise come back twice.
 
     Length is pre-filtered with octet_length on the *compressed* column rather
     than by loading the text: extracted_text is deferred precisely because
@@ -96,14 +129,15 @@ def backlog_documents(session):
     for free once the text is in hand. Under-selection is invisible.
     """
     min_bytes = SMART_TRUNCATE_TARGET // 10
-    return (session.query(Document)
-            .outerjoin(DocumentSectionRead,
-                       DocumentSectionRead.document_id == Document.id)
-            .filter(Document.extracted_text.isnot(None),
-                    func.octet_length(Document.extracted_text) > min_bytes,
-                    DocumentSectionRead.document_id.is_(None))
-            .options(undefer(Document.extracted_text))
-            .order_by(Document.meeting_date.desc().nullslast(), Document.id))
+    q = session.query(Document).filter(
+        Document.extracted_text.isnot(None),
+        func.octet_length(Document.extracted_text) > min_bytes)
+    if not reread:
+        q = (q.outerjoin(DocumentSectionRead,
+                         DocumentSectionRead.document_id == Document.id)
+              .filter(DocumentSectionRead.document_id.is_(None)))
+    return (q.options(undefer(Document.extracted_text))
+             .order_by(Document.meeting_date.desc().nullslast(), Document.id))
 
 
 def _estimate_cost(n_windows: int) -> Decimal:
@@ -115,8 +149,9 @@ def _estimate_cost(n_windows: int) -> Decimal:
 
 
 def _worklist(docs, top: int, limit: int | None = None,
-              per_plan: int | None = None):
-    """Rank documents for free. Returns (worklist, n_without_candidates).
+              per_plan: int | None = None,
+              seen_offsets: dict[int, set[int]] | None = None):
+    """Rank documents for free. Returns (worklist, n_without_candidates, n_done).
 
     Documents with no candidate are counted and reported, never handed an
     arbitrary window -- that would spend money to extract nothing and look
@@ -141,8 +176,14 @@ def _worklist(docs, top: int, limit: int | None = None,
     Two is the natural default because two is what the view consumes. Raising
     it buys history in ``document_section_read`` rather than anything visible,
     which is a fine thing to want and should be asked for on purpose.
+
+    ``seen_offsets`` removes candidates already read, *before* ``top`` slices.
+    Filtering after would take the best window, find it already read, and leave
+    the document with nothing -- which is precisely backwards under --reread,
+    where the whole point is the second-best window that only exists now that
+    the text runs past 150,000 characters.
     """
-    work, blank = [], 0
+    work, blank, already = [], 0, 0
     seen: dict[str, int] = {}
     for doc in docs:
         if per_plan and seen.get(doc.plan_id, 0) >= per_plan:
@@ -150,7 +191,18 @@ def _worklist(docs, top: int, limit: int | None = None,
         text = doc.extracted_text or ""
         if len(text) <= SMART_TRUNCATE_TARGET:
             continue
-        cands = section_finder.find_candidates(text)[:top]
+        cands = section_finder.find_candidates(text)
+        if seen_offsets:
+            done = seen_offsets.get(doc.id, ())
+            fresh = [c for c in cands if c.offset not in done]
+            # A document whose every candidate is read is finished, not blank.
+            # Conflating the two would report hundreds of "no returns table"
+            # documents that in fact have one, already paid for.
+            if cands and not fresh:
+                already += 1
+                continue
+            cands = fresh
+        cands = cands[:top]
         if not cands:
             # Deliberately not counted against the plan's cap: a document with
             # no returns table has not answered anything, so letting it use up
@@ -161,7 +213,7 @@ def _worklist(docs, top: int, limit: int | None = None,
         seen[doc.plan_id] = seen.get(doc.plan_id, 0) + 1
         if limit and len(work) >= limit:
             break
-    return work, blank
+    return work, blank, already
 
 
 def main() -> int:
@@ -180,6 +232,11 @@ def main() -> int:
     ap.add_argument("--per-plan", type=int, default=2,
                     help="documents to read per plan, newest first (default 2, "
                          "which is what the view shows). 0 for no cap.")
+    ap.add_argument("--reread", action="store_true",
+                    help="also consider documents already read, buying only "
+                         "windows at offsets not already in "
+                         "document_section_read. For text that has grown "
+                         "since its read.")
     ap.add_argument("--workers", type=int, default=12,
                     help="concurrent reads (default 12). A window takes ~45s, "
                          "so serial is 12 hours for the full corpus.")
@@ -187,11 +244,16 @@ def main() -> int:
 
     session = database.SessionLocal()
     try:
-        work, blank = _worklist(backlog_documents(session).yield_per(50),
-                                args.top, args.limit,
-                                per_plan=args.per_plan or None)
+        work, blank, already = _worklist(
+            backlog_documents(session, reread=args.reread).yield_per(50),
+            args.top, args.limit,
+            per_plan=args.per_plan or None,
+            seen_offsets=read_offsets(session) if args.reread else None)
 
         n_windows = sum(len(c) for _, _, c in work)
+        if already:
+            _say(f"[dim]{already} documents already read at every candidate "
+                 f"offset — skipped, not re-bought[/dim]")
         if blank:
             scope = "scanned so far" if args.limit else "in the corpus"
             _say(f"[yellow]{blank}[/yellow] long documents {scope} have "

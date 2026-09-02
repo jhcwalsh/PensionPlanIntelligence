@@ -156,6 +156,78 @@ def test_already_read_documents_are_skipped(session, monkeypatch):
     assert len(calls) == 1, "re-read a document that already had a section read"
 
 
+def test_reread_buys_only_offsets_not_already_read(session, monkeypatch):
+    """The point of --reread: text that grew past its read, not a second bill.
+
+    The document has two candidate tables. One offset is already recorded, so
+    --reread must buy the other and only the other. Without --reread the whole
+    document is invisible, which is what hid the 122.8M characters the
+    2026-09-01 re-extraction recovered.
+    """
+    two_tables = _filler(1_200) + TABLE + _filler(1_200) + TABLE + _filler(100)
+    doc, = _docs(session, n=1, text=two_tables)
+    offsets = [c.offset for c in
+               read_sections.section_finder.find_candidates(two_tables)]
+    assert len(offsets) >= 2, "fixture must offer at least two candidates"
+
+    session.add(DocumentSectionRead(document_id=doc.id, offset=offsets[0],
+                                    returns_json="[]"))
+    session.commit()
+
+    bought = []
+    monkeypatch.setattr(read_sections, "extract_window", lambda t, c: (
+        bought.append(c.offset) or ({"returns": []}, Decimal("0.0008"))))
+    monkeypatch.setattr("sys.argv",
+                        ["read_sections", "--approve", "--reread", "--top", "5"])
+    read_sections.main()
+
+    assert offsets[0] not in bought, "paid again for a passage already read"
+    assert set(bought) == set(offsets[1:])
+
+
+def test_reread_skips_a_document_whose_every_candidate_is_read(
+        session, monkeypatch, capsys):
+    """Finished, not blank — and not billed."""
+    doc, = _docs(session, n=1)
+    for c in read_sections.section_finder.find_candidates(LONG):
+        session.add(DocumentSectionRead(document_id=doc.id, offset=c.offset,
+                                        returns_json="[]"))
+    session.commit()
+
+    def boom(*a, **kw):
+        raise AssertionError("spent on a document with nothing new to read")
+
+    monkeypatch.setattr(read_sections, "extract_window", boom)
+    monkeypatch.setattr("sys.argv",
+                        ["read_sections", "--approve", "--reread", "--top", "9"])
+    read_sections.main()
+
+    out = capsys.readouterr().out
+    assert "already read at every candidate offset" in out
+    assert "no candidate section" not in out, "reported a real table as absent"
+
+
+def test_reread_does_not_duplicate_a_document_with_several_reads(
+        session, monkeypatch):
+    """Dropping the outer join, not just its filter.
+
+    Keeping the join and only relaxing its NULL test returns one Document row
+    per recorded read, so a document read three times would be priced and
+    bought three times over.
+    """
+    two_tables = _filler(1_200) + TABLE + _filler(1_200) + TABLE + _filler(100)
+    doc, = _docs(session, n=1, text=two_tables)
+    cands = read_sections.section_finder.find_candidates(two_tables)
+    for c in cands[:2]:
+        session.add(DocumentSectionRead(document_id=doc.id, offset=c.offset,
+                                        returns_json="[]"))
+    session.commit()
+
+    ids = [d.id for d in
+           read_sections.backlog_documents(session, reread=True).all()]
+    assert ids == [doc.id]
+
+
 def test_only_the_newest_documents_per_plan_are_read(session, monkeypatch, capsys):
     """The view shows one document per plan; reading forty is paying to hide 39.
 
