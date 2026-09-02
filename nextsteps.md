@@ -34,6 +34,7 @@ Specs: `docs/superpowers/specs/2026-08-16-low-maintenance-app-design.md`,
 | **Targeted section read (D8)** | 951 windows, 510 docs, $1.0980; +14% asset-class cells |
 | **`horizon_of` label repair (D7)** | ~3,350 rows reclaimed from `unclear` |
 | **Per-asset-class view (D6)** | 2,437 cells, 126 plans, 13 classes |
+| **Horizon table keeps history (D11)** | 6,196 cells; 2025Q4 PE 17 → 22 plans |
 | **Scraper + extraction repairs (D9)** | OCR backlog, `not_a_pdf`, Playwright, new domain |
 | **PDF retention code (E1)** | R2 store built and wired — **but inert, see E1** |
 | **Dollar amounts read as LaTeX** | every weekly briefing's figures rendered as italics |
@@ -264,9 +265,47 @@ because within one asset class the comparison runs across plans, so the row
 never claims to be a portfolio. The UI says so in a caption and carries **As
 of** and **Sources**.
 
-Live: **2,437 cells across 126 plans and 13 asset classes.** For real estate,
-69 plans have an annual figure, 27 a 3-year, 27 a 10-year, 26 a 5-year, 23 a
-quarter.
+**Superseded on 2026-09-01 — see D11.** The key gained `period_end`, so the
+table holds history rather than a snapshot, and the paragraph above describes
+what happens *within* one quarter rather than across all of them.
+
+### D11. The horizon table keeps every quarter — **DONE 2026-09-01**
+
+Prompted by James: a sweep of 2025Q4 private equity showed 17 plans and that
+looked low. It was. Keyed on `(plan, asset class, horizon_key)`, the table
+kept one reading per cell — the latest — so a plan with both a 2025Q4 and a
+2026Q1 figure kept only 2026Q1 and vanished from any question about 2025Q4. A
+snapshot being asked history questions.
+
+`period_end` joined the key. **2,437 cells → 6,196**, and 2025Q4 private
+equity went **17 → 22 plans**. Not the 26 that reported one: the other four
+report that quarter only on horizons the view has no column for (inception,
+20-year, monthly, part-year) — a separate and smaller question, and the
+cheapest remaining coverage win on this table.
+
+Two readings of the *same* quarter still collapse to one, so a figure
+restated in a later pack supersedes the earlier printing. History, not
+duplicates.
+
+The read layer keeps both questions: no quarter chosen means "how is everyone
+doing now" (latest per cell, the old behaviour); choosing quarters sweeps
+them, including plans that have since reported something newer.
+
+Two faults fixed alongside it, both worth remembering rather than
+rediscovering:
+
+- **A document cannot report a period ending after it was written.** Nine rows
+  sat in 2026Q4, a quarter that had not happened — "Calendar Year 2026" in a
+  May pack, "Fiscal 2026", "1-year ending Feb-2026", each arriving by a
+  different route through the year rules. One cap catches all of them.
+- **A keyed widget dies when its options change under an open tab.** Streamlit
+  raises rather than ignoring a stored selection that is no longer offered,
+  and the quarter list changes for ordinary reasons. `_drop_stale_selection`
+  reconciles session state before the widget renders.
+
+Also: figures before `queries.EARLIEST_PERIOD_END` (2025Q1) are no longer
+shown — the corpus reached back to 1994Q4 and a 2014 return sat in a column
+beside a 2026 one. A display rule, not a build rule; nothing was deleted.
 
 ### D7. `horizon_of` label repair — **DONE 2026-08-31**
 
