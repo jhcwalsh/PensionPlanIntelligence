@@ -36,6 +36,7 @@ Specs: `docs/superpowers/specs/2026-08-16-low-maintenance-app-design.md`,
 | **Per-asset-class view (D6)** | 2,437 cells, 126 plans, 13 classes |
 | **Horizon table keeps history (D11)** | 6,196 cells; 2025Q4 PE 17 → 22 plans |
 | **Neon transfer verified (C1)** | 0.68 GB against a 500 GB allowance |
+| **Failed extractions triaged (D13)** | 104 lost for good, 7 fixed, no OCR bill |
 | **Scraper + extraction repairs (D9)** | OCR backlog, `not_a_pdf`, Playwright, new domain |
 | **PDF retention live (E1)** | 4,882 of 5,109 PDFs in R2; 172 lost to link rot |
 | **Dollar amounts read as LaTeX** | every weekly briefing's figures rendered as italics |
@@ -514,22 +515,51 @@ extra text actually gets used.
 
 ---
 
+### D13. The 137 failed extractions, triaged 2026-09-02
+
+Every one already carried a reason in `extraction_details`. An earlier note
+here claimed they did not; that was written after querying `document_skips`,
+a different table, and is corrected rather than deleted because the same
+mistake is easy to repeat -- the reasons live in **`ExtractionDetail`**.
+
+| Reason | n | PDF | Outcome |
+|---|---|---|---|
+| `file_missing` | **104** | unrecoverable | **Lost permanently.** Same root cause as the backfill's 172. |
+| `not_a_pdf` | 12 | in R2 | Not PDFs, and re-fetching does not help — see below |
+| `file_missing` | 8 | not attempted | WAF-blocked; the Mac mini reaches these |
+| `file_missing` | 7 | in R2 | **Fixed.** 245,169 characters recovered |
+| `ocr_gate_doc_type` | 5 | in R2 | Image-only, blocked by policy not cost |
+| `unsupported_format` | 1 | in R2 | Also not a PDF |
+
+**No OCR spend is pending anywhere.** The `ocr_deferred` queue — the only
+reason in the vocabulary that is a funding decision — is empty. An earlier
+note calling this "an unpriced OCR backlog" was wrong: there is no bill.
+
+The 5 `ocr_gate_doc_type` documents are the only place OCR cost could enter,
+and five documents is small either way.
+
+**The 12 `not_a_pdf` were probed before downloading: none now serves a PDF.**
+Eleven are `sdcers_ca` returning `text/html` at those exact URLs, one timed
+out. So the retained bytes are faithful — the fetcher archived what it was
+given — and the URLs themselves are wrong. Re-fetching would re-archive the
+same HTML. The fix is in discovery for that one plan, and it is worth doing:
+11 documents is most of what `sdcers_ca` has failed on.
+
 ## Suggested order
 
 Sections A1, A6, B1, B2, C1, D1–D12 and E1 are done. Everything that was
 blocking something else has landed. What's left is genuinely optional, which
 is a different position from any previous edition of this document.
 
-1. **The 130 failed extractions** — the last real backlog. Their failure
-   reasons were never recorded, so nobody knows how many are image-only
-   (needing OCR, which costs) versus broken downloads (free to retry). Triage
-   first, then price. Recording a reason on failure is worth doing anyway.
-2. **OCR is the only expensive model path left.** `extractor.py:211` pins
-   vision OCR to Sonnet. Haiku 4.5 has vision and is far cheaper, but OCR is
-   exactly where a cheaper model degrades quietly — worth an A/B on a few
-   pages before switching, not a blind swap. Everything else is already on the
-   cheap option: the targeted read runs DeepSeek V4 Flash, the summariser
-   routes to Haiku by default.
+1. **`sdcers_ca`'s document URLs are wrong** — the only actionable thing the
+   failure triage turned up. See D13. One plan, 11 documents, and the fix is
+   in discovery rather than fetching.
+2. **OCR is the only expensive model path left**, and it is now a 5-document
+   question. `extractor.py:211` pins vision OCR to Sonnet; Haiku 4.5 has
+   vision and is far cheaper, but OCR is exactly where a cheaper model
+   degrades quietly — worth an A/B before switching, not a blind swap.
+   Everything else is already on the cheap option: the targeted read runs
+   DeepSeek V4 Flash, the summariser routes to Haiku by default.
 3. **Re-run the targeted read (D8)** over the documents D12 grew. The summariser
    only ever reads the first ~50k characters, so the recovered text is
    currently invisible to everything except search; the targeted read is what
