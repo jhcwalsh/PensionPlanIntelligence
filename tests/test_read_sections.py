@@ -34,6 +34,17 @@ TABLE = ("\nTotal Rates of Return (%)\n"
 LONG = _filler(1_200) + TABLE + _filler(100)
 
 
+@pytest.fixture(autouse=True)
+def _fake_key(monkeypatch):
+    """A credential the preflight can see. No test ever reaches the network.
+
+    Every --approve test stubs extract_window, so this value is never used to
+    authenticate anything -- but the preflight check runs before the stub gets
+    a chance, and without this the whole approved path would return 2.
+    """
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key-not-a-credential")
+
+
 @pytest.fixture
 def session(tmp_db):
     s = database.get_session()
@@ -154,6 +165,38 @@ def test_already_read_documents_are_skipped(session, monkeypatch):
     read_sections.main()
 
     assert len(calls) == 1, "re-read a document that already had a section read"
+
+
+def test_a_missing_key_is_caught_before_the_corpus_is_ranked(
+        session, monkeypatch, capsys):
+    """The 2026-09-02 run: 590 windows ranked, then 590 identical failures.
+
+    Ranking is minutes of free work over every long document. Discovering the
+    missing credential afterwards wastes all of it, so the check runs first --
+    and the proof is that no document was ever loaded.
+    """
+    _docs(session, n=2)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+
+    def boom(*a, **kw):
+        raise AssertionError("ranked the corpus without a credential")
+
+    monkeypatch.setattr(read_sections, "backlog_documents", boom)
+    monkeypatch.setattr("sys.argv", ["read_sections", "--approve"])
+
+    assert read_sections.main() == 2
+    assert "OPENROUTER_API_KEY not set" in capsys.readouterr().out
+    assert session.query(DocumentSectionRead).count() == 0
+
+
+def test_pricing_a_run_needs_no_credential(session, monkeypatch, capsys):
+    """Without --approve there is nothing to authenticate, so nothing to check."""
+    _docs(session, n=2)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.setattr("sys.argv", ["read_sections"])
+
+    assert read_sections.main() == 0
+    assert "estimated cost" in capsys.readouterr().out
 
 
 def test_reread_buys_only_offsets_not_already_read(session, monkeypatch):

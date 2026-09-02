@@ -39,6 +39,7 @@ from sqlalchemy.orm import undefer
 
 import costs
 import database
+import llm_openrouter
 import section_finder
 from database import Document, DocumentSectionRead
 from llm_openrouter import MODEL
@@ -241,6 +242,14 @@ def main() -> int:
                     help="concurrent reads (default 12). A window takes ~45s, "
                          "so serial is 12 hours for the full corpus.")
     args = ap.parse_args()
+
+    # Before the ranking, not after it: ranking is minutes of free work over
+    # the whole corpus, and without a credential every window it produces
+    # fails identically at the end of it.
+    if args.approve and not llm_openrouter.have_key():
+        _say("[red]OPENROUTER_API_KEY not set.[/red] Nothing scanned, "
+             "nothing spent. Set it in .env and re-run.")
+        return 2
 
     session = database.SessionLocal()
     try:

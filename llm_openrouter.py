@@ -47,6 +47,17 @@ def adapt_usage(usage):
     )
 
 
+def have_key() -> bool:
+    """Is a credential present? For preflight checks, before long free work.
+
+    On 2026-09-02 a re-read scanned the whole corpus to rank 590 windows, then
+    failed all 590 identically on a missing key. Nothing was spent and nothing
+    was corrupted -- the per-job handler did its job -- but the run is only
+    useful if the credential is checked before the ranking, not after it.
+    """
+    return bool(os.environ.get("OPENROUTER_API_KEY"))
+
+
 def _raw_call(**kwargs):
     from openai import OpenAI
     key = os.environ.get("OPENROUTER_API_KEY")
