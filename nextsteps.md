@@ -496,6 +496,47 @@ What this does **not** change: summaries. The summariser reads the first
 and the targeted read (D8), which scans the whole document and is where the
 extra text actually gets used.
 
+### D16. Reading the recovered text — **DONE 2026-09-02**
+
+D12 recovered 122,839,578 characters, and every document holding them had
+already been read. `backlog_documents` excluded read documents outright, so
+the new material was invisible: a priced run returned 41 documents and $0.03,
+all of them genuinely new files. The first quote was therefore meaningless,
+and quoting it was the mistake — the worklist was not the set in question.
+
+`--reread` moves the unit from the document to the window. `read_offsets()`
+loads every `(document_id, offset)` already recorded and the worklist filters
+candidates against it **before** `--top` slices, so a document is bought only
+at offsets nobody has read. Filtering after the slice takes the best window,
+finds it read, and leaves the document with nothing — backwards, since the
+second-best window is the one that only exists now the text runs past the cap.
+The outer join is dropped rather than merely unfiltered: a document with three
+recorded reads would otherwise be priced and bought three times.
+
+**587 of 590 windows, 3 failures, $0.7827** against a $1.00 ceiling. Reads
+951 → 1,538; return rows 29,274 → 53,474; horizon cells 6,196 → 7,913. 242
+windows (41%) came back empty, which is the targeted read confirming there is
+no returns grid rather than a failure.
+
+**2025Q4 private equity: 17 → 22 → 33 plans** — the question that started D11.
+2025Q4 now covers 70 plans and 1,174 cells. Real estate 34, US public equity
+38, private credit 25.
+
+Two observations, neither acted on. **2026Q3 exists with 7 cells across 3
+plans** — a quarter that has not ended, from documents stating a period end in
+progress; legitimate, thin, and worth suspicion. **The 3 failures** are
+individual call errors and re-runnable for pennies, since `--reread` skips
+what is already bought.
+
+Also fixed: the credential check ran *after* the corpus scan, so a missing
+`OPENROUTER_API_KEY` cost minutes of free ranking before surfacing 590 copies
+of one message. `llm_openrouter.have_key()` is now a preflight under
+`--approve` only, exiting 2 so "not configured" is distinguishable from
+"nothing to read". The key itself was never missing — `.env` is gitignored, so
+this worktree carried a stale private copy of it. Worth remembering for every
+future worktree, and for `ANTHROPIC_API_KEY` and the four `R2_*` values, whose
+absence is a silent no-op rather than an error.
+
 ### Others
 
 - **The Drafts tab is vestigial.** Nothing can enter `awaiting_approval` now
@@ -645,10 +686,9 @@ is a different position from any previous edition of this document.
    degrades quietly — worth an A/B before switching, not a blind swap.
    Everything else is already on the cheap option: the targeted read runs
    DeepSeek V4 Flash, the summariser routes to Haiku by default.
-4. **Re-run the targeted read (D8)** over the documents D12 grew. The summariser
-   only ever reads the first ~50k characters, so the recovered text is
-   currently invisible to everything except search; the targeted read is what
-   consumes it. ~$1 last time, and it should be quoted again first.
+4. ~~**Re-run the targeted read (D8)** over the documents D12 grew.~~
+   **DONE 2026-09-02 — see D16.** $0.7827, 587 windows, and 2025Q4 private
+   equity went 22 → 33 plans.
 5. **The horizon view's missing columns** — four plans report 2025Q4 private
    equity only as since-inception / 20-year / monthly / part-year, which have
    no column. Small, and it is the remainder of the question that produced D11.
