@@ -2665,5 +2665,43 @@
     "sub_page_pattern": "/board/(agendas-minutes|board-retirement)/[a-z0-9-]+\\d",
     "max_sub_pages": 40,
     "sub_page_skip_committee_filter": true
+  },
+  {
+    "id": "ucrp",
+    "name": "University of California Retirement Plan",
+    "abbreviation": "UCRP",
+    "state": "CA",
+    "aum_billions": 110.8,
+    "website": "https://regents.universityofcalifornia.edu",
+    "materials_url": "https://regents.universityofcalifornia.edu/minutes-index/index.html",
+    "extra_pages": [
+      "https://regents.universityofcalifornia.edu/meetings/past-meetings/index.html"
+    ],
+    "materials_type": "html_links",
+    "investment_only": false,
+    "doc_types": [
+      "minutes",
+      "agenda"
+    ],
+    "fiscal_year_end": "06-30",
+    "notes": "Added 2026-09-02 from the PPD coverage review: $110.8B, PPD rank 11, and the single largest omission in the registry -- 72% of the whole top-200 gap by assets. Investments Committee minutes appear as minutes/<year>/invest<n>.pdf alongside board, fin, gov and health committees, so the minutes index is the richer feed; ucop.edu/investment-office carries investment-only reports if a narrower source is ever wanted. extra_pages is the meeting-notice listing. Static HTML, no WAF, no JavaScript."
+  },
+  {
+    "id": "apers_ar",
+    "name": "Arkansas Public Employees Retirement System",
+    "abbreviation": "APERS",
+    "state": "AR",
+    "aum_billions": 11.9,
+    "website": "https://www.apers.org",
+    "materials_url": "https://www.apers.org/board",
+    "materials_type": "html_links",
+    "investment_only": false,
+    "doc_types": [
+      "agenda",
+      "board_pack",
+      "minutes"
+    ],
+    "fiscal_year_end": "06-30",
+    "notes": "Added 2026-09-02 from the PPD coverage review. Arkansas tracked only its teachers' fund (atrs_ar), leaving the state at 51% coverage -- the thinnest in the country. Board packets and Investment Committee packets sit in the WordPress uploads directory as APERS-Packet-<date>.pdf and IFC-Packet_<date>.pdf."
   }
 ]
