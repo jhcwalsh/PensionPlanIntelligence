@@ -916,6 +916,190 @@ tabs want looking at on Render once this is merged.
 
 ---
 
+### D19. Are the numbers right? — checks, not hope
+
+**Requested by James, 2026-09-03. Not started.** Nothing currently validates a
+single extracted figure. Three LLM paths write numbers — the targeted read
+(DeepSeek V4 Flash), the summariser (Haiku, escalating to Sonnet) and the CAFR
+extractor — and whatever they return is stored, built into
+`plan_asset_class_horizon`, and shown. A wrong number looks exactly like a
+right one.
+
+**This is worth doing before adding more plans.** Coverage is now 99.5% of the
+top 200 by assets; accuracy is unmeasured.
+
+#### The check that already works
+
+Prototyped 2026-09-03 against the live table. Public plans holding the same
+asset class over the same quarter earn *similar* returns — dispersion is real
+but bounded — so a robust z-score against the peer median finds parse errors
+without needing a ground truth.
+
+Group by `(asset_class, horizon_key, period_end)`, keep groups of 8+ plans,
+flag on `|x − median| / (1.4826 × MAD) > 6`. **203 groups qualify; 82 of ~7,999
+cells flag — about 1%, a reviewable queue.** The top of it is unambiguous:
+
+| flagged | value | peer median | why it is wrong |
+|---|---|---|---|
+| `persi_id` total 5y 2023Q4 | **110.00%** | 8.23% | not a return |
+| `hfrrf` opportunistic 1y 2024Q2 | **94.80%** | 7.70% | not a return |
+| `dpfp` private equity 1y 2025Q4 | **68.80%** | 7.83% | implausible, and repeats in 2026Q1 |
+| `sers_oh` cash 1y 2024Q4 | **−11.60%** | 5.30% | cash does not lose 11.6% |
+
+Cheap, needs no API calls, and every hit is traceable to a document.
+
+#### The free check being thrown away
+
+**The extractors capture `benchmark_pct` and the build discards it.** Of 66,041
+raw observations, **17,959 (27%) carry a benchmark** — 12,790 of 53,474 from
+targeted reads, 5,169 of 12,567 from the summariser — and
+`plan_asset_class_horizon` has no column for it.
+
+A return beside its own benchmark is the strongest sanity check available and
+it costs nothing: a plan reporting +12.4% against a benchmark of +12.0% is
+almost certainly read correctly, while +110% against +8% is not. It also makes
+excess return displayable, which is what an investment reader actually wants.
+Adding the column is part of D20.
+
+#### The rest of the ladder, cheapest first
+
+1. **Range gates.** A quarterly return outside ±40%, an annual outside ±80%, a
+   10-year annualised outside ±25%, an allocation weight outside 0–100. These
+   catch index levels, market values and basis points misread as percentages.
+2. **Allocation weights should sum to ~100%** per plan and date. A plan summing
+   to 60% or 180% has had rows dropped or double-counted, and neither is
+   visible today.
+3. **Temporal continuity.** A plan's 10-year annualised figure cannot move 20pp
+   in a quarter — the window barely changed. Large jumps in long horizons are
+   parse errors nearly every time.
+4. **Cross-source agreement.** Where two of the three sources cover the same
+   `(plan, asset_class, horizon, period_end)`, disagreement beyond ~0.5pp is a
+   flag. `pick_best_per_cell` silently prefers one today; the disagreement it
+   resolves is evidence and should be recorded, not dropped.
+5. **CAFR as ground truth.** CAFRs are audited. Where a targeted read and a
+   CAFR cover the same plan-year, the CAFR wins and the delta measures how much
+   the LLM path can be trusted — the only place a real error *rate* can be
+   computed rather than an anomaly count.
+6. **A sampled human audit.** Twenty random cells per quarter, opened at the
+   stored `DocumentSectionRead.offset` in the retained PDF and checked by eye.
+   **PDF retention makes this possible for the first time** — every figure is
+   now traceable to a byte range of a document we still hold.
+
+#### Where it should live
+
+A `scripts/check_performance.py` that runs the whole ladder and writes results
+to a table, plus an Admin tab showing the queue newest-first. Not a test:
+these are data findings, not code failures, and a red CI run is the wrong
+channel for "one plan's private equity looks odd this quarter". Wire it into
+the daily pipeline **after** the derived-data rebuild, on the same
+`!cancelled()` footing as the other post-steps.
+
+Two rules worth fixing now so this stays honest. **Never auto-delete a flagged
+figure** — flag, show, let a human decide; a silent delete is the same failure
+as a silent wrong number, minus the evidence. And **record the check that
+fired**, so a cell cleared once is not re-flagged forever.
+
+---
+
+### D20. Make the data usable — by charts, and by an agent
+
+**Requested by James, 2026-09-03. Not started.** Closely tied to D19: *you
+cannot check what you cannot query*, and today the atomic facts are not
+queryable at all.
+
+#### What is actually wrong
+
+**The atomic fact has nowhere to live.** One observation — a plan, an asset
+class, a horizon, a period, a number, a source, and the document window it came
+from — is currently spread across:
+
+- `summaries.performance_data` — **TEXT**, a JSON array
+- `document_section_read.returns_json` — **TEXT**, a JSON array
+- `cafr_performance` / `cafr_allocation` — properly tabular, but CAFR-only
+
+TEXT, not JSONB, so **none of it is queryable in SQL**. Every consumer parses
+JSON in Python. `scripts/build_performance_view.py` reads all three, maps asset
+classes, classifies horizons, picks a winner per cell, and writes
+`plan_asset_class_horizon` — which is then **dropped and recreated** on every
+shape change.
+
+The result: **66,041 raw observations collapse to 7,999 horizon cells.** Much
+of that loss is legitimate — superseded documents, `pick_best_per_cell`, the
+2025 staleness cutoff, asset classes with no canonical mapping — but *none of
+it is recoverable*, because the losers were never stored as rows. The only
+durable record is a JSON blob nobody can query and a derived table that gets
+dropped.
+
+That is why D19 is hard, why `benchmark_pct` was discardable without anyone
+noticing, and why an agent has nothing to talk to.
+
+#### The proposal: an observation fact table
+
+One immutable row per extracted number. Long format, never dropped:
+
+```
+performance_observation
+  id, plan_id, document_id
+  asset_class_raw          what the document said
+  asset_class              canonical, nullable when unmapped
+  horizon_key, period_label, period_end, as_of_date
+  return_pct, benchmark_pct
+  source                   targeted_read | summariser | cafr
+  offset                   window in documents.extracted_text, nullable
+  model, extracted_at
+  UNIQUE(document_id, source, asset_class_raw, period_label)
+```
+
+Four things follow, and they are the whole point:
+
+- **D19's checks become SQL.** Peer dispersion, range gates, cross-source
+  agreement and weight sums are all one query over one table instead of a
+  Python pass over parsed blobs.
+- **`benchmark_pct` survives**, so excess return is displayable and the best
+  free check is available.
+- **`plan_asset_class_horizon` keeps being derived and droppable** — that
+  design is right for a view — but the facts underneath stop being destroyed
+  with it. Rebuilding stops being lossy.
+- **Unmapped asset classes become visible.** `asset_class_raw` alongside the
+  canonical value turns "13 classes" into a measurable mapping gap rather than
+  silent loss.
+
+Build it the project's way: **add the model class and run `init_db()`** — no
+`ALTER TABLE`, per CLAUDE.md — then a one-off backfill script that parses the
+existing blobs. The blobs stay as provenance; nothing is deleted.
+
+An allocation equivalent (`allocation_observation`, with `weight_pct` and
+`target_pct`) is the same shape and the same argument.
+
+#### Then, for agents
+
+Only worth doing **after** the fact table exists; an agent over three TEXT
+blobs and a droppable view is a worse version of the same problem.
+
+- **A read-only MCP server** over Neon is the natural fit, exposing a handful
+  of intentional tools — `plans`, `performance(plan, asset_class, horizon,
+  period)`, `allocation`, `search_documents`, `document_window(document_id,
+  offset)` — rather than arbitrary SQL. The last one matters: it lets an agent
+  quote the source text behind a number instead of asserting it.
+- **Not a general SQL endpoint.** `documents.extracted_text` is deferred and
+  gzipped precisely because loading it in bulk exhausted Neon's transfer quota
+  on 2026-08-25. An agent with `SELECT *` would repeat that within a day.
+- **A tidy export** — one Parquet or CSV of the fact table, rebuilt daily and
+  published — covers most analytical uses with no service to run, and is the
+  cheapest thing that makes the data reusable. Worth doing first.
+- The **FastAPI service was removed on 2026-08-16** as unmaintained. Anything
+  new here should justify why it will not go the same way; the export needs no
+  uptime, which is the argument for starting there.
+
+#### Suggested split
+
+1. `performance_observation` + backfill + `benchmark_pct` carried through.
+2. D19's checks as SQL over it, plus the Admin queue.
+3. Daily Parquet/CSV export.
+4. MCP server, only if an agent is actually going to consume it.
+
+---
+
 ## Suggested order
 
 Everything that was blocking something else has landed. A, B, C1, D1–D18 and
@@ -937,7 +1121,33 @@ risk from a restyle.
 Do this before A3's visibility change, so a Render clone failure cannot be
 confused with a bad deploy.
 
-### 1. Refresh `aum_billions` from PPD
+### 1. The observation fact table (D20, part 1)
+
+**Do this before D19, and before adding plans.** One immutable row per
+extracted number, replacing three TEXT blobs nothing can query. It is the
+prerequisite for every check in D19, it stops `benchmark_pct` — present on 27%
+of 66,041 observations — being discarded at build time, and it means rebuilding
+the derived view stops destroying the facts underneath it.
+
+Add the model class, run `init_db()`, backfill from the existing blobs. No
+`ALTER TABLE`. No API calls.
+
+### 2. The checks (D19)
+
+Once the facts are queryable the checks are SQL. Start with the two that are
+already proven or free:
+
+- **Peer dispersion** — prototyped 2026-09-03, flags 82 of ~7,999 cells at
+  robust-z > 6, and the top of the queue is unambiguous garbage (a 110% 5-year
+  return, cash losing 11.6% in a year).
+- **Return against its own benchmark** — free, and available the moment the
+  fact table carries it.
+
+Then range gates, weight sums, temporal continuity, cross-source agreement, and
+a sampled human audit against the retained PDFs. Flag and show; never
+auto-delete.
+
+### 3. Refresh `aum_billions` from PPD
 
 The highest-value item left, because it is **silently wrong everywhere** rather
 than missing in one place. D15 measured a median ratio of 0.881 across 32
@@ -954,7 +1164,7 @@ The work: a hand-checked `plan_id` → `ppd_id` map stored in the registry, then
 automated** — three matcher attempts failed in one afternoon, one of them
 hiding a $110.8B plan behind a shared word. Free, no API calls.
 
-### 2. C2, the local hang
+### 4. C2, the local hang
 
 Now pinned to an interaction rather than a page: renders once, then a tab click
 never completes its rerun, nothing in the log. See the entry. Next probe is
@@ -962,7 +1172,7 @@ never completes its rerun, nothing in the log. See the entry. Next probe is
 confirm or kill the held-session theory in one shot. Development friction only,
 but it has now cost a review.
 
-### 3. OCR model A/B
+### 5. OCR model A/B
 
 `extractor.py:211` pins vision OCR to Sonnet, and it is **the only expensive
 model path left** — the targeted read runs DeepSeek V4 Flash and the summariser
@@ -971,12 +1181,12 @@ where a cheap model degrades quietly, so this wants a 5-document comparison,
 not a swap. Only ~5 documents are affected, so the prize is small and the
 downside of getting it wrong is silent corruption of the archive.
 
-### 4. `wsib`'s missing performance data (D3)
+### 6. `wsib`'s missing performance data (D3)
 
 Needs a second section search or a cross-section merge. Fails safe — fewer
 rows, not wrong ones.
 
-### 5. Small change
+### 7. Small change
 
 - **Three windows failed in the D16 re-read.** Re-runnable for pennies;
   `--reread` skips everything already bought.
