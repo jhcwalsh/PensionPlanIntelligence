@@ -4,6 +4,7 @@ Streamlit UI — search and browse pension plan meeting documents and summaries.
 Run with: streamlit run app.py
 """
 
+import html
 import json
 import os
 import re
@@ -46,27 +47,70 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# Only what .streamlit/config.toml cannot express. Palette and typography live
+# there; this is the handful of our own components plus two Streamlit elements
+# reached by data-testid, which is part of Streamlit's testing contract and
+# far more stable than the generated .st-emotion-cache-* class names.
+#
+# See docs/superpowers/specs/2026-09-02-lazyeconomist-style-design.md.
 st.markdown("""
 <style>
+    /* Hairline box, not a Bootstrap left-accent bar. The rule does the work
+       that borders and shadows usually do in this design. */
     .summary-card {
-        background: #f8f9fa;
-        border-left: 4px solid #0066cc;
-        padding: 1rem;
+        background: #fbfaf7;
+        border: 1px solid #e8e4dc;
+        border-radius: 2px;
+        padding: 20px 24px;
         margin-bottom: 1rem;
-        border-radius: 4px;
     }
+
+    /* Mono pill. Containers are square, status chips are fully round --
+       that contrast is most of the source's character. */
     .tag {
         display: inline-block;
-        background: #e3f2fd;
-        color: #1565c0;
-        padding: 2px 8px;
-        border-radius: 12px;
-        font-size: 0.8em;
+        font-family: 'JetBrains Mono', ui-monospace, monospace;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        background: #f4f2ec;
+        color: #8a8780;
+        border: 1px solid #e8e4dc;
+        padding: 3px 10px;
+        border-radius: 999px;
         margin: 2px;
     }
+    /* The accent is earned: an investment action is the thing a reader came
+       for, so it gets the one colour on the page. */
     .action-tag {
-        background: #fce4ec;
-        color: #880e4f;
+        background: #f5e6dd;
+        color: #b8410e;
+        border-color: transparent;
+    }
+
+    /* Eyebrow label -- short metadata only. Deliberately NOT applied to
+       st.caption: those carry sentences (PERIOD_END_NOTE, the mixed-source
+       note on the horizon table), and uppercase mono at 0.12em tracking makes
+       a sentence unreadable. */
+    .eyebrow {
+        font-family: 'JetBrains Mono', ui-monospace, monospace;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: #8a8780;
+    }
+
+    /* Captions stay prose: warm grey, sans, readable size. */
+    [data-testid="stCaptionContainer"] {
+        color: #8a8780;
+        font-size: 13px;
+        line-height: 1.55;
+    }
+
+    /* Tab labels. primaryColor already colours the active underline. */
+    [data-testid="stTabs"] button p {
+        font-size: 14px;
+        font-weight: 500;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -233,6 +277,18 @@ def _safe_md(text: str) -> str:
     return text.replace("$", r"\$")
 
 
+def _label(text: str) -> None:
+    """A short mono-uppercase section label.
+
+    For two or three words naming what follows -- "Investment Actions",
+    "Performance Data". Not for sentences: the style is 11px uppercase at
+    0.12em tracking, which is legible as a label and punishing as prose, so
+    the explanatory captions stay in ``st.caption``.
+    """
+    st.markdown(f'<div class="eyebrow">{html.escape(text)}</div>',
+                unsafe_allow_html=True)
+
+
 def _highlight(text: str, query: str | None) -> str:
     """Wrap case-insensitive matches of ``query`` in <mark> tags.
 
@@ -349,7 +405,7 @@ def render_summary_card(doc: Document, summary: Summary, highlight: str = None):
 
         with col1:
             if investment_actions:
-                st.markdown("**Investment Actions**")
+                _label("Investment Actions")
                 for action in investment_actions[:5]:
                     desc = action.get("description", "")
                     amt = action.get("amount_millions")
@@ -362,7 +418,7 @@ def render_summary_card(doc: Document, summary: Summary, highlight: str = None):
                     st.markdown(line, unsafe_allow_html=True)
 
             if decisions:
-                st.markdown("**Decisions**")
+                _label("Decisions")
                 for d in decisions[:5]:
                     vote = d.get("vote", "")
                     vote_str = f" [{vote}]" if vote else ""
@@ -374,7 +430,7 @@ def render_summary_card(doc: Document, summary: Summary, highlight: str = None):
 
         with col2:
             if performance:
-                st.markdown("**Performance Data**")
+                _label("Performance Data")
                 for p in performance[:5]:
                     ret = p.get("return_pct")
                     bench = p.get("benchmark_pct")

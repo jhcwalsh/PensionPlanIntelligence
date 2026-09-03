@@ -1,6 +1,8 @@
 # Restyling the Streamlit app to match lazyeconomist.com
 
-**2026-09-02. Spec, not yet implemented.** Requested by James.
+**2026-09-02. Implemented 2026-09-03.** Requested by James. See "As built" at
+the end for what the spec got right, what it missed, and the one thing it
+should have warned about and did not.
 
 ## The finding that shapes this
 
@@ -184,3 +186,49 @@ One test is worth writing despite the visual nature of the work:
 options — the failure mode for a typo'd key is that Streamlit ignores it
 silently, which is exactly the class of bug `tests/test_deployment_config.py`
 already exists to catch for `DATABASE_URL`.
+
+---
+
+## As built (2026-09-03)
+
+The central claim held: **every value in `.streamlit/config.toml` validates
+against `streamlit.config._config_options_template`, and no `.st-emotion-cache-*`
+selector was needed.** The CSS that remains is four rules over two
+`data-testid` selectors and three classes of our own.
+
+### The trap the spec missed
+
+It warned that `fontFaces` needs a `.woff2` rather than the `css2` stylesheet,
+and that was right. It did **not** warn about the second silent failure in the
+same step: **Google splits every family by `unicode-range`, and the largest
+file is usually Cyrillic.** Picking by size — the obvious heuristic — ships a
+font containing no Latin glyphs. Nothing errors; the browser falls back to the
+system face and the page looks approximately styled.
+
+Caught only because Inter Tight went from 89,800 to 44,872 bytes when the
+selection changed to "the block whose `unicode-range` contains `U+0000`". The
+first download had grabbed its Cyrillic subset. `static/fonts/LICENSES.md`
+records the rule for whoever refreshes these next.
+
+Vendored sizes: Fraunces 67,304 · Inter Tight 44,872 · JetBrains Mono 31,432 —
+**143,608 bytes total**, all SIL OFL.
+
+### Verified, not assumed
+
+- All three fonts serve: `HTTP 200` at `app/static/fonts/*.woff2`, byte counts
+  matching the files on disk.
+- The theme applies — paper ground, Fraunces headings, burnt-orange active tab
+  and links — confirmed by screenshot, not by the config parsing.
+- `base = "light"` is doing real work: with the config removed the same build
+  renders **dark**, following the OS preference.
+- `tests/test_theme_config.py` — 9 tests, including that every declared font
+  file exists and starts with `wOF2`, since a path typo also fails silently.
+
+### Unrelated problem this surfaced
+
+**The Performance and Plans tabs render nothing locally.** Reproduced on the
+same build with the theme config removed, so it is not the restyle — it is
+C2, the known local hang, and this is the first time it has been pinned to a
+specific interaction: the app renders once, then a tab click never completes
+its rerun. No error reaches the server log. That makes the visual review of
+those two tabs incomplete; they were checked as far as the hang allows.

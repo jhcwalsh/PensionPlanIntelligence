@@ -1,0 +1,80 @@
+# Visual theme, per docs/superpowers/specs/2026-09-02-lazyeconomist-style-design.md
+#
+# Read once at process start, so Render must be RESTARTED after a change here,
+# not merely redeployed into the same container.
+#
+# Almost everything the design needs is expressible as supported config in
+# Streamlit 1.58. That is deliberate: the usual way to restyle Streamlit is to
+# target generated class names like .st-emotion-cache-1r6slb0, which break on
+# every upgrade, silently, and look fine in review.
+
+[server]
+# Required for [[theme.fontFaces]] to serve files out of static/.
+enableStaticServing = true
+
+[theme]
+base = "light"
+
+# Paper, not white. The whole palette is warm; a neutral grey anywhere in it
+# reads as dirt rather than as grey.
+backgroundColor          = "#fbfaf7"
+secondaryBackgroundColor = "#f4f2ec"
+textColor                = "#1a1a1a"
+borderColor              = "#e8e4dc"
+
+# One accent, used sparingly. Burnt orange carries every interactive state:
+# primary buttons, active tab underline, links, slider fill.
+primaryColor = "#b8410e"
+linkColor    = "#b8410e"
+
+dataframeHeaderBackgroundColor = "#f4f2ec"
+
+# Containers are square; only status pills are round, and those are CSS.
+baseRadius   = "2px"
+buttonRadius = "2px"
+
+font        = "Inter Tight"
+headingFont = "Fraunces"
+codeFont    = "JetBrains Mono"
+
+# h1 capped well below the source's clamp(44px, 7vw, 84px): that is a
+# landing-page hero, and this app opens on a filter sidebar and a table.
+headingFontSizes   = ["2.5rem", "1.875rem", "1.375rem", "1.125rem", "1rem", "0.875rem"]
+headingFontWeights = [400, 400, 500, 500, 600, 600]
+
+# Warm categorical ramp built around the accent. Only one chart uses this
+# today (st.altair_chart in the allocation view), so treat it as a starting
+# point to be checked against that chart rather than a settled palette.
+chartCategoricalColors = [
+    "#b8410e", "#3d5a5c", "#c98a5e", "#5c6b4a",
+    "#7a5c6b", "#8a8780", "#d4b483", "#4a4a4a",
+]
+
+# Sidebar inherits colours but NOT heading sizes -- Streamlit is explicit that
+# [theme] heading sizes do not carry into [theme.sidebar].
+[theme.sidebar]
+backgroundColor          = "#f4f2ec"
+secondaryBackgroundColor = "#fbfaf7"
+borderColor              = "#e8e4dc"
+
+# url points at a font FILE. Passing the fonts.googleapis.com/css2 stylesheet
+# here fails silently: the face never registers and `font` falls back to the
+# system stack with no error anywhere. Served from static/ by the [server]
+# block above; "app/static/..." is the path Streamlit exposes it on.
+[[theme.fontFaces]]
+family = "Fraunces"
+url    = "app/static/fonts/Fraunces.woff2"
+weight = "300 700"
+style  = "normal"
+
+[[theme.fontFaces]]
+family = "Inter Tight"
+url    = "app/static/fonts/InterTight.woff2"
+weight = "400 700"
+style  = "normal"
+
+[[theme.fontFaces]]
+family = "JetBrains Mono"
+url    = "app/static/fonts/JetBrainsMono.woff2"
+weight = "400 600"
+style  = "normal"
