@@ -2675,7 +2675,8 @@
     "website": "https://regents.universityofcalifornia.edu",
     "materials_url": "https://regents.universityofcalifornia.edu/minutes-index/index.html",
     "extra_pages": [
-      "https://regents.universityofcalifornia.edu/meetings/past-meetings/index.html"
+      "https://regents.universityofcalifornia.edu/meetings/past-meetings/index.html",
+      "https://www.ucop.edu/investment-office/investment-reports/annual-reports/index.html"
     ],
     "materials_type": "html_links",
     "investment_only": false,
@@ -2684,7 +2685,7 @@
       "agenda"
     ],
     "fiscal_year_end": "06-30",
-    "notes": "Added 2026-09-02 from the PPD coverage review: $110.8B, PPD rank 11, and the single largest omission in the registry -- 72% of the whole top-200 gap by assets. Investments Committee minutes appear as minutes/<year>/invest<n>.pdf alongside board, fin, gov and health committees, so the minutes index is the richer feed; ucop.edu/investment-office carries investment-only reports if a narrower source is ever wanted. extra_pages is the meeting-notice listing. Static HTML, no WAF, no JavaScript."
+    "notes": "Added 2026-09-02 from the PPD coverage review: $110.8B, PPD rank 11, and the single largest omission in the registry -- 72% of the whole top-200 gap by assets. Static HTML, no WAF, no JavaScript. TWO SOURCES, because one was not enough. materials_url is the Regents minutes index (minutes/<year>/invest<n>.pdf for the Investments Committee, alongside board, fin, gov and health). Minutes are a narrative record of what a board discussed, so 40 of them yielded exactly one horizon cell -- they say a committee reviewed performance, not what the numbers were. The second extra_pages entry is UC Investments' annual reports, which carry the figures: asset allocation by class with market value and weight, and net returns over 1/3/5/10/15/20/25/30 years. Those returns are per *pool* -- UC Endowment, Blue and Gold, GEP, Pension, Working Capital -- not per asset class. UCRP is the 'Pension' row. Per-asset-class returns do not appear to be published, so a thin per-class horizon row for this plan is the source's limit, not a scraper bug. The figures also sit in chart labels, which extract as jumbled number runs."
   },
   {
     "id": "apers_ar",
