@@ -1,15 +1,21 @@
 # Next steps
 
-**As of 2026-09-02.** Working doc. Supersedes the 2026-08-19 migration
+**As of 2026-09-03.** Working doc. Supersedes the 2026-08-19 migration
 edition (in git history at `e66d56d`) — that migration is complete.
 
 Specs: `docs/superpowers/specs/2026-08-16-low-maintenance-app-design.md`,
 `docs/superpowers/specs/2026-08-19-portal-readiness-design.md`,
-`docs/superpowers/specs/2026-08-29-pdf-retention-design.md`.
+`docs/superpowers/specs/2026-08-29-pdf-retention-design.md`,
+`docs/superpowers/specs/2026-09-02-lazyeconomist-style-design.md`.
+
+> **Read entries as dated observations, not current state.** A3 sat here for
+> weeks asking whether to make the repo public; it had already been public
+> since April, and one `gh repo view` would have said so at any point. Before
+> acting on an entry, check the claim it rests on still holds.
 
 ---
 
-## Done (2026-08-21 → 2026-09-02)
+## Done (2026-08-21 → 2026-09-03)
 
 | | |
 |---|---|
@@ -41,6 +47,12 @@ Specs: `docs/superpowers/specs/2026-08-16-low-maintenance-app-design.md`,
 | **PDF retention live (E1)** | 4,882 of 5,109 PDFs in R2; 172 lost to link rot |
 | **Dollar amounts read as LaTeX** | every weekly briefing's figures rendered as italics |
 | **Period end + Performance sub-tabs (D10)** | which quarter a figure is, and a page per table |
+| **Recovered text read (D16)** | 587 windows, $0.78; 2025Q4 PE 22 → 33 plans |
+| **SDCERS unblocked (D14)** | the "403" was a spinner; 1 → 61 documents |
+| **Coverage review vs PPD (D15)** | 99.5% of the top 200 by assets; `aum_billions` ~12% low |
+| **Horizon columns** | 48 hidden cells recovered; a plan with no column had no row |
+| **UCRP + APERS added (D17)** | 150 plans; UC was the largest omission at $110.8B |
+| **Restyle (D18)** | paper/Fraunces/one accent, almost all supported config |
 
 ---
 
@@ -63,11 +75,70 @@ from both July and August.
 `docs/superpowers/plans/2026-08-22-auth0-invite-only.md`. Needs a tenant and
 four `AUTH_*` values. Free to 25k MAU, but a new identity dependency.
 
-### A3. Make the repo public?
+### A3. Repo visibility — **DECIDED 2026-09-03: go private.**
 
-Private caps Actions at 2,000 min/month and the Playwright pipeline
-approaches it. Data is all public record. Going public makes Actions free but
-publishes code and history.
+**It has been public since 2026-04-05.** `gh repo view` says
+`isPrivate: false`. The entry asking whether to *go* public was stale for
+weeks and nobody checked, which is why the warning at the top of this document
+now exists.
+
+So the Actions argument it rested on is moot, and measurement kills it anyway.
+**1,609 minutes over the 30 days to 2026-09-03, against the 2,000 a private
+repo gets free:**
+
+| workflow | runs | minutes |
+|---|---|---|
+| Daily pipeline | 33 | 1,076 |
+| tests | 137 | 378 |
+| daily-digest | 41 | 65 |
+| everything else | 32 | 90 |
+
+It fits at 80%, and Linux overage is **$0.008/min** — 400 minutes over is
+$3.20/month. Actions cost is not a reason to keep anything public. Note the
+two growing terms: the daily pipeline scales with plans tracked (150 now,
+two added 2026-09-02), and `tests` scales with development activity, so 1,609
+is a busy month rather than a floor.
+
+**The real argument for going private is the registry, not the code.**
+`data/known_plans.json` is 150 plans with working `materials_url` configs,
+WAF classifications, CAFR templates and the notes that took months to earn —
+the SDCERS spinner, the OnBase `dropid` presets, which hosts need a
+residential IP. The scraper is replaceable; that file is not.
+
+**Nothing here is security-sensitive.** `.env` is gitignored, `db/pension.db`
+left history in August, and every source document is public record.
+
+**Two things to know before flipping it.** Going private is forward-looking
+only — the history has been public since April and cannot be unpublished;
+the mitigating fact is **0 forks, 0 stars, 0 watchers**, so nothing has been
+taken and no orphaned forks are created. And Render deploys from this repo:
+its GitHub grant usually survives a visibility change but sometimes needs
+re-authorising, so confirm the service still builds immediately afterwards
+rather than finding out at the next deploy.
+
+**The plan.** James flips the switch — repository visibility is an account
+setting and cannot be changed from here.
+
+1. **Merge this branch to master first.** Doing it in the other order means
+   re-authorising Render and then immediately testing a deploy of unmerged
+   work, which confuses two failure modes.
+2. **Settings → General → Danger Zone → Change repository visibility →
+   Private.** GitHub asks for the repository name to confirm.
+3. **Check Render still builds.** Trigger a manual deploy and watch it clone.
+   If the grant lapsed, reconnect the repository in Render's settings — the
+   symptom is a clone failure, not a build failure, so read the first lines of
+   the log rather than the last.
+4. **Check the next scheduled GHA run goes green.** The daily pipeline at
+   11:00 UTC is the one that matters; Actions on a private repo start
+   consuming the 2,000-minute allowance from that point.
+5. **Watch the allowance for one month** at Settings → Billing → Plans and
+   usage. Expect ~1,600 minutes. If a heavy development month pushes it over,
+   the overage is pennies — but the two levers if it ever matters are running
+   `tests` on pull requests only rather than every push, and dropping the
+   daily pipeline to weekdays.
+
+**Not blocking anything.** Nothing in this document depends on it, and it can
+happen whenever the merge lands.
 
 ### A4. WAF proxy — now a 7-plan question, and a weaker one
 
@@ -183,6 +254,29 @@ rather than guessed at. Suspicion, unproven: a rerun triggered while the
 previous one is still in a network read holds the shared
 `@st.cache_resource` Session, and the two block each other — the same shape as
 the `IllegalStateChangeError` seen when two browser tabs were open at once.
+
+**Sharpened 2026-09-03** while reviewing the restyle, which is the first time
+it has been pinned to an interaction rather than a page:
+
+- **The first render always succeeds.** Insights renders fully, sidebar
+  metrics and all. It is the *second* render that never arrives.
+- **A tab click never completes its rerun.** Performance and Plans both.
+  Sometimes the tab underline moves and the pane blanks; sometimes the click
+  does nothing at all and the previous tab stays put.
+- **Nothing reaches the server log.** No traceback, no warning — the log ends
+  at the FTS5 notice from startup.
+- **Not the theme.** Reproduced on the same build with
+  `.streamlit/config.toml` removed, so it predates the restyle.
+
+That "renders once, then never again" shape fits the existing suspicion — a
+session held by the first render's network read — better than anything
+page-specific, and it says the next probe is the *rerun*, not the queries.
+Worth an hour with `py-spy dump` against the Streamlit process while it is
+wedged; a thread stuck in psycopg would settle it either way.
+
+**Cost so far:** it made the visual review of the restyle incomplete. The
+Performance tab's wide horizon table — the change most at risk from a
+restyle — has still not been looked at locally.
 
 ---
 
@@ -746,58 +840,166 @@ Worth doing before any further per-plan scraper work. It is the question that
 tells you whether `sdcers_ca` ($12B) is worth a day, or whether that day
 belongs to a plan we do not have at all.
 
+### D17. UCRP and APERS added — **DONE 2026-09-03**
+
+The two fillable gaps D15 found. Probing all 19 uncovered top-200 plans showed
+only these two publish board materials at a findable URL; the rest serve member
+forms and handbooks where board packets would be, which is the `scers_suffolk`
+lesson again — absent from the ranking is not the same as addable. Arlington
+County, Kansas City MO and Hartford CT returned 403 from a datacentre IP and
+are Mac-mini candidates if they ever seem worth ~$6B combined.
+
+**Registry is 150 plans.** Top-200 coverage 97.4% → **99.5% by assets**.
+
+**APERS: 16 documents, 61 horizon cells across 9 asset classes and 4 quarters.**
+Board packets with allocation tables — the ideal shape.
+
+**UCRP: 84 documents, 11 horizon cells across 5 classes.** Two sources, because
+one was not enough. Pointing `materials_url` at the Regents minutes index —
+richer, and matching the other 148 — was wrong for this plan: 40 minutes
+produced *one* cell, because minutes record that a committee reviewed
+performance, not what the numbers were. Adding UC Investments' annual reports
+as `extra_pages` fixed it as far as the source allows.
+
+**The source's ceiling, so nobody re-litigates it:** UC publishes allocation by
+asset class (market value and weight) but returns only per *pool* — Endowment,
+Blue and Gold, GEP, Pension, Working Capital — where UCRP is "Pension".
+Per-asset-class returns do not appear to be published at all, and the figures
+that exist sit in chart labels that extract as jumbled number runs. A thin
+per-class row for UC is the source, not a scraper bug.
+
+**Cost:** $1.79 for the first 56 documents, $3.36 for the UC follow-up. The
+second overran its estimate because 26 of 56 documents escalated to Sonnet at
+~30× Haiku — 46% of the documents carrying 94% of the bill. **UC Regents
+minutes are long multi-committee documents, which is exactly the shape that
+escalates**; quoting a blended Haiku rate for them was the estimating error.
+
+**Operational trap worth keeping:** `fetcher.run_fetcher` slices
+`doc_links[:max_docs_per_plan]`, so a low `--max-docs` is consumed by whichever
+page is discovered first. Here the already-known minutes ate the whole budget
+and the run reported "0 new documents" against 88 links found.
+
+### D18. Restyle to match lazyeconomist.com — **DONE 2026-09-03**
+
+Spec and an "as built" section:
+`docs/superpowers/specs/2026-09-02-lazyeconomist-style-design.md`.
+
+Paper ground (`#fbfaf7`), Fraunces headings, Inter Tight body, JetBrains Mono
+labels, one burnt-orange accent (`#b8410e`). **Almost all of it is supported
+`.streamlit/config.toml` configuration**, not CSS — Streamlit 1.58 exposes
+`font`, `headingFont`, `codeFont`, `fontFaces`, `borderColor`, `baseRadius`,
+`headingFontSizes` and `chartCategoricalColors`. The CSS left in `app.py` is
+four rules over two `data-testid` selectors, so nothing depends on
+`.st-emotion-cache-*` names that break silently on upgrade.
+
+**Two silent failures in one step, both now guarded by tests.**
+`theme.fontFaces` takes a `.woff2`, not the `fonts.googleapis.com/css2`
+stylesheet — the spec caught that one. It missed the second: **Google splits
+each family by `unicode-range` and the largest file is usually Cyrillic**, so
+picking by size ships a font with no Latin glyphs and the browser quietly falls
+back. Caught only because Inter Tight shrank 89,800 → 44,872 bytes when
+selection changed to "the block containing `U+0000`".
+
+Fonts are vendored (143,608 bytes, three faces, all SIL OFL) rather than
+CDN-loaded, so a rotated `fonts.gstatic.com` URL cannot change how the app
+renders. `tests/test_theme_config.py` asserts every key is a real Streamlit
+option, every declared font file exists and starts with `wOF2`, and no
+`theme.dark` block exists — light-only is deliberate, since `#b8410e` on
+near-black is muddy.
+
+**Render must be RESTARTED, not just redeployed:** `config.toml` is read at
+process start.
+
+**Not fully reviewed:** Performance and Plans render nothing locally — C2, not
+the restyle, confirmed by reproducing it with the config removed. Those two
+tabs want looking at on Render once this is merged.
+
+---
+
 ## Suggested order
 
-Sections A1, A6, B1, B2, C1, D1–D12 and E1 are done. Everything that was
-blocking something else has landed. What's left is genuinely optional, which
-is a different position from any previous edition of this document.
+Everything that was blocking something else has landed. A, B, C1, D1–D18 and
+E1 are done or decided; what follows is improvement, and the first item is the
+only one holding anything back.
 
-1. ~~**D15, the top-200 review**~~ **DONE 2026-09-02.** Coverage is broad —
-   every state, 97% of PPD assets. Two things came out of it that are now the
-   real work: **add the University of California ($110.8B, the one large
-   omission)**, and **refresh `aum_billions`, which is systematically ~12%
-   low** and is what CLAUDE.md's AUM-weighted claims are computed from.
-2. ~~**D14, `sdcers_ca` OnBase downloading**~~ **DONE 2026-09-02.** The stub
-   was a "Downloading, please wait…" spinner, not a block; following the
-   redirect it names took SDCERS from 1 to 61 documents. Only one plan uses
-   OnBase, so there is no platform win — checking that first would have cost
-   five minutes.
+### 0. Merge to master and restart Render
 
-**Superseded, kept for the reasoning:**
+**Ten commits sit on `worktree-pdf-retention` and none of it is live.** That is
+the restyle (D18), UCRP and APERS (D17), the SDCERS fix (D14), the horizon
+columns, `--reread` and the credential preflight (D16).
 
-2. **D14, `sdcers_ca` OnBase downloading** — discovery is fixed; the download
-   stub is not. Check first how many other plans use OnBase, since the same
-   scraper would serve all of them.
-3. **OCR is the only expensive model path left**, and it is now a 5-document
-   question. `extractor.py:211` pins vision OCR to Sonnet; Haiku 4.5 has
-   vision and is far cheaper, but OCR is exactly where a cheaper model
-   degrades quietly — worth an A/B before switching, not a blind swap.
-   Everything else is already on the cheap option: the targeted read runs
-   DeepSeek V4 Flash, the summariser routes to Haiku by default.
-4. ~~**Re-run the targeted read (D8)** over the documents D12 grew.~~
-   **DONE 2026-09-02 — see D16.** $0.7827, 587 windows, and 2025Q4 private
-   equity went 22 → 33 plans.
-5. ~~**The horizon view's missing columns**~~ **DONE 2026-09-02.** Bigger than
-   the brief: the missing columns were hiding **48 (plan, asset_class) cells,
-   9 of them private equity**, because a plan with no displayable figure is
-   dropped entirely rather than shown blank. `month`, `partial`, `20y`, `30y`
-   and `inception` added — `30y` on the evidence, not in the original brief.
-   Private equity 59 → 63 rows; nothing hidden now.
+**Restart, do not merely redeploy** — `.streamlit/config.toml` is read at
+process start, so a redeploy into the same container will not pick up the
+theme. Then look at the Performance and Plans tabs on Render: C2 made that
+review impossible locally, and the wide horizon table is the change most at
+risk from a restyle.
 
-**Superseded, kept for the reasoning:**
+Do this before A3's visibility change, so a Render clone failure cannot be
+confused with a bad deploy.
 
-5. **The horizon view's missing columns** — four plans report 2025Q4 private
-   equity only as since-inception / 20-year / monthly / part-year, which have
-   no column. Small, and it is the remainder of the question that produced D11.
-6. **C2 local Streamlit hang** — development friction only, does not affect the
-   live site. Worth an hour with a thread dump rather than more guessing.
-7. **`wsib`'s missing performance data** (D3) — needs a second section search
-   or a cross-section merge. Not urgent: it fails safe, showing fewer rows
-   rather than wrong ones.
-8. **A2 Auth0**, **A3 public repo**, **A4 WAF proxy** — decisions only James
-   can make. A4 is now worth about two plans; see the entry.
+### 1. Refresh `aum_billions` from PPD
+
+The highest-value item left, because it is **silently wrong everywhere** rather
+than missing in one place. D15 measured a median ratio of 0.881 across 32
+hand-verified pairs — 26 of 32 understated, one-directional, a vintage lag
+rather than rounding. Philadelphia −37%, Connecticut Teachers −35%,
+CalPERS −11%.
+
+**CLAUDE.md's "8.5% of tracked AUM" is computed from this column**, so it
+inherits the error, unevenly. Every AUM-weighted claim in the docs is
+approximate until this is fixed.
+
+The work: a hand-checked `plan_id` → `ppd_id` map stored in the registry, then
+`scripts/ppd_coverage.py` refreshes the figure on every run. **Deliberately not
+automated** — three matcher attempts failed in one afternoon, one of them
+hiding a $110.8B plan behind a shared word. Free, no API calls.
+
+### 2. C2, the local hang
+
+Now pinned to an interaction rather than a page: renders once, then a tab click
+never completes its rerun, nothing in the log. See the entry. Next probe is
+`py-spy dump` against the wedged process — a thread parked in psycopg would
+confirm or kill the held-session theory in one shot. Development friction only,
+but it has now cost a review.
+
+### 3. OCR model A/B
+
+`extractor.py:211` pins vision OCR to Sonnet, and it is **the only expensive
+model path left** — the targeted read runs DeepSeek V4 Flash and the summariser
+routes to Haiku. Haiku 4.5 has vision and is far cheaper, but OCR is exactly
+where a cheap model degrades quietly, so this wants a 5-document comparison,
+not a swap. Only ~5 documents are affected, so the prize is small and the
+downside of getting it wrong is silent corruption of the archive.
+
+### 4. `wsib`'s missing performance data (D3)
+
+Needs a second section search or a cross-section merge. Fails safe — fewer
+rows, not wrong ones.
+
+### 5. Small change
+
+- **Three windows failed in the D16 re-read.** Re-runnable for pennies;
+  `--reread` skips everything already bought.
+- **~50 municipal plans remain uncovered** (D15/D17). They mostly publish
+  member forms rather than board packets, and are worth ~1% of assets. Only
+  worth it if *document* coverage becomes the goal.
+- **Arlington County, Kansas City MO, Hartford CT** 403 from a datacentre IP —
+  Mac-mini candidates, ~$6B combined.
+
+### Waiting on James
+
+**A2 Auth0** (needs a tenant and four `AUTH_*` values) and **A4 WAF proxy**
+(now worth about two plans, and probably not those two — see the entry).
+**A3 is decided**: go private, per the plan in that entry, after the merge.
+
+---
 
 Worth saying plainly: the constraint that shaped this whole document — "we are
 throwing away the documents" — is gone. 95.6% of the corpus is archived, every
 future fetch is retained, and extraction no longer has to happen on the machine
 that did the fetching. What remains is improvement rather than repair.
+
+And the newer lesson, earned twice in one day: **this document's entries are
+dated observations.** A3 asked for weeks whether to go public when it already
+was; D14 recorded SDCERS as blocked when the "block" was a spinner nobody had
+decoded. Both were one command away from being checked. Re-verify before acting.
