@@ -120,7 +120,8 @@ def summarization_backlog(session, plan_ids, ratio):
         else:
             model = "claude-haiku-4-5-20251001"
 
-        cost = _price(model, tokens_in, SUMMARY_OUTPUT_TOKENS)
+        # Summaries go through Message Batches, at half the list rate.
+        cost = _price(model, tokens_in, SUMMARY_OUTPUT_TOKENS) * costs.BATCH_DISCOUNT
         by_model[model][0] += 1
         by_model[model][1] += cost
         total += cost

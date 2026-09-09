@@ -202,6 +202,35 @@ reports "shape changed"; the line is printed for that reason.
 ### Two independent mock flags
 `INSIGHTS_MODE=mock` (insights package) and `LLM_MODE=mock` (document/CAFR extraction) are unrelated. Tests' `conftest.py` sets both as autouse fixtures; production sets neither. When debugging an unexpected real-API call, check both env vars.
 
+### Which model does what, and the summariser runs as a Message Batch
+Three Claude models plus one OpenRouter model, all priced in `costs.PRICES`:
+- **Haiku 4.5** — short or simple documents in the summariser
+  (`choose_model`), vision OCR (`extractor.py`), the daily digest's per-plan
+  paragraphs (`insights/daily.py`), IPS verification, the asset-class
+  normaliser. Transcription and restatement.
+- **Sonnet 4.6** — investment packs of 20k+ chars in the summariser, the
+  weekly and monthly briefings, CAFR / IPS / performance-report extraction,
+  the manager normaliser. Judgement over long inputs.
+- **Opus 4.6** — quarterly and annual briefings only.
+- **DeepSeek V4 Flash via OpenRouter** — schema-constrained section reads,
+  manual runs only (`llm_openrouter.py`).
+
+`run_summarizer` submits every call in a run as **one Message Batch**
+(`client.messages.batches`) and polls until it ends: nothing waits on a
+summary, and batches bill at half the standard rate. Consequences:
+- A duplicate of a text that is itself pending in the same run is held back
+  and written as a `dedup:` row once the original returns, so the same text
+  is never paid for twice within a batch.
+- On `SUMMARIZE_BATCH_TIMEOUT_MIN` (default 180) the batch is cancelled and
+  whatever finished is kept; the rest, like any `errored` result, is picked
+  up by the next run. Refusals still become `document_skips` rows.
+- The batch path bypasses the instrumented client, so it records its own
+  `api_usage` rows with `batch=True`, which halves `cost_usd`. Nothing else
+  on the row marks it: a reader pricing a batch row from its token counts
+  and the list price gets double its `cost_usd`.
+- `SUMMARIZE_MODE=sync` restores the one-call-per-document path for a local
+  run where you want to watch summaries land one at a time.
+
 ### Test DB isolation does NOT reload the database module
 `tests/conftest.py` rebinds `database.engine` and `database.SessionLocal` per-test using `monkeypatch.setattr`. Reloading the module would orphan the ORM classes and break SQLAlchemy's mapper registry. If you write a new test that needs DB isolation, follow this pattern — use the existing `_isolated_environment` (insights-style) or `tmp_db` fixture rather than instantiating your own engine.
 

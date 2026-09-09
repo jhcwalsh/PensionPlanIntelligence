@@ -89,6 +89,13 @@ def test_an_unknown_model_raises_rather_than_costing_zero():
         cost_usd("claude-future-9", _usage(input_tokens=100))
 
 
+def test_batch_calls_are_priced_at_half_rate():
+    """Message Batches bill every token category at 50% of the standard rate."""
+    usage = _usage(input_tokens=1_000_000, output_tokens=1_000_000)
+    assert cost_usd(SONNET, usage, batch=True) == Decimal("9")
+    assert cost_usd(SONNET, usage) == Decimal("18")
+
+
 def test_missing_cache_fields_are_treated_as_zero():
     """Older SDK responses omit them entirely."""
     bare = types.SimpleNamespace(input_tokens=1000, output_tokens=100)

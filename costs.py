@@ -58,14 +58,22 @@ PRICES: dict[str, Price] = {
 
 MILLION = Decimal(1_000_000)
 
+# Message Batches bill every token category at half the standard rate.
+BATCH_DISCOUNT = Decimal("0.5")
 
-def cost_usd(model: str, usage) -> Decimal:
+
+def cost_usd(model: str, usage, batch: bool = False) -> Decimal:
     """Cost of one call, from its usage block.
 
     The four token categories are summed independently: the API reports
     ``input_tokens`` *excluding* cache reads and writes, so treating cache
     tokens as a subset of input would under-count every cached call — which
     today means every CAFR extraction.
+
+    ``batch`` applies the 50% Message Batches rate. The row records the
+    discounted figure and nothing else marks it, so a reader multiplying a
+    batch row's tokens by the list price gets twice its cost_usd; the
+    summariser is the one batch caller today.
     """
     try:
         price = PRICES[model]
@@ -76,12 +84,13 @@ def cost_usd(model: str, usage) -> Decimal:
     def n(attr: str) -> Decimal:
         return Decimal(getattr(usage, attr, 0) or 0)
 
-    return (
+    full = (
         n("input_tokens") * price.input
         + n("output_tokens") * price.output
         + n("cache_creation_input_tokens") * price.cache_write_5m
         + n("cache_read_input_tokens") * price.cache_read
     ) / MILLION
+    return full * BATCH_DISCOUNT if batch else full
 
 
 # ---------------------------------------------------------------------------

@@ -5,14 +5,19 @@ Cost optimisations:
 - Haiku for short/simple docs; Sonnet only for large investment packs
 - Smart truncation: first 20k + keyword-rich middle chunks + last 10k (cap ~50k)
 - Hash-based deduplication: never re-summarise identical text
-- max_tokens capped at 1500 (summaries rarely need more)
+- max_tokens capped at 4096 (summaries rarely need more)
 - Skip clearly non-substantive documents
+- One Message Batch per run, at half the standard rate: nothing waits on a
+  summary, so there is no reason to pay the interactive price. The
+  synchronous path is kept behind SUMMARIZE_MODE=sync for local one-offs.
 """
 
 import hashlib
 import json
 import os
 import re
+import time
+from dataclasses import dataclass
 from datetime import datetime
 
 import anthropic
@@ -275,21 +280,23 @@ def _unwrap(exc: Exception) -> Exception:
     return exc
 
 
-@retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=2, min=4, max=30),
-    # Refusals are deterministic — retrying just costs money. Other empty
-    # responses (max_tokens, transient API hiccups) still get the 3-attempt
-    # treatment.
-    retry=retry_if_not_exception_type(ClaudeRefusedError),
-)
-def call_claude(prompt: str, model: str) -> str:
-    message = _get_client().messages.create(
+def request_params(prompt: str, model: str) -> dict:
+    """The Messages API request for one summary.
+
+    One function for both paths: ``messages.create(**params)`` in sync mode,
+    and the ``params`` of one batch request otherwise. Any divergence between
+    the two would show up as summaries that differ by which path ran them.
+    """
+    return dict(
         model=model,
         max_tokens=_max_tokens(model),
         system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": prompt}]
+        messages=[{"role": "user", "content": prompt}],
     )
+
+
+def message_text(message) -> str:
+    """The text of a response, or the reason there is none."""
     if not message.content:
         diagnostic = (
             f"stop_reason={message.stop_reason}, "
@@ -300,6 +307,19 @@ def call_claude(prompt: str, model: str) -> str:
             raise ClaudeRefusedError(f"Claude refused ({diagnostic})")
         raise RuntimeError(f"Claude returned empty content ({diagnostic})")
     return message.content[0].text
+
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=2, min=4, max=30),
+    # Refusals are deterministic — retrying just costs money. Other empty
+    # responses (max_tokens, transient API hiccups) still get the 3-attempt
+    # treatment.
+    retry=retry_if_not_exception_type(ClaudeRefusedError),
+)
+def call_claude(prompt: str, model: str) -> str:
+    message = _get_client().messages.create(**request_params(prompt, model))
+    return message_text(message)
 
 
 def parse_response(raw: str) -> dict:
@@ -327,11 +347,23 @@ def should_skip(doc: Document) -> str | None:
     return None
 
 
-def summarize_document(doc: Document, plan_name: str,
-                       session) -> Summary | None:
-    """
-    Generate a Summary for a single document.
-    Returns Summary object (not committed), or None if skipped.
+@dataclass
+class PendingCall:
+    """A document that needs a model call: everything but the response."""
+    doc: Document
+    plan_name: str
+    model: str
+    text_hash: str
+    truncated: str
+    prompt: str
+
+
+def prepare_document(doc: Document, plan_name: str,
+                     session) -> Summary | PendingCall | None:
+    """Decide what a document needs, without calling the model.
+
+    Returns a ready Summary (a duplicate of one already held), a PendingCall
+    (the request the model should see), or None (nothing worth summarising).
     """
     skip_reason = should_skip(doc)
     if skip_reason:
@@ -343,18 +375,7 @@ def summarize_document(doc: Document, plan_name: str,
     existing = summary_exists_for_hash(session, text_hash)
     if existing:
         console.print(f"  [dim]Skipping {doc.filename} — duplicate of doc {existing.document_id}[/dim]")
-        # Create a thin summary record pointing at same hash so it won't be retried
-        return Summary(
-            document_id=doc.id,
-            summary_text=existing.summary_text,
-            key_topics=existing.key_topics,
-            investment_actions=existing.investment_actions,
-            decisions=existing.decisions,
-            performance_data=existing.performance_data,
-            generated_at=utcnow(),
-            model_used=f"dedup:{existing.model_used}",
-            text_hash=text_hash,
-        )
+        return _dedup_summary(doc, existing, text_hash)
 
     # Smart truncation + model routing
     truncated = smart_truncate(doc.extracted_text)
@@ -366,19 +387,64 @@ def summarize_document(doc: Document, plan_name: str,
         f"  Summarizing [cyan]{doc.filename}[/cyan] "
         f"({orig_len:,}->{trunc_len:,} chars, [bold]{model.split('-')[1]}[/bold])"
     )
+    return PendingCall(
+        doc=doc, plan_name=plan_name, model=model, text_hash=text_hash,
+        truncated=truncated,
+        prompt=build_extraction_prompt(doc, plan_name, truncated),
+    )
 
+
+def _dedup_summary(doc: Document, existing: Summary, text_hash: str) -> Summary:
+    """A thin summary record pointing at the same hash so it won't be retried."""
+    return Summary(
+        document_id=doc.id,
+        summary_text=existing.summary_text,
+        key_topics=existing.key_topics,
+        investment_actions=existing.investment_actions,
+        decisions=existing.decisions,
+        performance_data=existing.performance_data,
+        generated_at=utcnow(),
+        model_used=f"dedup:{existing.model_used}",
+        text_hash=text_hash,
+    )
+
+
+def _summary_from(pending: PendingCall, data: dict) -> Summary:
+    summary = Summary(
+        document_id=pending.doc.id,
+        summary_text=data.get("summary", ""),
+        key_topics=json.dumps(data.get("key_topics", [])),
+        investment_actions=json.dumps(data.get("investment_actions", [])),
+        decisions=json.dumps(data.get("decisions", [])),
+        performance_data=json.dumps(data.get("performance_data", [])),
+        generated_at=utcnow(),
+        model_used=pending.model,
+        text_hash=pending.text_hash,
+    )
+    notable = data.get("notable_items", [])
+    if notable:
+        summary.summary_text += "\n\nNotable items: " + "; ".join(notable)
+    return summary
+
+
+def finish_document(pending: PendingCall, message, session) -> Summary | None:
+    """Turn the model's response into a Summary, or record why there is none.
+
+    Shared by both paths. The one follow-up call — a truncated JSON response
+    retried on a shorter excerpt — is made synchronously even in batch mode:
+    it is rare, and a second batch round-trip for a handful of documents
+    would hold the whole run open for nothing.
+    """
+    doc = pending.doc
     try:
-        prompt = build_extraction_prompt(doc, plan_name, truncated)
-        raw = call_claude(prompt, model)
-        data = parse_response(raw)
+        data = parse_response(message_text(message))
     except json.JSONDecodeError:
         # Output was truncated — retry with a 20k char excerpt (fits comfortably in 2048 tokens)
         console.print(f"  [yellow]JSON truncated, retrying with shorter excerpt...[/yellow]")
         try:
-            short_text = truncated[:20_000]
-            prompt = build_extraction_prompt(doc, plan_name, short_text)
-            raw = call_claude(prompt, model)
-            data = parse_response(raw)
+            short_text = pending.truncated[:20_000]
+            prompt = build_extraction_prompt(doc, pending.plan_name, short_text)
+            data = parse_response(call_claude(prompt, pending.model))
         except ClaudeRefusedError as e2:
             _record_refusal(session, doc, str(e2))
             return None
@@ -391,27 +457,141 @@ def summarize_document(doc: Document, plan_name: str,
     except Exception as e:
         console.print(f"  [red]Claude API error: {_unwrap(e)}[/red]")
         return None
-
-    summary = Summary(
-        document_id=doc.id,
-        summary_text=data.get("summary", ""),
-        key_topics=json.dumps(data.get("key_topics", [])),
-        investment_actions=json.dumps(data.get("investment_actions", [])),
-        decisions=json.dumps(data.get("decisions", [])),
-        performance_data=json.dumps(data.get("performance_data", [])),
-        generated_at=utcnow(),
-        model_used=model,
-        text_hash=text_hash,
-    )
-
-    notable = data.get("notable_items", [])
-    if notable:
-        summary.summary_text += "\n\nNotable items: " + "; ".join(notable)
-
-    return summary
+    return _summary_from(pending, data)
 
 
-def run_summarizer(doc_ids: list[int] = None):
+def summarize_document(doc: Document, plan_name: str,
+                       session) -> Summary | None:
+    """
+    Generate a Summary for a single document, synchronously.
+    Returns Summary object (not committed), or None if skipped.
+    """
+    prepared = prepare_document(doc, plan_name, session)
+    if not isinstance(prepared, PendingCall):
+        return prepared
+    try:
+        message = _create_with_retry(request_params(prepared.prompt, prepared.model))
+    except Exception as e:
+        console.print(f"  [red]Claude API error: {_unwrap(e)}[/red]")
+        return None
+    return finish_document(prepared, message, session)
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=2, min=4, max=30))
+def _create_with_retry(params: dict):
+    return _get_client().messages.create(**params)
+
+
+# ---------------------------------------------------------------------------
+# Batch path
+# ---------------------------------------------------------------------------
+
+#: How long a run will wait for its batch before cancelling it. Most batches
+#: finish in minutes; the API's own ceiling is 24 hours. The daily-pipeline
+#: job has 360 minutes in total and has usually spent 30–40 of them fetching
+#: and extracting before it gets here.
+BATCH_TIMEOUT_MINUTES = int(os.environ.get("SUMMARIZE_BATCH_TIMEOUT_MIN", "180"))
+BATCH_POLL_SECONDS = 30
+
+
+def _run_batch(client, pendings: list[PendingCall],
+               poll_seconds: float, timeout_minutes: float) -> list:
+    """Submit one batch for every pending call and return its results.
+
+    On timeout the batch is cancelled and the run collects whatever had
+    finished: cancellation is not immediate, and the requests it caught
+    mid-flight come back ``canceled`` rather than billed. Anything not
+    summarised is picked up by the next run, which is also what happens to
+    an ``errored`` result.
+    """
+    requests = [
+        {"custom_id": str(p.doc.id),
+         "params": request_params(p.prompt, p.model)}
+        for p in pendings
+    ]
+    batch = client.messages.batches.create(requests=requests)
+    console.print(f"  Batch [cyan]{batch.id}[/cyan] submitted: {len(requests)} requests")
+
+    started = time.monotonic()
+    cancelled = False
+    while True:
+        batch = client.messages.batches.retrieve(batch.id)
+        if batch.processing_status == "ended":
+            break
+        elapsed_min = (time.monotonic() - started) / 60
+        if not cancelled and elapsed_min >= timeout_minutes:
+            console.print(
+                f"  [yellow]Batch {batch.id} still {batch.processing_status} "
+                f"after {elapsed_min:.0f} min; cancelling and keeping what "
+                f"finished[/yellow]"
+            )
+            client.messages.batches.cancel(batch.id)
+            cancelled = True
+        time.sleep(poll_seconds)
+
+    return list(client.messages.batches.results(batch.id))
+
+
+def _result_detail(result) -> str:
+    """Why a batch request did not succeed, as the API phrased it.
+
+    An errored result carries ``error`` (an ErrorResponse) whose own
+    ``error`` holds the message; canceled and expired results carry nothing
+    beyond their type.
+    """
+    response = getattr(result, "error", None)
+    inner = getattr(response, "error", None)
+    return getattr(inner, "message", None) or result.type
+
+
+def _collect_batch(pendings: list[PendingCall], results, session) -> dict:
+    """Apply each batch result to its document. Returns counts by outcome."""
+    by_id = {str(p.doc.id): p for p in pendings}
+    counts = {"haiku": 0, "sonnet": 0, "failed": 0}
+    for item in results:
+        pending = by_id.get(item.custom_id)
+        if pending is None:
+            continue
+        result = item.result
+        if result.type != "succeeded":
+            detail = _result_detail(result)
+            console.print(
+                f"  [red]{pending.doc.filename}: batch result {result.type} "
+                f"({detail}); left for the next run[/red]"
+            )
+            counts["failed"] += 1
+            continue
+        message = result.message
+        usage = getattr(message, "usage", None)
+        if usage is not None and not costs.mock_mode():
+            # The batch path bypasses the instrumented client's create(), so
+            # this is where its spend gets recorded — at the batch rate.
+            import database
+            database.record_api_usage(pending.model, usage, batch=True)
+        summary = finish_document(pending, message, session)
+        if summary is None:
+            counts["failed"] += 1
+            continue
+        session.add(summary)
+        session.commit()
+        counts["haiku" if pending.model == MODEL_HAIKU else "sonnet"] += 1
+    return counts
+
+
+def run_summarizer(doc_ids: list[int] = None, mode: str | None = None,
+                   poll_seconds: float | None = None,
+                   timeout_minutes: float | None = None):
+    """Summarise every document that needs it.
+
+    ``mode`` is "batch" (default) or "sync"; the environment variable
+    SUMMARIZE_MODE sets it when the argument is omitted.
+    """
+    mode = mode or os.environ.get("SUMMARIZE_MODE", "batch")
+    if mode not in ("batch", "sync"):
+        raise ValueError(f"SUMMARIZE_MODE must be 'batch' or 'sync', not {mode!r}")
+    poll_seconds = BATCH_POLL_SECONDS if poll_seconds is None else poll_seconds
+    timeout_minutes = BATCH_TIMEOUT_MINUTES if timeout_minutes is None else timeout_minutes
+
     session = get_session()
     try:
         if doc_ids:
@@ -428,14 +608,31 @@ def run_summarizer(doc_ids: list[int] = None):
             console.print("[yellow]No documents pending summarization.[/yellow]")
             return
 
-        console.print(f"[bold]Summarizing {len(docs)} documents with Claude...[/bold]")
+        console.print(f"[bold]Summarizing {len(docs)} documents with Claude ({mode})...[/bold]")
 
         plan_names = {p.id: p.name for p in session.query(Plan).all()}
         haiku_count = sonnet_count = dedup_count = skip_count = 0
+        pendings: list[PendingCall] = []
+        # In sync mode a duplicate finds the original's summary already
+        # committed. In batch mode nothing is committed until the batch
+        # returns, so a second copy of the same text in one run would be
+        # summarised — and paid for — twice. Hold the copies back instead.
+        pending_hashes: set[str] = set()
+        held_duplicates: list[tuple[Document, str]] = []
 
         for doc in docs:
             plan_name = plan_names.get(doc.plan_id, doc.plan_id)
-            summary = summarize_document(doc, plan_name, session)
+            if mode == "sync":
+                summary = summarize_document(doc, plan_name, session)
+            else:
+                summary = prepare_document(doc, plan_name, session)
+                if isinstance(summary, PendingCall):
+                    if summary.text_hash in pending_hashes:
+                        held_duplicates.append((doc, summary.text_hash))
+                    else:
+                        pending_hashes.add(summary.text_hash)
+                        pendings.append(summary)
+                    continue
             if summary:
                 session.add(summary)
                 session.commit()
@@ -447,6 +644,23 @@ def run_summarizer(doc_ids: list[int] = None):
                     sonnet_count += 1
             else:
                 skip_count += 1
+
+        if pendings:
+            results = _run_batch(_get_client(), pendings, poll_seconds, timeout_minutes)
+            counts = _collect_batch(pendings, results, session)
+            haiku_count += counts["haiku"]
+            sonnet_count += counts["sonnet"]
+            skip_count += counts["failed"]
+
+        for doc, text_hash in held_duplicates:
+            existing = summary_exists_for_hash(session, text_hash)
+            if existing is None:
+                # The original's call failed; the copy waits with it.
+                skip_count += 1
+                continue
+            session.add(_dedup_summary(doc, existing, text_hash))
+            session.commit()
+            dedup_count += 1
 
         done = haiku_count + sonnet_count + dedup_count
         console.print(

@@ -1620,7 +1620,8 @@ _FTS_TRIGGER_SQL = [
 logger = logging.getLogger(__name__)
 
 
-def record_api_usage(model: str, usage) -> Optional["ApiUsage"]:
+def record_api_usage(model: str, usage,
+                     batch: bool = False) -> Optional["ApiUsage"]:
     """Record one Claude call. Never raises.
 
     Measurement is subordinate to the work. A lost row costs a data point; an
@@ -1631,10 +1632,12 @@ def record_api_usage(model: str, usage) -> Optional["ApiUsage"]:
     Its own session, opened and closed immediately, because callers hold theirs
     across minutes of network I/O and Neon terminates a transaction left idle
     for five.
+
+    ``batch`` prices the row at the Message Batches rate; see costs.cost_usd.
     """
     import costs
     try:
-        cost = costs.cost_usd(model, usage)
+        cost = costs.cost_usd(model, usage, batch=batch)
         operation, run_id = costs.current_attribution()
         session = get_session()
         try:
