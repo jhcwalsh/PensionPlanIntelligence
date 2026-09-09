@@ -69,26 +69,21 @@ Output clean markdown only — no code fences, no JSON, no commentary."""
 def generate_note(prompt: str, max_tokens: int, model: str = MODEL_SONNET) -> str:
     """Call Claude to generate an analytical markdown note.
 
-    The system prompt and MEETING DATA corpus are sent as prompt-cached content
-    blocks.  Cache hits occur on retries and same-session re-runs where the
-    corpus is unchanged, cutting input-token costs ~90% on those calls.
-
-    Note: meetings are sorted most-recent-first so cross-day cache hits on the
-    data block are unlikely (new meetings prepend to the text).  The system
-    prompt cache always hits after the first call.
+    Only the system prompt is cache-marked. The MEETING DATA corpus used to
+    be as well, but every cadence composes exactly once per period and the
+    corpus is rebuilt each time, so the marker never produced a hit: it
+    charged 1.25x the input rate to write a cache nobody read (~125k tokens
+    a week on the weekly alone). The system prompt is small and identical
+    across runs, so its marker costs nothing and hits on retries.
     """
-    # Split at the MEETING DATA boundary so the large corpus lives in its own
-    # content block and can be cached independently of the variable header.
+    # Split at the MEETING DATA boundary so the corpus lives in its own
+    # content block, kept separate from the variable header.
     split_marker = "\nMEETING DATA:\n"
     if split_marker in prompt:
         instructions, meeting_data = prompt.split(split_marker, 1)
         content = [
             {"type": "text", "text": instructions + "\nMEETING DATA:\n"},
-            {
-                "type": "text",
-                "text": meeting_data,
-                "cache_control": {"type": "ephemeral"},
-            },
+            {"type": "text", "text": meeting_data},
         ]
     else:
         content = [{"type": "text", "text": prompt}]
