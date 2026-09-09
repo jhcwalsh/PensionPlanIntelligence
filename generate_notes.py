@@ -32,9 +32,9 @@ from database import (
 )
 
 # Reuse the summarizer's client setup (handles API key + OAuth fallback)
-from summarizer import _get_client, MODEL_SONNET
+from summarizer import _get_client, message_text, MODEL_SONNET
 
-MODEL_OPUS = "claude-opus-4-6"
+MODEL_OPUS = "claude-opus-5"
 
 _ENV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
 load_dotenv(_ENV_PATH, override=True)
@@ -42,7 +42,9 @@ load_dotenv(_ENV_PATH, override=True)
 console = Console(legacy_windows=False)
 NOTES_DIR = Path(__file__).parent / "notes"
 
-MAX_TOKENS_HIGHLIGHTS = 4096
+# Total output: adaptive thinking plus the note, on a tokenizer ~30% heavier
+# than the one 4096 was tuned for.
+MAX_TOKENS_HIGHLIGHTS = 8192
 MAX_TOKENS_INSIGHTS = 8192
 
 # ---------------------------------------------------------------------------
@@ -91,7 +93,12 @@ def generate_note(prompt: str, max_tokens: int, model: str = MODEL_SONNET) -> st
     message = _get_client().messages.create(
         model=model,
         max_tokens=max_tokens,
-        temperature=0.2,
+        # Sonnet 5 and Opus 5 reject sampling parameters; the briefing's
+        # register is set by the system prompt. Medium effort: editorial
+        # synthesis benefits from some thinking, and the published curves
+        # show medium matching the default at a fraction of the spend.
+        thinking={"type": "adaptive"},
+        output_config={"effort": "medium"},
         system=[
             {
                 "type": "text",
@@ -107,7 +114,7 @@ def generate_note(prompt: str, max_tokens: int, model: str = MODEL_SONNET) -> st
     cache_read = getattr(usage, "cache_read_input_tokens", 0) or 0
     cache_write = getattr(usage, "cache_creation_input_tokens", 0) or 0
     if cache_read:
-        rate = 15 if model == MODEL_OPUS else 3
+        rate = 25 if model == MODEL_OPUS else 10
         saved = cache_read * rate * 0.9 / 1_000_000
         console.print(
             f"  [dim green][cache hit] {cache_read:,} tokens read "
@@ -118,7 +125,7 @@ def generate_note(prompt: str, max_tokens: int, model: str = MODEL_SONNET) -> st
             f"  [dim][cache write] {cache_write:,} tokens stored[/dim]"
         )
 
-    return message.content[0].text
+    return message_text(message)
 
 
 # ---------------------------------------------------------------------------

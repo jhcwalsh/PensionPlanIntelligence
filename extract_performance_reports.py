@@ -79,13 +79,13 @@ load_dotenv(_ENV_PATH, override=True)
 
 console = Console(legacy_windows=False)
 
-MODEL = "claude-sonnet-4-6"
+MODEL = "claude-sonnet-5"
 # These reports carry per-asset-class breakdowns alongside total_fund, so a
 # full response easily exceeds a few thousand tokens (observed: a 4096 cap
 # truncated the tool call before it reached the returns array at all,
 # silently saving an empty result with no error). 16384 matches the margin
 # extract_cafr_investments.py uses for its own worst case.
-MAX_OUTPUT_TOKENS = 16384
+MAX_OUTPUT_TOKENS = 21300   # 16384 tuned for Sonnet 4.6, +30% for the new tokenizer
 MAX_TEXT_CHARS = 100_000  # these reports run well under this; a CAFR would not
 
 # Only plans whose doc_type='performance' documents are genuinely periodic
@@ -190,6 +190,9 @@ def call_claude(plan_name: str, fund_scope: str | None, report_text: str) -> dic
     msg = _get_client().messages.create(
         model=MODEL,
         max_tokens=MAX_OUTPUT_TOKENS,
+        # Structured extraction through a forced tool call; thinking
+        # would be billed output spent before the schema is filled.
+        thinking={"type": "disabled"},
         system=[{
             "type": "text",
             "text": SYSTEM_PROMPT,

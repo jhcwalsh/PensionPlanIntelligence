@@ -16,7 +16,7 @@ PyMuPDF==1.24.14
 python-docx==1.1.2
 
 # AI
-anthropic==0.42.0
+anthropic==0.125.0
 # OpenRouter is OpenAI-compatible; used only by llm_openrouter for the
 # targeted-read extraction. Pipeline-only — the Streamlit service in
 # requirements.txt never calls a model.

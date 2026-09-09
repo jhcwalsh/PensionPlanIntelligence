@@ -52,8 +52,8 @@ load_dotenv(_ENV_PATH, override=True)
 
 console = Console(legacy_windows=False)
 
-MODEL = "claude-sonnet-4-6"
-MAX_OUTPUT_TOKENS = 8192
+MODEL = "claude-sonnet-5"
+MAX_OUTPUT_TOKENS = 10650   # 8192 tuned for Sonnet 4.6, +30% for the new tokenizer
 MAX_INPUT_CHARS = 180_000
 
 PROMPT_VERSION = "ips_v1"
@@ -215,6 +215,9 @@ def call_claude(plan_name: str, ips_text: str) -> dict:
     msg = _get_client().messages.create(
         model=MODEL,
         max_tokens=MAX_OUTPUT_TOKENS,
+        # Structured extraction through a forced tool call; thinking
+        # would be billed output spent before the schema is filled.
+        thinking={"type": "disabled"},
         # System prompt cached so subsequent IPS calls pay only the cache-read price.
         system=[{
             "type": "text",

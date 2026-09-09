@@ -100,9 +100,9 @@ def _classify_batch(client, batch: list[str]) -> dict:
         + json.dumps(batch, ensure_ascii=False)
     )
     msg = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=8192,
-        temperature=0,
+        model="claude-sonnet-5",
+        max_tokens=10650,   # 8192 tuned for Sonnet 4.6, +30% for the new tokenizer
+        thinking={"type": "disabled"},
         system=[{
             "type": "text",
             "text": _PROMPT_INSTRUCTIONS,

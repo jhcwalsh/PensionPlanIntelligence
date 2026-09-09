@@ -54,8 +54,8 @@ load_dotenv(_ENV_PATH, override=True)
 
 console = Console(legacy_windows=False)
 
-MODEL = "claude-sonnet-4-6"
-MAX_OUTPUT_TOKENS = 8192
+MODEL = "claude-sonnet-5"
+MAX_OUTPUT_TOKENS = 10650   # 8192 tuned for Sonnet 4.6, +30% for the new tokenizer
 MAX_SECTION_CHARS = 200_000
 
 # Bound on the page span when no section end could be located and the range
@@ -373,6 +373,9 @@ def call_claude(plan_name: str, fiscal_year: int | None,
     msg = _get_client().messages.create(
         model=MODEL,
         max_tokens=MAX_OUTPUT_TOKENS,
+        # Structured extraction through a forced tool call; thinking
+        # would be billed output spent before the schema is filled.
+        thinking={"type": "disabled"},
         # System prompt cached so subsequent CAFRs pay only the cache-read price.
         system=[{
             "type": "text",

@@ -137,7 +137,7 @@ def compose_monthly(weekly_markdowns: list[str],
         return _mock_markdown("Monthly Insights", period_start, period_end)
 
     from generate_notes import generate_note  # noqa: F401  (verifies import path)
-    from summarizer import _get_client
+    from summarizer import _get_client, message_text
 
     today_str = datetime.now(timezone.utc).strftime("%B %d, %Y")
     month_label = period_start.strftime("%B %Y")
@@ -230,9 +230,10 @@ WEEKLY BRIEFINGS:
 {weeklies_block}"""
 
     message = _get_client().messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=4096,
-        temperature=0.2,
+        model="claude-sonnet-5",
+        max_tokens=8192,
+        thinking={"type": "adaptive"},
+        output_config={"effort": "medium"},
         system=[
             {
                 "type": "text",
@@ -242,7 +243,7 @@ WEEKLY BRIEFINGS:
         ],
         messages=[{"role": "user", "content": user_prompt}],
     )
-    return message.content[0].text
+    return message_text(message)
 
 
 # ---------------------------------------------------------------------------
@@ -274,7 +275,7 @@ def compose_annual(monthlies: list[tuple[date, str]],
     if config.is_mock():
         return _mock_markdown("Annual Insights", period_start, period_end)
 
-    from summarizer import _get_client
+    from summarizer import _get_client, message_text
 
     today_str = datetime.now(timezone.utc).strftime("%B %d, %Y")
     year = period_start.year
@@ -360,9 +361,10 @@ MONTHLY BRIEFINGS:
 {monthlies_block}"""
 
     message = _get_client().messages.create(
-        model="claude-opus-4-6",
-        max_tokens=8192,
-        temperature=0.2,
+        model="claude-opus-5",
+        max_tokens=16384,
+        thinking={"type": "adaptive"},
+        output_config={"effort": "medium"},
         system=[
             {
                 "type": "text",
@@ -372,7 +374,7 @@ MONTHLY BRIEFINGS:
         ],
         messages=[{"role": "user", "content": user_prompt}],
     )
-    return message.content[0].text
+    return message_text(message)
 
 
 # ---------------------------------------------------------------------------
@@ -423,7 +425,7 @@ def compose_quarterly(monthlies: list[tuple[date, str]],
     if config.is_mock():
         return _mock_markdown(f"Quarterly Insights ({label})", period_start, period_end)
 
-    from summarizer import _get_client
+    from summarizer import _get_client, message_text
 
     today_str = datetime.now(timezone.utc).strftime("%B %d, %Y")
     n_months = len(monthlies)
@@ -507,9 +509,10 @@ MONTHLY BRIEFINGS:
 {monthlies_block}"""
 
     message = _get_client().messages.create(
-        model="claude-opus-4-6",
-        max_tokens=8192,
-        temperature=0.2,
+        model="claude-opus-5",
+        max_tokens=16384,
+        thinking={"type": "adaptive"},
+        output_config={"effort": "medium"},
         system=[
             {
                 "type": "text",
@@ -519,7 +522,7 @@ MONTHLY BRIEFINGS:
         ],
         messages=[{"role": "user", "content": user_prompt}],
     )
-    return message.content[0].text
+    return message_text(message)
 
 
 # ---------------------------------------------------------------------------

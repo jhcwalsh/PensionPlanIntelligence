@@ -46,6 +46,10 @@ PRICES: dict[str, Price] = {
     "claude-haiku-4-5-20251001": _p("1", "5", "1.25", "0.10"),
     "claude-sonnet-4-6":         _p("3", "15", "3.75", "0.30"),
     "claude-opus-4-6":           _p("5", "25", "6.25", "0.50"),
+    # Current generation, from 2026-09-09. The 4.6 rows above stay so the
+    # api_usage history they priced remains reproducible.
+    "claude-sonnet-5":           _p("2", "10", "2.50", "0.20"),
+    "claude-opus-5":             _p("5", "25", "6.25", "0.50"),
 
     # OpenRouter, DeepSeek V4 Flash. Both cache columns are zero deliberately.
     # DeepSeek does have a cache-read price (~$0.0177/M), but adapt_usage

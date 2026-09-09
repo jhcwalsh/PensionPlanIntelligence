@@ -55,11 +55,11 @@ load_dotenv(_ENV_PATH, override=True)
 
 console = Console(legacy_windows=False)
 
-MODEL = "claude-sonnet-4-6"
+MODEL = "claude-sonnet-5"
 # 16K output covers the worst case observed: ~30 alloc rows + 70 perf rows
 # + 4K-char policy text + benchmarks. With 8K we saw plans with rich
 # allocation tables silently truncate before emitting the performance array.
-MAX_OUTPUT_TOKENS = 16384
+MAX_OUTPUT_TOKENS = 21300   # 16384 tuned for Sonnet 4.6, +30% for the new tokenizer
 MAX_SECTION_CHARS = 200_000   # ~50k tokens; safe for Sonnet 4.6's 200k input
 
 # Section-header phrases that mark the start of the Investment Section
@@ -365,6 +365,9 @@ def call_claude(plan_name: str, fiscal_year: int | None,
     msg = _get_client().messages.create(
         model=MODEL,
         max_tokens=MAX_OUTPUT_TOKENS,
+        # Structured extraction through a forced tool call; thinking
+        # would be billed output spent before the schema is filled.
+        thinking={"type": "disabled"},
         # System prompt cached so subsequent CAFRs pay only the cache-read price.
         system=[{
             "type": "text",

@@ -5,7 +5,8 @@ Cost optimisations:
 - Haiku for short/simple docs; Sonnet only for large investment packs
 - Smart truncation: first 20k + keyword-rich middle chunks + last 10k (cap ~50k)
 - Hash-based deduplication: never re-summarise identical text
-- max_tokens capped at 4096 (summaries rarely need more)
+- max_tokens capped at 4096 on Haiku, 6000 on Sonnet 5 (summaries rarely
+  need more; the Sonnet figure is the old 4096 plus 30% for its tokenizer)
 - Skip clearly non-substantive documents
 - One Message Batch per run, at half the standard rate: nothing waits on a
   summary, so there is no reason to pay the interactive price. The
@@ -43,7 +44,7 @@ _ENV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
 load_dotenv(_ENV_PATH, override=True)
 console = Console(legacy_windows=False)
 
-MODEL_SONNET = "claude-sonnet-4-6"
+MODEL_SONNET = "claude-sonnet-5"
 MODEL_HAIKU = "claude-haiku-4-5-20251001"
 
 # Docs whose filenames match these patterns carry no investment intelligence
@@ -248,7 +249,9 @@ def _get_client():
 
 
 def _max_tokens(model: str) -> int:
-    return 4096 if model == MODEL_HAIKU else 4096
+    # Sonnet 5 tokenises ~30% heavier than 4.6; 4096 tuned for 4.6 would
+    # truncate equivalent output.
+    return 4096 if model == MODEL_HAIKU else 6000
 
 
 class ClaudeRefusedError(RuntimeError):
@@ -287,16 +290,27 @@ def request_params(prompt: str, model: str) -> dict:
     and the ``params`` of one batch request otherwise. Any divergence between
     the two would show up as summaries that differ by which path ran them.
     """
-    return dict(
+    params = dict(
         model=model,
         max_tokens=_max_tokens(model),
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": prompt}],
     )
+    if model != MODEL_HAIKU:
+        # Sonnet 5 thinks by default when the parameter is omitted, billed
+        # as output. A JSON summary of a document it has in front of it
+        # gains nothing from that, so it is off. Haiku 4.5 still takes the
+        # older budget_tokens form and is left alone.
+        params["thinking"] = {"type": "disabled"}
+    return params
 
 
 def message_text(message) -> str:
-    """The text of a response, or the reason there is none."""
+    """The text of a response, or the reason there is none.
+
+    The first *text* block, not content[0]: with adaptive thinking on, a
+    thinking block comes first and has no .text.
+    """
     if not message.content:
         diagnostic = (
             f"stop_reason={message.stop_reason}, "
@@ -306,7 +320,13 @@ def message_text(message) -> str:
         if message.stop_reason == "refusal":
             raise ClaudeRefusedError(f"Claude refused ({diagnostic})")
         raise RuntimeError(f"Claude returned empty content ({diagnostic})")
-    return message.content[0].text
+    for block in message.content:
+        # A block with no type at all is treated as text: every SDK block
+        # carries one, so this only matters to hand-rolled stand-ins.
+        if getattr(block, "type", "text") == "text":
+            return block.text
+    raise RuntimeError(
+        f"Claude returned no text block (stop_reason={message.stop_reason})")
 
 
 @retry(

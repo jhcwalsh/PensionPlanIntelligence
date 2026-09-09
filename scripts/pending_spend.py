@@ -104,7 +104,7 @@ def summarization_backlog(session, plan_ids, ratio):
     rows = q.all()
     total = Decimal(0)
     by_model = {"claude-haiku-4-5-20251001": [0, Decimal(0)],
-                "claude-sonnet-4-6": [0, Decimal(0)]}
+                "claude-sonnet-5": [0, Decimal(0)]}
     for _plan, doc_type, packed in rows:
         chars = int((packed or 0) * ratio)
         tokens_in = max(1, chars // CHARS_PER_TOKEN)
@@ -116,7 +116,7 @@ def summarization_backlog(session, plan_ids, ratio):
         elif doc_type == "minutes" and chars < 15_000:
             model = "claude-haiku-4-5-20251001"
         elif chars >= 20_000:
-            model = "claude-sonnet-4-6"     # assumed keyword hit; see docstring
+            model = "claude-sonnet-5"     # assumed keyword hit; see docstring
         else:
             model = "claude-haiku-4-5-20251001"
 

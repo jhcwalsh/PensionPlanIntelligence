@@ -208,10 +208,23 @@ Three Claude models plus one OpenRouter model, all priced in `costs.PRICES`:
   (`choose_model`), vision OCR (`extractor.py`), the daily digest's per-plan
   paragraphs (`insights/daily.py`), IPS verification, the asset-class
   normaliser. Transcription and restatement.
-- **Sonnet 4.6** — investment packs of 20k+ chars in the summariser, the
+- **Sonnet 5** — investment packs of 20k+ chars in the summariser, the
   weekly and monthly briefings, CAFR / IPS / performance-report extraction,
   the manager normaliser. Judgement over long inputs.
-- **Opus 4.6** — quarterly and annual briefings only.
+- **Opus 5** — quarterly and annual briefings only.
+
+Sonnet 5 and Opus 5 (moved to on 2026-09-09, from 4.6) reject
+`temperature`/`top_p`/`top_k` with a 400 and run adaptive thinking when
+the parameter is omitted, billed as output. The policy here: **thinking
+off** for summaries, the four extractors and the manager normaliser
+(`thinking={"type": "disabled"}`), **adaptive at medium effort** for the
+weekly/monthly/quarterly/annual briefings. With thinking on, the text is
+not `content[0]` — go through `summarizer.message_text`. Their tokenizer
+is ~30% heavier than 4.6's, so every `max_tokens` was raised by that
+much; `costs.PRICES` keeps the 4.6 rows so old `api_usage` rows stay
+reproducible. Haiku 4.5 is unchanged and still accepts `temperature`.
+The SDK pin is `anthropic==0.125.0`: 0.42.0 predates the `thinking` and
+`output_config` parameters.
 - **DeepSeek V4 Flash via OpenRouter** — schema-constrained section reads,
   manual runs only (`llm_openrouter.py`).
 
