@@ -311,7 +311,11 @@ def _synthesize_via_anthropic(
     # The shared factory rather than a directly constructed client: it
     # returns an instrumented one, so this call's spend is recorded like
     # every other. Built here directly, it was invisible.
-    from summarizer import MODEL_SONNET, _get_client
+    # Haiku: the prompt forbids inference and editorialising, the input is a
+    # few already-structured summaries and the output is one paragraph. That
+    # is restatement, not judgement, and Haiku does it at a third of the
+    # price the digest paid on Sonnet.
+    from summarizer import MODEL_HAIKU, _get_client
 
     client = _get_client()
     doc_blocks = "\n".join(_format_doc_block(d, summaries_by_doc.get(d.id)) for d in docs)
@@ -322,7 +326,7 @@ def _synthesize_via_anthropic(
         f"{doc_blocks}"
     )
     resp = client.messages.create(
-        model=MODEL_SONNET,
+        model=MODEL_HAIKU,
         max_tokens=600,
         temperature=0,
         system=_DAILY_SYNTH_SYSTEM,
