@@ -120,6 +120,8 @@ _CADENCE_DISPLAY: dict[str, tuple[str, str, str]] = {
     "quarterly":  ("Quarterly", "CIO Insights",       "quarterly_cio_insights"),
     "annual":     ("Annual",  "CIO Insights",         "annual_cio_insights"),
     "daily":      ("Daily",   "Pension Digest",       "daily_digest"),
+    # Private: emailed to the approval recipient only. See insights/watch.py.
+    "watch":      ("Weekly Watch", "Albourne, consultant RFPs & senior moves", "weekly_watch"),
 }
 
 

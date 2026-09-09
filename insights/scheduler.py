@@ -65,6 +65,11 @@ def main(argv: list[str] | None = None) -> int:
     p_daily.add_argument("--force", action="store_true",
                          help="Expire today's existing publication and re-send")
 
+    p_watch = sub.add_parser(
+        "watch", help="Weekly watch: Albourne, consultant RFPs, senior moves (private)")
+    p_watch.add_argument("--force", action="store_true",
+                         help="Expire this period's existing publication and re-send")
+
     args = parser.parse_args(argv)
 
     logging.basicConfig(
@@ -106,6 +111,10 @@ def main(argv: list[str] | None = None) -> int:
             from insights.daily import run_daily_cycle
             pub = run_daily_cycle(force=args.force)
             print(f"daily cycle complete: publication_id={pub.id} status={pub.status}")
+        elif args.cycle == "watch":
+            from insights.watch import run_watch_cycle
+            pub = run_watch_cycle(force=args.force)
+            print(f"watch cycle complete: publication_id={pub.id} status={pub.status}")
         else:
             parser.error(f"unknown cycle: {args.cycle}")
         return 0

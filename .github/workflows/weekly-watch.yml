@@ -1,0 +1,75 @@
+name: weekly-watch
+
+# Private weekly watch: Albourne mentions, consultant RFPs and searches,
+# senior hires and departures, scanned from the documents downloaded in
+# the last seven days. Emailed to APPROVAL_EMAIL_RECIPIENT only. No
+# notes/ file, no subscriber fan-out, not listed on the public site.
+#
+# Pure composition over documents already in the DB. Runs Sundays at
+# 13:00 UTC, after the silent weekly compose (12:30 UTC).
+
+on:
+  schedule:
+    - cron: "0 13 * * 0"   # Sundays 13:00 UTC
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "INSIGHTS_MODE (mock for dry-run, live for real send)"
+        required: false
+        default: "live"
+        type: choice
+        options:
+          - live
+          - mock
+      force:
+        description: "Expire this period's existing publication and re-send"
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      INSIGHTS_MODE: ${{ github.event.inputs.mode || 'live' }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      APPROVAL_EMAIL_FROM: ${{ secrets.APPROVAL_EMAIL_FROM }}
+      APPROVAL_EMAIL_RECIPIENT: ${{ secrets.APPROVAL_EMAIL_RECIPIENT }}
+      APPROVAL_BASE_URL: https://pensiongraph.com
+      # Job level, not per step: an unset DATABASE_URL means SQLite, which on
+      # a runner is an empty file and a green job that scanned nothing.
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-pipeline.txt
+
+      - name: Verify required secrets are set
+        run: |
+          missing=()
+          [ -z "$ANTHROPIC_API_KEY" ] && missing+=("ANTHROPIC_API_KEY")
+          [ -z "$RESEND_API_KEY" ] && missing+=("RESEND_API_KEY")
+          [ -z "$APPROVAL_EMAIL_FROM" ] && missing+=("APPROVAL_EMAIL_FROM")
+          [ -z "$APPROVAL_EMAIL_RECIPIENT" ] && missing+=("APPROVAL_EMAIL_RECIPIENT")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "Missing required secrets: ${missing[*]}"
+            exit 1
+          fi
+          echo "All required secrets present."
+
+      - name: Send weekly watch
+        run: |
+          ARGS=""
+          if [ "${{ github.event.inputs.force }}" = "true" ]; then ARGS="--force"; fi
+          python -m insights.scheduler watch $ARGS

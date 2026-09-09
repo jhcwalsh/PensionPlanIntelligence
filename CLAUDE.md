@@ -268,7 +268,13 @@ Two flags on `finalize_and_send` carry the differences:
   Monthly/quarterly/annual set it; daily and weekly don't.
 
 **The cascade is the thing to remember**: daily is standalone, weekly feeds
-monthly, and monthly feeds both quarterly and annual. Deleting a cadence
+monthly, and monthly feeds both quarterly and annual. The `watch` cadence
+(`insights/watch.py`, added 2026-09-09) is standalone too: a private
+keyword-scan-plus-one-Sonnet-call note on Albourne mentions, consultant
+RFPs and senior hires/departures over the last seven days of downloads,
+`notify=True, archive=False`, sent to `APPROVAL_EMAIL_RECIPIENT` only. It
+is deliberately absent from `subscribers.CADENCES` and the public Weekly
+tab lists the `weekly` cadence by name, so it never reaches the site. Deleting a cadence
 breaks the one above it a period later, not immediately.
 
 ### Archive / Drafts / Admin password gate
@@ -311,6 +317,7 @@ Render hosts one web service: Streamlit (`pension-plan-intelligence`), reading N
 | Weekly meeting-recordings catalogue (discover sources → poll via yt-dlp → email digest; no video downloads) | Task Scheduler Sat 08:00 local | local Windows | `scripts/run_recordings.bat --no-downloads` |
 | WAF-blocked plans (5 materials + 2 CAFR, from a residential IP) | launchd 07:30 local — **installed, not yet loaded** | Mac mini | `scripts/run_waf_plans.sh` |
 | Monthly insights composition + auto-publish | cron 1st of month 18:00 UTC | GHA | `.github/workflows/monthly-insights.yml` |
+| Weekly Watch — Albourne, consultant RFPs, senior moves (private: approval recipient only) | cron Sundays 13:00 UTC | GHA | `.github/workflows/weekly-watch.yml` |
 | Quarterly insights composition + auto-publish | cron 1st of Jan/Apr/Jul/Oct 19:00 UTC | GHA | `.github/workflows/quarterly-insights.yml` |
 | Annual insights composition + auto-publish | cron Jan 5 19:00 UTC | GHA | `.github/workflows/annual-insights.yml` |
 
