@@ -6,7 +6,7 @@ Three-tier PDF strategy:
      text layer.
   2. pymupdf (fitz) — secondary text-layer extraction; tolerates a
      wider range of broken PDFs.
-  3. Claude Sonnet vision — page-by-page transcription for image-only
+  3. Claude Haiku vision — page-by-page transcription for image-only
      PDFs (scanned minutes, image-export board packs). Better at tables
      and multi-column layouts than Tesseract; costs ~$0.02–0.05 per
      multi-page document. Triggered only when both text-layer paths
@@ -51,7 +51,7 @@ MAX_VISION_OCR_PAGES = 100
 # board pack isn't worth transcribing even partially).
 OCR_DOC_TYPES = {"cafr", "agenda", "minutes"}
 
-# Vision OCR is the one part of text extraction that costs money (Sonnet, per
+# Vision OCR is the one part of text extraction that costs money (Haiku, per
 # rendered page). Set False -- `pipeline.py --no-ocr` -- to extract everything
 # a text layer will give up for free and record the rest as `ocr_deferred`,
 # which `scripts/pending_spend.py` prices. Deferring loses nothing: the
@@ -60,7 +60,7 @@ OCR_ENABLED = True
 MAX_VISION_OCR_DOC_PAGES = 50
 
 # 2x render is roughly 1200x1600 px for letter-size — plenty of resolution for
-# Sonnet vision and only modestly more image tokens than 1x.
+# Haiku vision and only modestly more image tokens than 1x.
 VISION_OCR_RENDER_SCALE = 2
 
 VISION_OCR_SYSTEM_PROMPT = (
@@ -136,14 +136,14 @@ class OcrInfo:
 
 
 def extract_pdf_ocr(path: str) -> tuple[str, int, OcrInfo]:
-    """OCR fallback using Claude Sonnet vision.
+    """OCR fallback using Claude Haiku vision.
 
-    Renders each page with pymupdf and asks Sonnet for verbatim
+    Renders each page with pymupdf and asks Haiku for verbatim
     transcription. Replaces the prior Tesseract path: better at tables,
-    multi-column layouts, and scanned forms, at a cost of ~$0.02–0.05
-    per multi-page document. Failure on a single page (network blip,
-    transient API error) is logged and skipped — other pages still
-    contribute. The function returns whatever was successfully
+    multi-column layouts, and scanned forms, at ~$0.004 a page on Haiku
+    (Sonnet, the original choice, was ~$0.013 a page for the same copying).
+    Failure on a single page (network blip, transient API error) is logged
+    and skipped — other pages still contribute. The function returns whatever was successfully
     transcribed; an empty result causes ``extract_document`` to mark
     the row ``failed`` as before.
 
@@ -179,7 +179,7 @@ def _extract_pdf_ocr(path: str) -> tuple[str, int, OcrInfo]:
         return "", len(doc), OcrInfo(reason="page_cap")
 
     try:
-        from summarizer import MODEL_SONNET, _get_client
+        from summarizer import MODEL_HAIKU, _get_client
     except ImportError as e:
         console.print(f"  [yellow]OCR skipped: anthropic SDK not available ({e})[/yellow]")
         return "", 0, OcrInfo()
@@ -208,7 +208,7 @@ def _extract_pdf_ocr(path: str) -> tuple[str, int, OcrInfo]:
             png_b64 = base64.b64encode(pix.tobytes("png")).decode("ascii")
             try:
                 msg = client.messages.create(
-                    model=MODEL_SONNET,
+                    model=MODEL_HAIKU,
                     max_tokens=4096,
                     system=VISION_OCR_SYSTEM_PROMPT,
                     messages=[{

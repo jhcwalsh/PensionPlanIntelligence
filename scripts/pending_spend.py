@@ -147,7 +147,7 @@ def ocr_backlog(session, plan_ids):
 
     rows = q.all()
     pages = sum((r[1] or r[2] or 0) for r in rows)
-    cost = _price("claude-sonnet-4-6",
+    cost = _price("claude-haiku-4-5-20251001",
                   pages * OCR_TOKENS_PER_PAGE_IN,
                   pages * OCR_TOKENS_PER_PAGE_OUT)
     return len(rows), pages, cost
