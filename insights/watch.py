@@ -203,8 +203,19 @@ outcomes, motives or timing that are not stated.
 
 Drop false positives. A "search" for an investment manager is not a \
 consultant search. A consultant *presenting* is not an RFP. A CIO \
-*presenting* a report is not a hire or departure. If a category has nothing \
-real in it, write exactly: Nothing this week.
+*presenting* a report is not a hire or departure.
+
+Consultant RFPs and searches means investment, actuarial, custodian or \
+similar advisory consultants engaged by the plan. RFPs for legal counsel, \
+auditors, software or other vendors do not belong in that section.
+
+Senior hires and departures means the plan's own senior staff and trustees: \
+CIO, deputy CIO, executive director, CEO, general counsel, COO, CFO, board \
+chair. Personnel changes at external investment managers, consultants or \
+their parent firms do not belong, however senior; nor do farewells to \
+support staff.
+
+If a category has nothing real in it, write exactly: Nothing this week.
 
 Start with the H1 given to you. No preamble, no closing remarks, no code \
 fences."""

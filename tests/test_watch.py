@@ -247,3 +247,11 @@ def test_scheduler_dispatches_the_watch_cycle(monkeypatch):
     from insights import scheduler
     assert scheduler.main(["watch", "--force"]) == 0
     assert calls == [{"force": True}]
+
+
+def test_prompt_confines_moves_to_plan_staff_and_rfps_to_consultants():
+    """The first issue drifted: TPG's CFO and a board assistant's farewell
+    under senior moves, an outside-counsel RFP under consultant searches."""
+    p = watch._SYSTEM_PROMPT
+    assert "external investment managers" in p and "trustees" in p
+    assert "legal counsel" in p
