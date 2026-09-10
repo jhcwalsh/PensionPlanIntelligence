@@ -186,20 +186,37 @@ def _apply_column_migrations() -> None:
 
 @st.cache_resource
 def _db_session_singleton():
+    """One Session *per thread*, not one Session.
+
+    Streamlit runs every script execution on its own thread, and a run the
+    user interrupts overlaps the next one: the old run is still inside
+    _release_db_session()'s rollback while the new run's get_db_session()
+    finds what looks like a dirty session and tries to heal it. A Session is
+    not thread-safe, and on 2026-09-09 that overlap surfaced on the
+    Performance page as
+
+        IllegalStateChangeError: Method 'close()' can't be called here;
+        method 'rollback()' is already in progress
+
+    A scoped_session registry gives each thread its own Session on first
+    use; _release_db_session() removes it at the end of the run, so nothing
+    is held between reruns and the connection goes back to the pool.
+    """
+    from sqlalchemy.orm import scoped_session
     init_db()
     _apply_column_migrations()
-    return get_session()
+    return scoped_session(get_session)
 
 
 def get_db_session():
-    """The app's shared Session, guaranteed not to be mid-transaction.
+    """This thread's Session, guaranteed not to be mid-transaction.
 
     The rollback is defensive: it heals a session left dirty by an earlier
     rerun that raised between its first query and _release_db_session().
-    Without it, one traceback poisons the cached session for the life of
-    the process.
+    Without it, one traceback poisons the session for the life of the
+    thread.
     """
-    session = _db_session_singleton()
+    session = _db_session_singleton()()
     if session.in_transaction():
         try:
             session.rollback()
@@ -238,15 +255,18 @@ def _release_db_session() -> None:
     this at the cutover; the Streamlit app was not.
     """
     try:
-        session = _db_session_singleton()
+        registry = _db_session_singleton()
     except Exception:                          # noqa: BLE001
         return                                 # never built one; nothing to end
+    # remove() closes this thread's Session, which rolls back whatever it
+    # holds and returns its connection to the pool, then forgets it. A close
+    # on a connection the server already terminated raises; the registry is
+    # cleared regardless so the next run starts from nothing.
     try:
-        if session.in_transaction():
-            session.rollback()
+        registry.remove()
     except Exception:                          # noqa: BLE001
         try:
-            session.close()
+            registry.registry.clear()
         except Exception:                      # noqa: BLE001
             pass
 

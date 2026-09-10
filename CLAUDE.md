@@ -164,8 +164,13 @@ What this means when you touch document code:
 - Reading `doc.extracted_text` still works and returns the same `str`. It emits an
   extra `SELECT` on first access per instance, and requires the object still be
   bound to a session — a detached `Document` raises `DetachedInstanceError` where
-  it used to return text. `app.py` is safe: its session is a long-lived
-  `@st.cache_resource`.
+  it used to return text. `app.py` is safe within a rerun: `get_db_session()`
+  hands each Streamlit script thread its own Session from a cached
+  `scoped_session` registry, removed at the end of the run. (It was one
+  process-wide Session until 2026-09-09, when two overlapping reruns
+  rolling back and healing the same object crashed the Performance page
+  with `IllegalStateChangeError`.) Objects that must outlive a rerun go
+  through `st.cache_data`, which pickles them detached anyway.
 - **If you loop over many documents reading the text, add
   `.options(undefer(Document.extracted_text))`** or you turn one query into N+1.
   `fetch_cafr`, `fetch_ips`, `discover_video_sources`, `summarizer.run_summarizer`

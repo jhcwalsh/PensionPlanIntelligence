@@ -168,3 +168,44 @@ def test_main_is_wrapped_so_the_release_always_runs():
     assert "finally:" in tail, "main() is not wrapped in try/finally"
     assert "_release_db_session()" in tail, (
         "the rerun boundary does not release the session")
+
+
+def test_each_script_thread_gets_its_own_session(app_module):
+    """Reported from production on 2026-09-09: entering a date on the
+    Performance page rendered
+
+        sqlalchemy.exc.IllegalStateChangeError: Method 'close()' can't be
+        called here; method 'rollback()' is already in progress
+
+    from get_db_session(). SQLAlchemy resets that guard in a finally, so
+    the only way close() can see a rollback "in progress" is another thread
+    inside rollback() on the *same* Session. Streamlit runs each script
+    execution on its own thread and an interrupted run overlaps the next:
+    the old run was rolling back in _release_db_session() while the new
+    run's get_db_session() tried to heal what looked like a dirty session.
+    A Session is not thread-safe; each thread needs its own.
+    """
+    import threading
+    from sqlalchemy import text
+
+    # Warm the cache first, as production always is. Two threads racing the
+    # first call each compute their own Session before either is cached,
+    # which makes an unfixed app look fixed.
+    app_module.get_db_session()
+    app_module._release_db_session()
+
+    seen = {}
+
+    def run(name):
+        session = app_module.get_db_session()
+        session.execute(text("select 1"))
+        seen[name] = session       # the object, not id(): a freed Session's
+        app_module._release_db_session()   # address is reused by the next one
+
+    threads = [threading.Thread(target=run, args=(n,)) for n in ("a", "b")]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(5)
+
+    assert seen["a"] is not seen["b"], "two script threads shared one Session"
