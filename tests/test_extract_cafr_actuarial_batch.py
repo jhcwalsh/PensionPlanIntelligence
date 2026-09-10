@@ -180,3 +180,61 @@ def test_sync_mode_calls_create_directly(tmp_db, live, client, tmp_path):
     assert counts["saved"] == 1
     assert len(client.sync) == 1
     assert client.messages.batches.created == []
+
+
+# ---------------------------------------------------------------------------
+# The wait must not hold a transaction open, and one bad save must not
+# poison the rest. Neon terminates a transaction idle for five minutes,
+# which is shorter than a 105-request batch: on 2026-09-09 every one of
+# 105 paid results failed to save on the timed-out session.
+# ---------------------------------------------------------------------------
+
+def test_no_transaction_is_open_while_waiting_for_the_batch(tmp_db, live, client, tmp_path, monkeypatch):
+    pdf = tmp_path / "cafr.pdf"; pdf.write_bytes(b"%PDF-1.4 stub")
+    _seed(local_path=str(pdf))
+    sessions = []
+    real = eca.get_session
+    monkeypatch.setattr(eca, "get_session", lambda: sessions.append(real()) or sessions[-1])
+    seen = {}
+    fb = client.messages.batches
+    orig_create = fb.create
+    fb.create = lambda requests: seen.update(open=sessions[0].in_transaction()) or orig_create(requests)
+
+    eca.run_extraction(["p1"], poll_seconds=0)
+
+    assert seen["open"] is False
+
+
+def test_one_failed_save_does_not_block_the_others(tmp_db, live, client, tmp_path, monkeypatch):
+    pdf = tmp_path / "cafr.pdf"; pdf.write_bytes(b"%PDF-1.4 stub")
+    first, second = _seed(local_path=str(pdf), n=2)
+    real_save = eca.save_actuarial
+
+    def save(session, doc, payload, **kw):
+        if doc.id == first:
+            raise RuntimeError("boom")
+        return real_save(session, doc, payload, **kw)
+
+    monkeypatch.setattr(eca, "save_actuarial", save)
+
+    counts = eca.run_extraction(["p1"], poll_seconds=0)
+
+    assert counts == {**counts, "saved": 1, "failed": 1}
+    (row,) = get_session().query(CafrActuarial).all()
+    assert row.document_id == second
+
+
+def test_resume_collects_an_existing_batch_without_resubmitting_or_rebilling(
+        tmp_db, live, client, tmp_path, monkeypatch):
+    monkeypatch.setenv("LLM_MODE", "live")
+    monkeypatch.delenv("INSIGHTS_MODE", raising=False)
+    pdf = tmp_path / "cafr.pdf"; pdf.write_bytes(b"%PDF-1.4 stub")
+    (doc_id,) = _seed(local_path=str(pdf))
+    fb = client.messages.batches
+    fb.created.append([{"custom_id": str(doc_id), "params": {}}])   # the earlier, paid run
+
+    counts = eca.run_extraction(["p1"], poll_seconds=0, batch_id="b1")
+
+    assert counts["saved"] == 1
+    assert len(fb.created) == 1
+    assert get_session().query(ApiUsage).count() == 0

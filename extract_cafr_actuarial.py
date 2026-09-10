@@ -624,16 +624,27 @@ def extract_one(session, doc: Document, plan: Plan) -> str:
 
 
 def _run_batch(session, pendings: list[PendingExtract],
-               poll_seconds, timeout_minutes) -> dict[str, int]:
-    """One batch for every pending CAFR; save each result. Counts by outcome."""
+               poll_seconds, timeout_minutes,
+               batch_id: str | None = None) -> dict[str, int]:
+    """One batch for every pending CAFR; save each result. Counts by outcome.
+
+    ``batch_id`` collects a batch an earlier run paid for but could not
+    save. Its spend was recorded then, so it is not recorded again.
+    """
     counts = {"saved": 0, "failed": 0}
     by_id = {str(p.doc.id): p for p in pendings}
-    requests = [{"custom_id": str(p.doc.id),
-                 "params": request_params(p.plan.name, p.doc.fiscal_year, p.section_text)}
-                for p in pendings]
+    requests = [] if batch_id else [
+        {"custom_id": str(p.doc.id),
+         "params": request_params(p.plan.name, p.doc.fiscal_year, p.section_text)}
+        for p in pendings]
+
+    # The prepare pass ran queries, so a transaction is open. Close it before
+    # the wait: Neon terminates a transaction idle for five minutes, and on
+    # 2026-09-09 that cost every one of 105 paid results.
+    session.commit()
     results = batching.run_message_batch(
         _get_client(), requests, poll_seconds=poll_seconds,
-        timeout_minutes=timeout_minutes, log=console.print)
+        timeout_minutes=timeout_minutes, batch_id=batch_id, log=console.print)
     for item in results:
         pending = by_id.get(item.custom_id)
         if pending is None:
@@ -645,13 +656,15 @@ def _run_batch(session, pendings: list[PendingExtract],
             counts["failed"] += 1
             continue
         usage = getattr(result.message, "usage", None)
-        if usage is not None and not costs.mock_mode():
+        if usage is not None and batch_id is None and not costs.mock_mode():
             import database
             database.record_api_usage(MODEL, usage, batch=True)
         try:
             payload = payload_from(result.message)
             finish_one(session, pending, payload)
         except Exception as e:  # noqa: BLE001
+            # One document's failure must not poison the session for the rest.
+            session.rollback()
             console.print(f"  [red]{pending.label}: {e}[/red]")
             counts["failed"] += 1
             continue
@@ -662,9 +675,10 @@ def _run_batch(session, pendings: list[PendingExtract],
 def run_extraction(plan_ids: list[str] | None = None,
                    limit: int | None = None, mode: str | None = None,
                    poll_seconds: float | None = None,
-                   timeout_minutes: float | None = None) -> dict[str, int]:
+                   timeout_minutes: float | None = None,
+                   batch_id: str | None = None) -> dict[str, int]:
     """``mode`` is "batch" (default) or "sync". Mock mode is always sync: it
-    never reaches a client."""
+    never reaches a client. ``batch_id`` resumes an earlier run's batch."""
     mode = mode or os.environ.get("CAFR_EXTRACT_MODE", "batch")
     if os.environ.get("LLM_MODE") == "mock":
         mode = "sync"
@@ -717,7 +731,8 @@ def run_extraction(plan_ids: list[str] | None = None,
             counts[status] = counts.get(status, 0) + 1
 
         if pendings:
-            batch_counts = _run_batch(session, pendings, poll_seconds, timeout_minutes)
+            batch_counts = _run_batch(session, pendings, poll_seconds, timeout_minutes,
+                                      batch_id=batch_id)
             counts["saved"] += batch_counts["saved"]
             counts["failed"] += batch_counts["failed"]
     finally:
@@ -738,12 +753,15 @@ def main():
                         help="Cap the number of documents processed.")
     parser.add_argument("--sync", action="store_true",
                         help="One call per document instead of one Message Batch.")
+    parser.add_argument("--resume-batch", metavar="MSGBATCH_ID", default=None,
+                        help="Collect an earlier run's batch instead of submitting one.")
     args = parser.parse_args()
 
     # Its own process, so refresh_cafrs' label does not reach it.
     costs.label_process("cafr_extract")
     counts = run_extraction(plan_ids=args.plan_ids or None, limit=args.limit,
-                            mode="sync" if args.sync else None)
+                            mode="sync" if args.sync else None,
+                            batch_id=args.resume_batch)
     sys.exit(0 if not counts.get("failed") else 1)
 
 

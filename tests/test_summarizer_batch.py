@@ -234,3 +234,19 @@ def test_sync_mode_calls_messages_create_directly(client, session, monkeypatch):
     assert [c["model"] for c in client.sync_calls] == [summarizer.MODEL_HAIKU]
     (row,) = session.query(Summary).all()
     assert row.document_id == doc_id
+
+
+def test_no_transaction_is_open_while_waiting_for_the_batch(client, session, monkeypatch):
+    """Neon terminates a transaction idle for five minutes; a batch can take longer."""
+    _doc(session, "agenda.pdf", SHORT)
+    sessions = []
+    real = summarizer.get_session
+    monkeypatch.setattr(summarizer, "get_session", lambda: sessions.append(real()) or sessions[-1])
+    seen = {}
+    fb = client.messages.batches
+    orig_create = fb.create
+    fb.create = lambda requests: seen.update(open=sessions[0].in_transaction()) or orig_create(requests)
+
+    summarizer.run_summarizer(poll_seconds=0)
+
+    assert seen["open"] is False

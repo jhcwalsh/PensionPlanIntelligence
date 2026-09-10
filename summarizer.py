@@ -514,18 +514,24 @@ BATCH_TIMEOUT_MINUTES = int(os.environ.get("SUMMARIZE_BATCH_TIMEOUT_MIN", "180")
 BATCH_POLL_SECONDS = 30
 
 
-def _run_batch(client, pendings: list[PendingCall],
-               poll_seconds: float, timeout_minutes: float) -> list:
-    """One batch for every pending call; results in the API's order.
-
-    Anything not summarised — an ``errored`` result, or one caught by a
-    timeout cancellation — is picked up by the next run.
-    """
-    requests = [
+def _batch_requests(pendings: list[PendingCall]) -> list[dict]:
+    return [
         {"custom_id": str(p.doc.id),
          "params": request_params(p.prompt, p.model)}
         for p in pendings
     ]
+
+
+def _run_batch(client, requests: list[dict],
+               poll_seconds: float, timeout_minutes: float) -> list:
+    """One batch for the prebuilt requests; results in the API's order.
+
+    Anything not summarised — an ``errored`` result, or one caught by a
+    timeout cancellation — is picked up by the next run. Takes requests
+    rather than pendings so nothing touches an ORM object between the
+    caller's commit and the wait: reading an expired attribute would
+    open a transaction again.
+    """
     return batching.run_message_batch(
         client, requests, poll_seconds=poll_seconds,
         timeout_minutes=timeout_minutes, log=console.print)
@@ -558,12 +564,19 @@ def _collect_batch(pendings: list[PendingCall], results, session) -> dict:
             # this is where its spend gets recorded — at the batch rate.
             import database
             database.record_api_usage(pending.model, usage, batch=True)
-        summary = finish_document(pending, message, session)
-        if summary is None:
+        try:
+            summary = finish_document(pending, message, session)
+            if summary is None:
+                counts["failed"] += 1
+                continue
+            session.add(summary)
+            session.commit()
+        except Exception as e:  # noqa: BLE001
+            # One document's failure must not poison the session for the rest.
+            session.rollback()
+            console.print(f"  [red]{pending.doc.filename}: {_unwrap(e)}[/red]")
             counts["failed"] += 1
             continue
-        session.add(summary)
-        session.commit()
         counts["haiku" if pending.model == MODEL_HAIKU else "sonnet"] += 1
     return counts
 
@@ -636,7 +649,12 @@ def run_summarizer(doc_ids: list[int] = None, mode: str | None = None,
                 skip_count += 1
 
         if pendings:
-            results = _run_batch(_get_client(), pendings, poll_seconds, timeout_minutes)
+            # Build the requests, then close the transaction the prepare pass
+            # opened, then wait: Neon terminates a transaction idle for five
+            # minutes, and a batch can take longer.
+            requests = _batch_requests(pendings)
+            session.commit()
+            results = _run_batch(_get_client(), requests, poll_seconds, timeout_minutes)
             counts = _collect_batch(pendings, results, session)
             haiku_count += counts["haiku"]
             sonnet_count += counts["sonnet"]

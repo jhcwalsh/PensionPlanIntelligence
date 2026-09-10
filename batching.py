@@ -20,6 +20,7 @@ DEFAULT_POLL_SECONDS = 30
 def run_message_batch(client, requests: list[dict], *,
                       poll_seconds: float | None = None,
                       timeout_minutes: float | None = None,
+                      batch_id: str | None = None,
                       log=print) -> list:
     """Submit ``requests`` (each ``{"custom_id", "params"}``) and return results.
 
@@ -27,14 +28,26 @@ def run_message_batch(client, requests: list[dict], *,
     cancellation is not immediate, and requests caught mid-flight come back
     ``canceled`` rather than billed. The caller decides what an unsuccessful
     result means for its document; usually "try again next run".
+
+    ``batch_id`` resumes a batch an earlier run paid for and failed to
+    collect: nothing is submitted, the existing batch is polled and its
+    results returned. Results stay retrievable for 29 days.
+
+    **Callers must not hold a database transaction open across this call.**
+    Neon terminates a transaction idle for five minutes, and a batch can
+    take longer; commit before calling and start fresh after.
     """
-    if not requests:
+    if not requests and batch_id is None:
         return []
     poll_seconds = DEFAULT_POLL_SECONDS if poll_seconds is None else poll_seconds
     timeout_minutes = DEFAULT_TIMEOUT_MINUTES if timeout_minutes is None else timeout_minutes
 
-    batch = client.messages.batches.create(requests=requests)
-    log(f"  Batch {batch.id} submitted: {len(requests)} requests")
+    if batch_id is not None:
+        batch = client.messages.batches.retrieve(batch_id)
+        log(f"  Batch {batch.id} resumed ({batch.processing_status})")
+    else:
+        batch = client.messages.batches.create(requests=requests)
+        log(f"  Batch {batch.id} submitted: {len(requests)} requests")
 
     started = time.monotonic()
     cancelled = False

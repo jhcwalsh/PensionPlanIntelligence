@@ -59,3 +59,11 @@ def test_result_detail_reads_the_nested_error_message():
         error=types.SimpleNamespace(error=types.SimpleNamespace(message="overloaded")))
     assert batching.result_detail(errored) == "overloaded"
     assert batching.result_detail(types.SimpleNamespace(type="expired")) == "expired"
+
+
+def test_resuming_an_existing_batch_skips_create():
+    fb = FakeBatches()
+    fb.created.append([{"custom_id": "9", "params": {}}])   # what the earlier run submitted
+    out = batching.run_message_batch(_client(fb), [], poll_seconds=0, batch_id="b1")
+    assert len(fb.created) == 1
+    assert [r.custom_id for r in out] == ["9"]
