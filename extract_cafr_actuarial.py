@@ -19,6 +19,15 @@ Idempotent per `(document_id, prompt_version)`: if a `CafrActuarial` row
 already exists for the document with a matching `text_hash` and
 `prompt_version`, we skip it. Otherwise we delete the old row and replace it.
 
+The PDF comes from disk when it is there and from R2 otherwise
+(`pdf_store.document_pdf`). A GitHub runner holds only the CAFRs it fetched
+in the same run, so before this every other CAFR came back "no_section"
+when the truth was "no file" — 97 of 137 on 2026-09-01.
+
+The model calls go out as one Message Batch per run (half the standard
+rate; nothing waits on a monthly job). `--sync` keeps the one-call-per-
+document path for a local look at a single plan.
+
 Usage:
     python extract_cafr_actuarial.py                     # all unextracted CAFRs
     python extract_cafr_actuarial.py calpers ktrs         # specific plans
@@ -30,11 +39,14 @@ import hashlib
 import os
 import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 import anthropic
 
+import batching
 import costs
+import pdf_store
 import fitz  # PyMuPDF
 from dotenv import load_dotenv
 from rich.console import Console
@@ -363,14 +375,19 @@ def call_claude(plan_name: str, fiscal_year: int | None,
     """
     if os.environ.get("LLM_MODE") == "mock":
         return MOCK_PAYLOAD
+    return payload_from(_get_client().messages.create(
+        **request_params(plan_name, fiscal_year, section_text)))
 
+
+def request_params(plan_name: str, fiscal_year: int | None,
+                   section_text: str) -> dict:
+    """The Messages API request for one CAFR: shared by both paths."""
     user_message = (
         f"Plan: {plan_name}\n"
         f"Fiscal year: {fiscal_year if fiscal_year else '(unknown)'}\n\n"
         f"--- ACTUARIAL SECTION TEXT ---\n{section_text}"
     )
-
-    msg = _get_client().messages.create(
+    return dict(
         model=MODEL,
         max_tokens=MAX_OUTPUT_TOKENS,
         # Structured extraction through a forced tool call; thinking
@@ -387,16 +404,17 @@ def call_claude(plan_name: str, fiscal_year: int | None,
         messages=[{"role": "user", "content": user_message}],
     )
 
+
+def payload_from(msg) -> dict:
+    """The tool input out of a response, or why there is none."""
     if msg.stop_reason == "max_tokens":
         console.print(
             f"  [yellow]warning: model hit max_tokens "
             f"(in={msg.usage.input_tokens} out={msg.usage.output_tokens})[/yellow]"
         )
-
     for block in msg.content:
         if block.type == "tool_use" and block.name == "record_actuarial_data":
             return block.input
-
     raise RuntimeError(
         f"Claude did not call record_actuarial_data; stop_reason={msg.stop_reason}"
     )
@@ -483,36 +501,26 @@ def save_actuarial(session, doc: Document, payload: dict, *,
 # Per-document orchestration
 # ---------------------------------------------------------------------------
 
-def extract_one(session, doc: Document, plan: Plan) -> str:
-    """Process one CAFR document. Returns a status string."""
-    label = f"{plan.abbreviation or doc.plan_id} FY{doc.fiscal_year or '?'}"
+@dataclass
+class PendingExtract:
+    """A CAFR whose section is read and hashed: everything but the model call."""
+    doc: Document
+    plan: Plan
+    label: str
+    section_text: str
+    text_hash: str
+    pages_used: str
 
-    # Mock mode bypasses PDF/file handling entirely.
-    if os.environ.get("LLM_MODE") == "mock":
-        text_hash = hashlib.md5(f"mock:{doc.id}".encode("utf-8")).hexdigest()
-        existing = session.query(CafrActuarial).filter_by(document_id=doc.id).first()
-        if (existing is not None and existing.text_hash == text_hash
-                and existing.prompt_version == PROMPT_VERSION):
-            console.print(f"  [dim]{label}: already extracted (mock hash + prompt_version match)[/dim]")
-            return "already_have"
 
-        payload = call_claude(plan.name, doc.fiscal_year, "")
-        save_actuarial(session, doc, payload, pages_used=None, text_hash=text_hash)
-        console.print(f"  [green]{label}: saved (mock)[/green]")
-        return "saved"
-
-    if not doc.local_path or not Path(doc.local_path).exists():
-        console.print(f"  [yellow]{label}: missing local file[/yellow]")
-        return "no_section"
-
-    rng = locate_actuarial_section(doc.local_path)
+def _read_section(doc: Document, label: str, pdf_path: str) -> tuple[str, int, int] | None:
+    """(section text, start, end) from the PDF at ``pdf_path``, or None."""
+    rng = locate_actuarial_section(pdf_path)
     if rng is None:
-        rng = _fallback_net_pension_liability(doc.local_path)
+        rng = _fallback_net_pension_liability(pdf_path)
     if rng is None:
-        console.print(f"  [yellow]{label}: Actuarial Section not found[/yellow]")
-        return "no_section"
+        return None
     start, end = rng
-    section_text = extract_section_text(doc.local_path, start, end)
+    section_text = extract_section_text(pdf_path, start, end)
 
     # Locating the right pages is not enough: some plans publish the Actuarial
     # Section as scanned images, so the pages carry a text layer of headers and
@@ -520,9 +528,9 @@ def extract_one(session, doc: Document, plan: Plan) -> str:
     # every extracted field comes back null). Prefer the net-pension-liability
     # window in that case — it lands in the text-bearing Financial Section.
     if not _has_usable_text(section_text, start, end):
-        fallback = _fallback_net_pension_liability(doc.local_path)
+        fallback = _fallback_net_pension_liability(pdf_path)
         if fallback is not None:
-            fallback_text = extract_section_text(doc.local_path, *fallback)
+            fallback_text = extract_section_text(pdf_path, *fallback)
             if len(fallback_text) > len(section_text):
                 console.print(
                     f"  [yellow]{label}: pages {start}-{end} have no usable text "
@@ -531,6 +539,28 @@ def extract_one(session, doc: Document, plan: Plan) -> str:
                 )
                 start, end = fallback
                 section_text = fallback_text
+    return section_text, start, end
+
+
+def prepare_one(session, doc: Document, plan: Plan) -> str | PendingExtract:
+    """Everything before the model: the PDF, the section, the idempotency check.
+
+    Returns a status string when there is nothing to send, else the pending
+    request. The PDF is read inside ``pdf_store.document_pdf`` so a copy
+    pulled from R2 is deleted as soon as the text is out of it.
+    """
+    label = f"{plan.abbreviation or doc.plan_id} FY{doc.fiscal_year or '?'}"
+
+    try:
+        with pdf_store.document_pdf(doc) as pdf_path:
+            found = _read_section(doc, label, str(pdf_path))
+    except FileNotFoundError:
+        console.print(f"  [yellow]{label}: PDF neither on disk nor in R2[/yellow]")
+        return "no_file"
+    if found is None:
+        console.print(f"  [yellow]{label}: Actuarial Section not found[/yellow]")
+        return "no_section"
+    section_text, start, end = found
 
     # Hash the FULL section text, before truncation. Hashing the truncated
     # slice makes the idempotency check blind to any revision past
@@ -553,23 +583,96 @@ def extract_one(session, doc: Document, plan: Plan) -> str:
         f"  [cyan]{label}: extracting from pages {pages_used} "
         f"({len(section_text):,} chars)[/cyan]"
     )
+    return PendingExtract(doc=doc, plan=plan, label=label, section_text=section_text,
+                          text_hash=text_hash, pages_used=pages_used)
 
-    try:
-        payload = call_claude(plan.name, doc.fiscal_year, section_text)
-    except Exception as e:
-        console.print(f"  [red]{label}: Claude error: {e}[/red]")
-        return "failed"
 
-    save_actuarial(session, doc, payload, pages_used=pages_used, text_hash=text_hash)
-    console.print(f"  [green]{label}: saved[/green]")
+def finish_one(session, pending: PendingExtract, payload: dict) -> str:
+    save_actuarial(session, pending.doc, payload,
+                   pages_used=pending.pages_used, text_hash=pending.text_hash)
+    console.print(f"  [green]{pending.label}: saved[/green]")
     return "saved"
 
 
+def extract_one(session, doc: Document, plan: Plan) -> str:
+    """Process one CAFR document synchronously. Returns a status string."""
+    label = f"{plan.abbreviation or doc.plan_id} FY{doc.fiscal_year or '?'}"
+
+    # Mock mode bypasses PDF/file handling entirely.
+    if os.environ.get("LLM_MODE") == "mock":
+        text_hash = hashlib.md5(f"mock:{doc.id}".encode("utf-8")).hexdigest()
+        existing = session.query(CafrActuarial).filter_by(document_id=doc.id).first()
+        if (existing is not None and existing.text_hash == text_hash
+                and existing.prompt_version == PROMPT_VERSION):
+            console.print(f"  [dim]{label}: already extracted (mock hash + prompt_version match)[/dim]")
+            return "already_have"
+
+        payload = call_claude(plan.name, doc.fiscal_year, "")
+        save_actuarial(session, doc, payload, pages_used=None, text_hash=text_hash)
+        console.print(f"  [green]{label}: saved (mock)[/green]")
+        return "saved"
+
+    pending = prepare_one(session, doc, plan)
+    if not isinstance(pending, PendingExtract):
+        return pending
+    try:
+        payload = call_claude(plan.name, doc.fiscal_year, pending.section_text)
+    except Exception as e:
+        console.print(f"  [red]{label}: Claude error: {e}[/red]")
+        return "failed"
+    return finish_one(session, pending, payload)
+
+
+def _run_batch(session, pendings: list[PendingExtract],
+               poll_seconds, timeout_minutes) -> dict[str, int]:
+    """One batch for every pending CAFR; save each result. Counts by outcome."""
+    counts = {"saved": 0, "failed": 0}
+    by_id = {str(p.doc.id): p for p in pendings}
+    requests = [{"custom_id": str(p.doc.id),
+                 "params": request_params(p.plan.name, p.doc.fiscal_year, p.section_text)}
+                for p in pendings]
+    results = batching.run_message_batch(
+        _get_client(), requests, poll_seconds=poll_seconds,
+        timeout_minutes=timeout_minutes, log=console.print)
+    for item in results:
+        pending = by_id.get(item.custom_id)
+        if pending is None:
+            continue
+        result = item.result
+        if result.type != "succeeded":
+            console.print(f"  [red]{pending.label}: batch result {result.type} "
+                          f"({batching.result_detail(result)}); left for the next run[/red]")
+            counts["failed"] += 1
+            continue
+        usage = getattr(result.message, "usage", None)
+        if usage is not None and not costs.mock_mode():
+            import database
+            database.record_api_usage(MODEL, usage, batch=True)
+        try:
+            payload = payload_from(result.message)
+            finish_one(session, pending, payload)
+        except Exception as e:  # noqa: BLE001
+            console.print(f"  [red]{pending.label}: {e}[/red]")
+            counts["failed"] += 1
+            continue
+        counts["saved"] += 1
+    return counts
+
+
 def run_extraction(plan_ids: list[str] | None = None,
-                   limit: int | None = None) -> dict[str, int]:
+                   limit: int | None = None, mode: str | None = None,
+                   poll_seconds: float | None = None,
+                   timeout_minutes: float | None = None) -> dict[str, int]:
+    """``mode`` is "batch" (default) or "sync". Mock mode is always sync: it
+    never reaches a client."""
+    mode = mode or os.environ.get("CAFR_EXTRACT_MODE", "batch")
+    if os.environ.get("LLM_MODE") == "mock":
+        mode = "sync"
     init_db()
     session = get_session()
-    counts: dict[str, int] = {"saved": 0, "already_have": 0, "no_section": 0, "failed": 0}
+    counts: dict[str, int] = {"saved": 0, "already_have": 0, "no_section": 0,
+                              "no_file": 0, "failed": 0}
+    pendings: list[PendingExtract] = []
 
     try:
         q = (
@@ -597,20 +700,31 @@ def run_extraction(plan_ids: list[str] | None = None,
         if limit is not None:
             docs = docs[:limit]
 
-        console.print(f"[bold]Extracting actuarial data for {len(docs)} CAFR(s)[/bold]")
+        console.print(f"[bold]Extracting actuarial data for {len(docs)} CAFR(s) ({mode})[/bold]")
         for doc, plan in docs:
             console.rule(f"[bold]{plan.abbreviation or doc.plan_id}[/bold]")
             try:
-                status = extract_one(session, doc, plan)
+                if mode == "sync":
+                    status = extract_one(session, doc, plan)
+                else:
+                    status = prepare_one(session, doc, plan)
+                    if isinstance(status, PendingExtract):
+                        pendings.append(status)
+                        continue
             except Exception as e:
                 status = "failed"
                 console.print(f"  [red]{plan.abbreviation or doc.plan_id}: {e}[/red]")
             counts[status] = counts.get(status, 0) + 1
+
+        if pendings:
+            batch_counts = _run_batch(session, pendings, poll_seconds, timeout_minutes)
+            counts["saved"] += batch_counts["saved"]
+            counts["failed"] += batch_counts["failed"]
     finally:
         session.close()
 
     console.rule("[bold green]Extraction complete[/bold green]")
-    for status in ("saved", "already_have", "no_section", "failed"):
+    for status in ("saved", "already_have", "no_section", "no_file", "failed"):
         console.print(f"  {status:20s} {counts.get(status, 0)}")
     return counts
 
@@ -622,9 +736,14 @@ def main():
                         help="Plan IDs to process (default: all unextracted CAFRs).")
     parser.add_argument("--limit", type=int, default=None,
                         help="Cap the number of documents processed.")
+    parser.add_argument("--sync", action="store_true",
+                        help="One call per document instead of one Message Batch.")
     args = parser.parse_args()
 
-    counts = run_extraction(plan_ids=args.plan_ids or None, limit=args.limit)
+    # Its own process, so refresh_cafrs' label does not reach it.
+    costs.label_process("cafr_extract")
+    counts = run_extraction(plan_ids=args.plan_ids or None, limit=args.limit,
+                            mode="sync" if args.sync else None)
     sys.exit(0 if not counts.get("failed") else 1)
 
 

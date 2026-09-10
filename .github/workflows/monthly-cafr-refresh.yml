@@ -46,6 +46,13 @@ jobs:
     # the job would appear to succeed having read and written nothing.
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      # The actuarial extractor reads each CAFR PDF from R2 when the runner
+      # does not hold it, which is every CAFR not fetched in this same run.
+      # Job level so a later step cannot silently lose the fallback.
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
     steps:
       - uses: actions/checkout@v5
 

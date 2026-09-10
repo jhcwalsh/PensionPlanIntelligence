@@ -17,13 +17,13 @@ import hashlib
 import json
 import os
 import re
-import time
 from dataclasses import dataclass
 from datetime import datetime
 
 import anthropic
 from sqlalchemy.orm import undefer
 
+import batching
 import costs
 from dotenv import load_dotenv
 from rich.console import Console
@@ -506,62 +506,32 @@ def _create_with_retry(params: dict):
 # Batch path
 # ---------------------------------------------------------------------------
 
-#: How long a run will wait for its batch before cancelling it. Most batches
-#: finish in minutes; the API's own ceiling is 24 hours. The daily-pipeline
-#: job has 360 minutes in total and has usually spent 30–40 of them fetching
-#: and extracting before it gets here.
+#: How long a run will wait for its batch before cancelling it. The
+#: daily-pipeline job has 360 minutes in total and has usually spent 30–40
+#: of them fetching and extracting before it gets here. The mechanics live
+#: in batching.run_message_batch, shared with the CAFR actuarial extractor.
 BATCH_TIMEOUT_MINUTES = int(os.environ.get("SUMMARIZE_BATCH_TIMEOUT_MIN", "180"))
 BATCH_POLL_SECONDS = 30
 
 
 def _run_batch(client, pendings: list[PendingCall],
                poll_seconds: float, timeout_minutes: float) -> list:
-    """Submit one batch for every pending call and return its results.
+    """One batch for every pending call; results in the API's order.
 
-    On timeout the batch is cancelled and the run collects whatever had
-    finished: cancellation is not immediate, and the requests it caught
-    mid-flight come back ``canceled`` rather than billed. Anything not
-    summarised is picked up by the next run, which is also what happens to
-    an ``errored`` result.
+    Anything not summarised — an ``errored`` result, or one caught by a
+    timeout cancellation — is picked up by the next run.
     """
     requests = [
         {"custom_id": str(p.doc.id),
          "params": request_params(p.prompt, p.model)}
         for p in pendings
     ]
-    batch = client.messages.batches.create(requests=requests)
-    console.print(f"  Batch [cyan]{batch.id}[/cyan] submitted: {len(requests)} requests")
-
-    started = time.monotonic()
-    cancelled = False
-    while True:
-        batch = client.messages.batches.retrieve(batch.id)
-        if batch.processing_status == "ended":
-            break
-        elapsed_min = (time.monotonic() - started) / 60
-        if not cancelled and elapsed_min >= timeout_minutes:
-            console.print(
-                f"  [yellow]Batch {batch.id} still {batch.processing_status} "
-                f"after {elapsed_min:.0f} min; cancelling and keeping what "
-                f"finished[/yellow]"
-            )
-            client.messages.batches.cancel(batch.id)
-            cancelled = True
-        time.sleep(poll_seconds)
-
-    return list(client.messages.batches.results(batch.id))
+    return batching.run_message_batch(
+        client, requests, poll_seconds=poll_seconds,
+        timeout_minutes=timeout_minutes, log=console.print)
 
 
-def _result_detail(result) -> str:
-    """Why a batch request did not succeed, as the API phrased it.
-
-    An errored result carries ``error`` (an ErrorResponse) whose own
-    ``error`` holds the message; canceled and expired results carry nothing
-    beyond their type.
-    """
-    response = getattr(result, "error", None)
-    inner = getattr(response, "error", None)
-    return getattr(inner, "message", None) or result.type
+_result_detail = batching.result_detail
 
 
 def _collect_batch(pendings: list[PendingCall], results, session) -> dict:

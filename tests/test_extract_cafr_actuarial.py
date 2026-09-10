@@ -107,10 +107,11 @@ def test_revision_past_truncation_cap_is_detected(tmp_db, tmp_path, monkeypatch)
     d.local_path = str(pdf)
     session.commit(); session.close()
 
-    assert extract_cafr_actuarial.run_extraction(["p1"])["saved"] == 1
+    # sync: this test stubs call_claude, which the batch path never uses.
+    assert extract_cafr_actuarial.run_extraction(["p1"], mode="sync")["saved"] == 1
 
     section[0] = "A" * 1000 + " RESTATED"
-    counts = extract_cafr_actuarial.run_extraction(["p1"])
+    counts = extract_cafr_actuarial.run_extraction(["p1"], mode="sync")
     assert counts["saved"] == 1 and counts["already_have"] == 0
 
 

@@ -57,7 +57,9 @@ def test_every_db_job_receives_the_dsn(name):
         assert "secrets.DATABASE_URL" in str(env["DATABASE_URL"]), env
 
 
-R2_WORKFLOWS = ["daily-pipeline.yml"]
+# monthly-cafr-refresh: the actuarial extractor reads CAFR PDFs from R2 when
+# the runner does not hold them, which is every CAFR not fetched that run.
+R2_WORKFLOWS = ["daily-pipeline.yml", "monthly-cafr-refresh.yml"]
 R2_VARS = ("R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID",
            "R2_SECRET_ACCESS_KEY", "R2_BUCKET")
 
