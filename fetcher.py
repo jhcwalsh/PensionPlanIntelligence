@@ -15,7 +15,7 @@ import time
 import hashlib
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, unquote
 
 import requests
 from bs4 import BeautifulSoup
@@ -41,6 +41,7 @@ DOC_URL_PATTERNS = [
     r"/iip/\w+/file/getfile/",           # AgendasSuite (ERS Texas, etc.)
     r"/documents/files/governance/",     # NCRS (myncretirement.gov)
     r"/DocumentDownload\.ashx",          # DotNetNuke/EasyDNNNews (TCRS Tennessee, etc.)
+    r"/documents/byfilename/",           # URS (Utah): @Folder@Name@@application@pdf/
 ]
 
 # A document link must match at least one of these to be kept
@@ -87,23 +88,34 @@ HEADERS = {
 # Date / type helpers
 # ---------------------------------------------------------------------------
 
+# Each pattern captures ONE group; `_` and `-` inside it are normalised to
+# `-` before strptime. The old YYYY-MM-DD entry captured three groups that
+# were joined with spaces and handed to a hyphenated format, so it never
+# matched: every "minutes-2026-07-29.pdf" in the corpus was undated unless
+# its link text spelled the date out. Order matters — the fuller shapes come
+# first so "2026-07-29" is not read as "2026-07".
 DATE_PATTERNS = [
-    (r"(\d{4})[_\-](\d{2})[_\-](\d{2})", "%Y-%m-%d"),
-    (r"(\w+ \d{1,2},? \d{4})", "%B %d %Y"),
-    (r"(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})", "%m/%d/%Y"),
+    (r"(\d{4}[_\-]\d{2}[_\-]\d{2})", ["%Y-%m-%d"]),
+    (r"(\w+ \d{1,2},? \d{4})", ["%B %d %Y", "%b %d %Y"]),
+    (r"(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})", ["%m-%d-%Y", "%m-%d-%y"]),
+    # Year-month (OPERS: agenda-2026-01.pdf) and month-year (NYSCRF:
+    # june-2026.pdf), dated to the first of the month. The lookahead stops
+    # "Act 2026-286" reading as 2026-28.
+    (r"(\d{4}[_\-]\d{2})(?![_\-]?\d)", ["%Y-%m"]),
+    (r"\b([A-Za-z]{3,9}[ _\-]\d{4})\b", ["%B-%Y", "%b-%Y"]),
 ]
 
 
 def parse_date_from_text(text: str) -> datetime | None:
     text = text.replace(",", "").strip()
-    for pattern, fmt in DATE_PATTERNS:
-        m = re.search(pattern, text, re.IGNORECASE)
-        if m:
-            raw = " ".join(g for g in m.groups() if g)
-            try:
-                return datetime.strptime(raw.strip(), fmt)
-            except ValueError:
-                continue
+    for pattern, formats in DATE_PATTERNS:
+        for m in re.finditer(pattern, text, re.IGNORECASE):
+            raw = re.sub(r"[_\-/ ]", "-", m.group(1))
+            for fmt in formats:
+                try:
+                    return datetime.strptime(raw, fmt.replace(" ", "-"))
+                except ValueError:
+                    continue
     return None
 
 
@@ -271,6 +283,19 @@ def make_filename(url: str, link_text: str) -> str:
     name = Path(parsed.path).name
     ext = Path(parsed.path).suffix.lower()
 
+    # 0) URS's document router joins the folder path, the document's own
+    #    name and its MIME type into one "@"-separated segment:
+    #    /documents/byfilename/@Public Web Documents@URS@...@09-09-2026Agenda
+    #    @@application@pdf/. The piece before "@@" is the name; after it,
+    #    the type. Slugifying the whole segment gave every document the
+    #    same sixty characters of folder path.
+    if "@@" in name:
+        stem_part, _, mime = name.partition("@@")
+        slug = re.sub(r"[^\w\-]", "-", unquote(stem_part.split("@")[-1]))[:60].strip("-")
+        if slug:
+            mime_ext = "." + mime.split("@")[-1].lower()
+            return slug + (mime_ext if mime_ext in DOC_EXTENSIONS else ".pdf")
+
     # 1) Real document filename — use it as-is.
     if ext in DOC_EXTENSIONS and name:
         return name
@@ -335,8 +360,15 @@ def is_investment_related(url: str, link_text: str, page_url: str = "") -> bool:
 
 
 def extract_doc_links(soup: BeautifulSoup, base_url: str,
-                      investment_only: bool = True) -> list[dict]:
-    """Extract document links from a BeautifulSoup page."""
+                      investment_only: bool = True,
+                      keep_all_documents: bool = False) -> list[dict]:
+    """Extract document links from a BeautifulSoup page.
+
+    ``keep_all_documents`` skips the RELEVANT_KEYWORDS check for a page that
+    is already nothing but the documents we want — NYSCRF's monthly reports
+    are linked as "June", "May", ... to june-2026.pdf, and no keyword in
+    either the text or the URL says agenda, board or report.
+    """
     found = []
     seen_urls = set()
 
@@ -353,7 +385,7 @@ def extract_doc_links(soup: BeautifulSoup, base_url: str,
         seen_urls.add(full_url)
 
         combined = (full_url + " " + link_text).lower()
-        if not any(kw in combined for kw in RELEVANT_KEYWORDS):
+        if not keep_all_documents and not any(kw in combined for kw in RELEVANT_KEYWORDS):
             continue
 
         if investment_only and not is_investment_related(full_url, link_text, base_url):
@@ -452,13 +484,15 @@ def discover_document_links(plan: dict) -> list[dict]:
     """
     materials_url = plan["materials_url"]
     investment_only = plan.get("investment_only", True)
+    keep_all = plan.get("keep_all_documents", False)
     console.print(f"[cyan]Discovering documents for {plan['abbreviation']}...[/cyan]")
 
     soup = fetch_page(plan)
     if soup is None:
         return []
 
-    found = extract_doc_links(soup, materials_url, investment_only=investment_only)
+    found = extract_doc_links(soup, materials_url, investment_only=investment_only,
+                              keep_all_documents=keep_all)
 
     # Pages that build their document links in the browser (see
     # extract_embedded_doc_urls). Opt-in: anchor scraping sees nothing here.
@@ -476,7 +510,8 @@ def discover_document_links(plan: dict) -> list[dict]:
             sub_soup = fetch_page(plan, url=sub_url)
             if sub_soup:
                 found.extend(extract_doc_links(sub_soup, sub_url,
-                                               investment_only=investment_only))
+                                               investment_only=investment_only,
+                                               keep_all_documents=keep_all))
             time.sleep(0.5)
 
     # Additional explicit extra_pages (e.g. LACERA Board of Investments)

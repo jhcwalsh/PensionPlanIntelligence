@@ -118,18 +118,21 @@ def test_the_plan_that_was_never_blocked_is_excluded():
 
 def test_unreachable_ids_names_exactly_the_residue():
     """Everything Stage 1 does not fix, and therefore the real size of what is
-    left: nine of the fourteen. If this set ever empties, A4 is closed."""
+    left: nine of the fourteen. If this set ever empties, A4 is closed.
+    rsa_al joined on 2026-09-10 as no_materials: recordings only."""
     assert waf_blocked_ids.unreachable_ids() == [
-        "acrs_pa", "asrs", "corp_az", "frs", "pgcers_md", "scers_suffolk",
-        "strs_ohio"]
+        "acrs_pa", "asrs", "corp_az", "frs", "pgcers_md", "rsa_al",
+        "scers_suffolk", "strs_ohio"]
 
 
-def test_stage_one_is_worth_five_materials_plans_and_two_cafrs():
+def test_stage_one_is_worth_six_materials_plans_and_two_cafrs():
     """Pinned deliberately. The plan was written expecting fourteen, the first
     probe suggested eleven, and downloads brought it to seven. Anything that
-    moves these numbers should have to say so in a diff."""
+    moves these numbers should have to say so in a diff. This is one: urs_ut
+    joined on 2026-09-10 when the coverage audit found a runner's browser gets
+    an empty listing page where a residential one gets 136 links."""
     assert waf_blocked_ids.materials_ids() == [
-        "kpers_ks", "lasers_la", "mcera", "nmpera", "nv_pers"]
+        "kpers_ks", "lasers_la", "mcera", "nmpera", "nv_pers", "urs_ut"]
     assert waf_blocked_ids.cafr_ids() == ["fwerf_tx", "pbpr_pa"]
 
 

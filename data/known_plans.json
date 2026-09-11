@@ -65,7 +65,7 @@
     "website": "https://www.nystrs.org",
     "materials_url": "https://www.nystrs.org/about-us/retirement-board/board-meetings/",
     "materials_type": "playwright",
-    "investment_only": true,
+    "investment_only": false,
     "doc_types": [
       "agenda",
       "board_pack",
@@ -160,7 +160,7 @@
     "website": "https://www.opers.org",
     "materials_url": "https://www.opers.org/about/board/meetings/",
     "materials_type": "playwright",
-    "investment_only": true,
+    "investment_only": false,
     "doc_types": [
       "agenda",
       "board_pack",
@@ -321,7 +321,7 @@
     "website": "https://www.imrf.org",
     "materials_url": "https://www.imrf.org/en/about-imrf/board-of-trustees/board-meeting-calendar",
     "materials_type": "html_links",
-    "investment_only": true,
+    "investment_only": false,
     "doc_types": [
       "agenda",
       "board_pack",
@@ -879,7 +879,7 @@
     "state": "NY",
     "aum_billions": 270,
     "website": "https://www.osc.ny.gov",
-    "materials_url": "https://www.osc.ny.gov/common-retirement-fund/resources/investment-advisory-committee",
+    "materials_url": "https://www.osc.ny.gov/common-retirement-fund/resources/financial-reporting-and-asset-allocation",
     "materials_type": "html_links",
     "investment_only": false,
     "doc_types": [
@@ -887,9 +887,9 @@
       "board_pack",
       "minutes"
     ],
-    "playwright_wait_selector": "a[href$=\".pdf\"]",
     "notes": "NY Comptroller is sole trustee; IAC is advisory only — meeting materials not publicly posted",
-    "fiscal_year_end": "03-31"
+    "fiscal_year_end": "03-31",
+    "keep_all_documents": true
   },
   {
     "id": "wsib",
@@ -916,7 +916,7 @@
     "state": "NY",
     "aum_billions": 100,
     "website": "https://www.trsnyc.org",
-    "materials_url": "https://www.trsnyc.org/memberportal/About-Us/MeetingSum",
+    "materials_url": "https://www.trsnyc.org/memberportal/about-us/ourretirementboard/meetingsum",
     "materials_type": "html_links",
     "investment_only": false,
     "doc_types": [
@@ -924,8 +924,8 @@
       "board_pack",
       "minutes"
     ],
-    "sub_page_pattern": "trsnyc\\.org/memberportal/About-Us/MeetingSum\\d{4}",
-    "max_sub_pages": 3,
+    "sub_page_pattern": "ourretirementboard/meetingsum/\\d{4}$",
+    "max_sub_pages": 2,
     "fiscal_year_end": "06-30",
     "cafr_url_template": "https://comptroller.nyc.gov/wp-content/uploads/documents/{year}-TRS-FS-1.pdf"
   },
@@ -1090,7 +1090,9 @@
       "minutes"
     ],
     "cafr_url": "https://www.trsil.org/sites/default/files/documents/ACFR-FY24-web_0.pdf",
-    "fiscal_year_end": "06-30"
+    "fiscal_year_end": "06-30",
+    "sub_page_pattern": "trsil\\.org/trustees/minutes/\\d{4}",
+    "max_sub_pages": 2
   },
   {
     "id": "mo_psrs",
