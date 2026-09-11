@@ -3943,9 +3943,12 @@ def main():
         ("Performance",         lambda: page_performance()),
         ("Meeting Recordings",  lambda: page_meeting_recordings(plan_id, plan_label)),
         ("Plans",               lambda: page_plans()),
-        ("Subscribe",           lambda: page_subscribe()),
     ]
     if _admin_unlocked():
+        # Subscribe is off the public strip since 2026-09-11 (hidden, not
+        # removed: the confirm/unsub/prefs landing pages above still work
+        # for anyone who signed up before). Unlock admin to see the form.
+        tab_specs.append(("Subscribe", lambda: page_subscribe()))
         tab_specs.append(("Archive", lambda: page_archive()))
         tab_specs.append(("Drafts",  lambda: page_drafts()))
         tab_specs.append(("Admin",   lambda: page_admin()))
