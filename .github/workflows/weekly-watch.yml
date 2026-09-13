@@ -55,6 +55,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-pipeline.txt
 
+      - name: Check Anthropic credit
+        # One Haiku call with max_tokens=1. An empty balance or a bad key
+        # fails the job here, before any work, and emails the approval
+        # recipient; three silent lapses in September 2026 are why.
+        run: python -m scripts.preflight_credit
+
       - name: Verify required secrets are set
         run: |
           missing=()
