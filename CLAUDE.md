@@ -15,7 +15,7 @@ Two layered systems sharing one SQLite database (`db/pension.db`, ~64 MB, tracke
    - `no_materials` (`scers_suffolk`, `rsa_al`) — **not blocked, and nothing to fetch.** RSA's board pages hold only Vimeo recordings; its transcripts stopped in 2021. The board page renders from anywhere and is a department directory: 92 anchors, all navigation, and "agenda"/"minutes"/"meeting" appear zero times. It stays on the list so the daily pipeline does not spend a Playwright run on a directory page. Neither a new host nor a new selector helps; only Suffolk publishing something does.
 
    Never derive that split by reading the `reason` strings; `scripts/waf_blocked_ids.py` is the one source of truth, and anything not classified `datacentre_ip` is excluded from the mini's job so an unclassified new entry is skipped rather than failed nightly.
-2. **Insights automation** (`insights/` package) — composes monthly / quarterly / annual editorial briefings from the existing summaries, plus a daily digest. All auto-publish and email a copy; nothing waits on approval. The weekly cadence still runs but is **silent** (no email, no notes file) because monthly composes from weekly publications — see the cadence-cascade note below.
+2. **Insights automation** (`insights/` package) — composes monthly / quarterly / annual editorial briefings from the existing summaries (the daily digest was retired on 2026-09-12). All auto-publish and email a copy; nothing waits on approval. The weekly cadence still runs but is **silent** (no email, no notes file) because monthly composes from weekly publications — see the cadence-cascade note below.
 
 The Streamlit app (`app.py`) reads from the same DB and surfaces both layers as tabs.
 
@@ -291,11 +291,14 @@ The Archive, Drafts, and Admin tabs are hidden from the tab strip entirely until
 - To force a re-send, expire the existing publication first (or use `--force` on the scheduler CLI). Setting it back to `"generating"` directly works but bypasses the audit trail.
 - The same idempotency pattern applies to `WeeklyRun` (unique on `period_start`).
 
-### Daily Pension Digest
-The `daily` cadence auto-sends every day. Lookback state lives in the
-`daily_runs` table (anchored on `MAX(sent_at)`); the GitHub Actions cron at
-`.github/workflows/daily-digest.yml` runs at 13:00 UTC daily and commits
-`db/pension.db` back after each successful send.
+### Daily Pension Digest — retired 2026-09-12
+The `daily` cadence is no longer scheduled: `.github/workflows/daily-digest.yml`
+keeps only `workflow_dispatch`, and `tests/test_daily_digest_unscheduled.py`
+pins that. The code path (`insights/daily.py`, `insights.scheduler daily`)
+stays for a manual one-off. Lookback state lives in the `daily_runs` table
+(anchored on `MAX(sent_at)`), so a manual run after a long gap covers the
+whole gap. Daily is standalone in the cadence cascade, so nothing above it
+noticed.
 
 Triggers (volume / keyword / reappearing-plan) used to route a busy day
 through an approval email. Since 2026-08-16 they only *annotate* the digest
@@ -316,6 +319,7 @@ Render hosts one web service: Streamlit (`pension-plan-intelligence`), reading N
 | Cadence | Trigger | Where | Workflow / .bat |
 |---|---|---|---|
 | Daily document pipeline (137 plans) | cron 11:00 UTC | GHA | `.github/workflows/daily-pipeline.yml` |
+| Daily Pension Digest | **retired 2026-09-12**, manual dispatch only | GHA | `.github/workflows/daily-digest.yml` |
 | Weekly Insights composition (silent — feeds monthly) | cron Sundays 12:30 UTC | GHA | `.github/workflows/weekly-insights.yml` |
 | Monthly CAFR refresh + structured extraction (~92 plans) | cron 1st of month 15:00 UTC | GHA | `.github/workflows/monthly-cafr-refresh.yml` |
 | Monthly IPS refresh (auto-discover + verify via Haiku 4.5) | cron 1st of month 16:00 UTC | GHA | `.github/workflows/monthly-ips.yml` |

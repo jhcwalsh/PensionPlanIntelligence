@@ -1,8 +1,9 @@
 name: daily-digest
 
+# No schedule since 2026-09-12: the daily digest was retired in favour of
+# the weekly cadences. Kept as a manual dispatch so a one-off digest can
+# still be sent; tests/test_daily_digest_unscheduled.py pins the absence.
 on:
-  schedule:
-    - cron: "0 13 * * *"   # 13:00 UTC daily — ~9am ET (EST) / 8am ET (EDT)
   workflow_dispatch:
     inputs:
       mode:
