@@ -58,6 +58,11 @@ PRICES: dict[str, Price] = {
     # one — the safe direction, and the opposite of the usage-name mismatch
     # that llm_openrouter exists to prevent.
     "deepseek/deepseek-v4-flash": _p("0.0886", "0.1772", "0", "0"),
+    # Candidates for the summary-model comparison (scripts/eval_summary_models.py),
+    # OpenRouter list prices on 2026-09-12. Nothing scheduled uses them.
+    "deepseek/deepseek-v4-pro-0813": _p("0.578", "1.734", "0", "0"),
+    "qwen/qwen3.7-plus": _p("0.32", "1.28", "0", "0"),
+    "z-ai/glm-5.2": _p("0.60", "2.00", "0", "0"),
 }
 
 MILLION = Decimal(1_000_000)
