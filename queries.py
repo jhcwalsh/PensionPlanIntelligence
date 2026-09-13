@@ -23,7 +23,7 @@ from __future__ import annotations
 import calendar
 import json
 import re
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from sqlalchemy import case, desc, distinct, func, or_
@@ -137,6 +137,161 @@ def plan_coverage_rows(session) -> list[dict]:
         }
         for r in rows
     ]
+
+
+BOARD_MATERIAL_EXCLUDED_TYPES = ("cafr", "ips")
+
+
+def _month_key(d: date) -> str:
+    return f"{d.year:04d}-{d.month:02d}"
+
+
+def _shift_month(year: int, month: int, delta: int) -> tuple[int, int]:
+    idx = year * 12 + (month - 1) + delta
+    return idx // 12, idx % 12 + 1
+
+
+def plan_reference_rows(session, months: int = 6, today: date | None = None) -> dict:
+    """How often each plan turns up, month by month, for the Admin page.
+
+    Two measures per plan per month, because they disagree and the gap is
+    the point: ``docs`` is documents summarised, placed in the month of the
+    meeting date (else the download date); ``mentions`` is how many times
+    the plan is named in briefings published for that month. LACERA got 50
+    mentions from 29 documents in the first six months; NYC Retirement got
+    7 from 46. Prominence follows which documents happen to be board packs
+    with decisions in them, not fund size.
+
+    ``cadence`` is observed, not declared: distinct meeting months in the
+    twelve months before the window's end. Eight or more is "monthly",
+    three to seven "quarterly", one or two "sparse", none "none". ``overdue``
+    is True when the months since the last document exceed what that
+    cadence allows (two for monthly, four for quarterly or sparse).
+    A monthly board with nothing for three months is a discovery failure;
+    a quarterly one is not, yet. The one-off table could not tell them
+    apart, which is why this exists.
+
+    Returns ``{"months": [...], "rows": [...]}`` with one row per plan,
+    ordered by AUM descending, unknown AUM last.
+    """
+    today = today or utcnow().date()
+    keys = []
+    y, m = today.year, today.month
+    for k in range(months - 1, -1, -1):
+        yy, mm = _shift_month(y, m, -k)
+        keys.append(f"{yy:04d}-{mm:02d}")
+    window_start = date(*map(int, keys[0].split("-")), 1)
+    cadence_start = date(*_shift_month(y, m, -11), 1)
+
+    # Summarised documents, dated by meeting month else download month.
+    # Only the two dates and the plan id come over the wire.
+    doc_rows = (
+        session.query(Document.plan_id, Document.meeting_date, Document.downloaded_at)
+        .join(Summary, Summary.document_id == Document.id)
+        .filter(or_(Document.meeting_date >= cadence_start,
+                    Document.downloaded_at >= cadence_start))
+        .all()
+    )
+    docs: dict[str, dict[str, int]] = {}
+    meeting_months: dict[str, set[str]] = {}
+    last_doc: dict[str, str] = {}
+    for pid, meeting, downloaded in doc_rows:
+        when = meeting or downloaded
+        if when is None:
+            continue
+        key = _month_key(when)
+        if key > keys[-1]:
+            continue
+        meeting_months.setdefault(pid, set()).add(key)
+        if key > last_doc.get(pid, ""):
+            last_doc[pid] = key
+        if key >= keys[0]:
+            docs.setdefault(pid, {})[key] = docs.get(pid, {}).get(key, 0) + 1
+
+    # Mentions in published briefings, by the month the period starts in.
+    pubs = (
+        session.query(Publication.period_start, Publication.draft_markdown)
+        .filter(Publication.status == "published",
+                Publication.period_start >= window_start,
+                Publication.draft_markdown.isnot(None))
+        .all()
+    )
+    pubs_by_month: dict[str, list[str]] = {}
+    for start, md in pubs:
+        pubs_by_month.setdefault(_month_key(start), []).append(md or "")
+
+    plan_rows = session.query(Plan).order_by(
+        Plan.aum_billions.desc().nullslast(), Plan.name).all()
+    allowance = {"monthly": 2, "quarterly": 4, "sparse": 4}
+    rows = []
+    for plan in plan_rows:
+        pats = [re.escape(plan.name)]
+        if plan.abbreviation and len(plan.abbreviation) >= 3:
+            pats.append(r"\b" + re.escape(plan.abbreviation) + r"\b")
+        rx = re.compile("|".join(pats))
+        mentions = {k: sum(len(rx.findall(md)) for md in pubs_by_month.get(k, []))
+                    for k in keys}
+        per_month = {k: docs.get(plan.id, {}).get(k, 0) for k in keys}
+        n_months = len(meeting_months.get(plan.id, ()))
+        cadence = ("monthly" if n_months >= 8 else "quarterly" if n_months >= 3
+                   else "sparse" if n_months else "none")
+        last = last_doc.get(plan.id)
+        if last:
+            ly, lm = map(int, last.split("-"))
+            gap = (today.year - ly) * 12 + (today.month - lm)
+            overdue = gap > allowance.get(cadence, 10 ** 6)
+        else:
+            overdue = False
+        rows.append({
+            "plan_id": plan.id,
+            "Plan": plan.name,
+            "Abbrev": plan.abbreviation or "",
+            "AUM $bn": plan.aum_billions,
+            "cadence": cadence,
+            "last_doc": last,
+            "overdue": overdue,
+            "docs": per_month,
+            "docs_total": sum(per_month.values()),
+            "mentions": mentions,
+            "mentions_total": sum(mentions.values()),
+        })
+    return {"months": keys, "rows": rows}
+
+
+def aum_coverage(session, days: int = 60, today: date | None = None) -> dict:
+    """Share of tracked AUM with board material downloaded in the window.
+
+    One number to watch weekly. Downloads rather than summaries, because
+    this measures whether discovery is finding documents at all; a summary
+    backlog is a separate, cheaper problem. CAFRs and IPS documents are
+    excluded: a fund with a fresh annual report and no board pack for three
+    months is exactly the case this should catch.
+    """
+    today = today or utcnow().date()
+    since = datetime(today.year, today.month, today.day, tzinfo=timezone.utc) - timedelta(days=days)
+    covered = {
+        pid for (pid,) in session.query(distinct(Document.plan_id))
+        .filter(Document.downloaded_at >= since,
+                or_(Document.doc_type.is_(None),
+                    ~Document.doc_type.in_(BOARD_MATERIAL_EXCLUDED_TYPES)))
+        .all()
+    }
+    total_aum = covered_aum = 0.0
+    plans_total = 0
+    for pid, aum in session.query(Plan.id, Plan.aum_billions).all():
+        plans_total += 1
+        aum = float(aum or 0)
+        total_aum += aum
+        if pid in covered:
+            covered_aum += aum
+    return {
+        "days": days,
+        "plans_covered": len(covered),
+        "plans_total": plans_total,
+        "covered_aum": covered_aum,
+        "total_aum": total_aum,
+        "share": (covered_aum / total_aum) if total_aum else 0.0,
+    }
 
 
 def plans_index_rows(session) -> list[dict]:

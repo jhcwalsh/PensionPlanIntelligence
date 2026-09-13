@@ -2958,15 +2958,18 @@ def _render_admin_login_sidebar() -> None:
 def page_admin():
     """Admin views: pipeline / data-quality diagnostics for the site owner."""
     st.title("Admin")
-    (tab_runs, tab_coverage, tab_backlog, tab_failed,
+    (tab_runs, tab_coverage, tab_references, tab_backlog, tab_failed,
      tab_cafr, tab_cafr_refreshes, tab_subscribers, tab_spend) = st.tabs(
-        ["Recent Runs", "Plan Coverage", "Pipeline Backlog",
+        ["Recent Runs", "Plan Coverage", "References", "Pipeline Backlog",
          "Failed Docs", "CAFR Coverage", "CAFR Refreshes",
          "Subscribers", "Spend"]
     )
 
     with tab_runs:
         _render_recent_runs()
+
+    with tab_references:
+        _render_admin_references()
 
     with tab_coverage:
         st.caption(
@@ -3067,6 +3070,77 @@ def page_admin():
 
     with tab_spend:
         _render_admin_spend()
+
+
+@st.cache_data(ttl=300)
+def _admin_references_table(months: int) -> dict:
+    """plan_reference_rows plus the 60-day AUM coverage, cached for the
+    page's TTL: the query walks every summarised document's dates and
+    every published briefing's text."""
+    session = get_db_session()
+    return {"table": queries.plan_reference_rows(session, months=months),
+            "coverage": queries.aum_coverage(session, days=60)}
+
+
+def _render_admin_references() -> None:
+    """How often each plan turns up, month by month.
+
+    Built after a one-off table on 2026-09-12 showed 41 of 150 plans with
+    no summarised document in six months, five of the ten largest funds
+    among them, and ten plans supplying half of everything. Two measures
+    per month, documents summarised and briefing mentions, an observed
+    meeting cadence so a silent monthly board reads as a discovery failure
+    rather than a quiet quarter, and one AUM-weighted number to watch.
+    """
+    import pandas as pd
+
+    months = st.select_slider("Months shown", options=[3, 6, 9, 12], value=6,
+                              key="admin_ref_months")
+    data = _admin_references_table(months)
+    cov, table = data["coverage"], data["table"]
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric(f"AUM with board material in {cov['days']} days",
+              f"{cov['share']:.0%}",
+              help="Share of tracked AUM whose plan had a non-CAFR, non-IPS "
+                   "document downloaded in the window. Measures discovery, "
+                   "not summarisation.")
+    c2.metric("Plans covered", f"{cov['plans_covered']} of {cov['plans_total']}")
+    overdue = [r for r in table["rows"] if r["overdue"]]
+    c3.metric("Overdue against own cadence", len(overdue),
+              help="Monthly boards silent for more than two months, "
+                   "quarterly or sparse ones for more than four.")
+
+    labels = {k: datetime.strptime(k, "%Y-%m").strftime("%b %y") for k in table["months"]}
+    rows = []
+    for r in table["rows"]:
+        row = {"Plan": r["Abbrev"] or r["Plan"], "AUM $bn": r["AUM $bn"],
+               "Cadence": r["cadence"], "Last doc": r["last_doc"] or "—",
+               "Overdue": "yes" if r["overdue"] else ""}
+        for k in table["months"]:
+            row[f"Docs {labels[k]}"] = r["docs"][k]
+        row["Docs total"] = r["docs_total"]
+        for k in table["months"]:
+            row[f"Mentions {labels[k]}"] = r["mentions"][k]
+        row["Mentions total"] = r["mentions_total"]
+        rows.append(row)
+    df = pd.DataFrame(rows)
+
+    st.caption(
+        "Docs: documents summarised, in the month of the meeting date (else "
+        "the download date). Mentions: times the plan is named in briefings "
+        "published for that month. Cadence is observed from the last twelve "
+        "months of meeting dates, not declared by the plan."
+    )
+    st.dataframe(df, use_container_width=True, hide_index=True,
+                 column_config={"AUM $bn": st.column_config.NumberColumn(format="%.0f")})
+
+    if overdue:
+        st.markdown("**Overdue plans**")
+        st.dataframe(pd.DataFrame([
+            {"Plan": r["Plan"], "AUM $bn": r["AUM $bn"], "Cadence": r["cadence"],
+             "Last doc": r["last_doc"] or "—"} for r in overdue]),
+            use_container_width=True, hide_index=True)
 
 
 def _render_admin_spend() -> None:
