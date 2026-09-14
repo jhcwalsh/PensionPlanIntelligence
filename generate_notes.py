@@ -28,7 +28,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 from database import (
     utcnow,
     sort_key,
-    Document, Plan, Summary, get_new_meetings, get_session, init_db,
+    Document, Plan, Summary, as_utc, get_new_meetings, get_session, init_db,
 )
 
 # Reuse the summarizer's client setup (handles API key + OAuth fallback)
@@ -151,17 +151,68 @@ def _enrich_meeting_summaries(session, meeting: dict) -> list[dict]:
     return summaries
 
 
+# Breadth controls on the composer's input (2026-09-14). Six months of
+# briefings were dominated by a handful of small plans, for three reasons
+# these constants and the undated filter below address:
+#
+# * El Paso and Metro Nashville publish every agenda item as its own PDF,
+#   so one meeting arrived as twenty summaries beside CalPERS's one.
+# * 467 of 2,358 documents in the window had no meeting date and were
+#   placed by download date; NM PERA's 2018 minutes reached an April
+#   briefing that way.
+# * Nothing capped meetings per plan, and the prompt was ordered "meetings
+#   with investment actions first" then truncated at MAX_PROMPT_CHARS, so
+#   whichever plans came last were dropped entirely.
+#
+# The Activity tab reads get_new_meetings directly and is unaffected.
+MAX_MEETINGS_PER_PLAN = 3
+MAX_SUMMARIES_PER_MEETING = 6
+_SUMMARY_TYPE_RANK = {"minutes": 0, "board_pack": 1, "performance": 2, "agenda": 3}
+
+
+def _summary_rank(summary: dict) -> tuple:
+    """Minutes and packs before agenda items; within a type, the richest
+    summary first. What survives a cap should be the record of what the
+    board did, not the cover sheet."""
+    richness = len(summary.get("investment_actions") or []) + len(summary.get("decisions") or [])
+    return (_SUMMARY_TYPE_RANK.get(summary.get("doc_type"), 9), -richness, summary["doc_id"])
+
+
 def gather_highlights_data(session, days: int = 7) -> dict:
-    """Collect recent meeting data for the 7-day highlights note."""
-    meetings = get_new_meetings(session, days=days)
+    """Collect recent meeting data for the 7-day highlights note.
+
+    Applies the breadth controls: undated meetings are dropped, each plan
+    keeps its MAX_MEETINGS_PER_PLAN most recent meetings, and each meeting
+    keeps its MAX_SUMMARIES_PER_MEETING best summaries. ``dropped`` counts
+    what did not make it, for the run log.
+    """
+    all_meetings = get_new_meetings(session, days=days)
+    dropped = {"undated_meetings": 0, "meetings_over_cap": 0, "summaries_over_cap": 0}
+
+    dated = [m for m in all_meetings if m["meeting_date"] is not None]
+    dropped["undated_meetings"] = len(all_meetings) - len(dated)
+    for m in dated:
+        m["meeting_date"] = as_utc(m["meeting_date"])
+
+    per_plan: dict[str, int] = {}
+    meetings = []
+    for m in sorted(dated, key=lambda m: m["meeting_date"], reverse=True):
+        pid = m["plan"].id if m["plan"] else ""
+        if per_plan.get(pid, 0) >= MAX_MEETINGS_PER_PLAN:
+            dropped["meetings_over_cap"] += 1
+            continue
+        per_plan[pid] = per_plan.get(pid, 0) + 1
+        meetings.append(m)
 
     if not meetings:
         return {"meetings": [], "date_range": None, "plans_with_activity": 0,
-                "total_aum": 0, "plans": [], "new_doc_count": 0}
+                "total_aum": 0, "plans": [], "new_doc_count": 0, "dropped": dropped}
 
-    # Enrich with all summaries
+    # Enrich with summaries, capped per meeting
     for m in meetings:
-        m["all_summaries"] = _enrich_meeting_summaries(session, m)
+        summaries = sorted(_enrich_meeting_summaries(session, m), key=_summary_rank)
+        dropped["summaries_over_cap"] += max(0, len(summaries) - MAX_SUMMARIES_PER_MEETING)
+        m["all_summaries"] = summaries[:MAX_SUMMARIES_PER_MEETING]
 
     # Compute metadata
     dates = [m["meeting_date"] for m in meetings if m["meeting_date"]]
@@ -182,6 +233,7 @@ def gather_highlights_data(session, days: int = 7) -> dict:
         "total_aum": total_aum,
         "plans": plans,
         "new_doc_count": _count_new_documents(session, days=days),
+        "dropped": dropped,
     }
 
 
@@ -375,13 +427,16 @@ def _format_aum_table(plans: list) -> str:
 def format_meetings_for_prompt(meetings: list[dict]) -> str:
     """Convert enriched meeting data into structured text for Claude.
 
-    Prioritises meetings with investment actions and summaries.
-    Truncates at MAX_PROMPT_CHARS to stay within token budget.
+    Ordered by plan AUM, largest first, then by date. Truncates at
+    MAX_PROMPT_CHARS to stay within token budget, so when the week is too
+    big for the prompt it is the smallest funds that fall off the end.
+    (Until 2026-09-14 the order was "meetings with investment actions
+    first", which put the plans with the richest minutes at the front and
+    the largest funds wherever they fell.)
     """
-    # Sort: meetings with investment actions first, then by date descending
     def _sort_key(m):
-        has_actions = any(s.get("investment_actions") for s in m.get("all_summaries", []))
-        return (not has_actions, -(m["meeting_date"].timestamp() if m["meeting_date"] else 0))
+        aum = m["plan"].aum_billions if m["plan"] and m["plan"].aum_billions else 0
+        return (-aum, -(m["meeting_date"].timestamp() if m["meeting_date"] else 0))
 
     sorted_meetings = sorted(meetings, key=_sort_key)
 
@@ -513,6 +568,11 @@ FORMAT REQUIREMENTS:
   governance actions, performance data — but choose themes that fit the data
 - Bold (**) plan names, dollar amounts, and manager names on first mention
 - Include plan AUM in parentheses on first mention of each plan (see PLAN AUM TABLE)
+- BREADTH: cover as many plans as the evidence supports. No single plan may
+  supply more than a quarter of the note's content, however much material it
+  has. When two items are comparable in substance, prefer the larger fund by
+  AUM. A plan with one document and one real decision outranks a plan with
+  twenty documents and none.
 - Every sentence containing a $ figure, %, bps, vote tally, or manager name \
 must end with an inline citation as a parenthesised markdown link in the \
 form ([source](?doc=42)). The cited doc must be the one whose summary in \

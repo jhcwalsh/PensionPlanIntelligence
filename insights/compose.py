@@ -71,6 +71,14 @@ def compose_weekly(session, period_start: date, period_end: date) -> str:
 
     days = (period_end - period_start).days + 1
     data = gather_highlights_data(session, days=days)
+    dropped = data.get("dropped") or {}
+    if any(dropped.values()):
+        # In the run log, so a week where the caps bit hard is visible
+        # without reading the briefing.
+        print(f"Weekly breadth caps: {dropped['undated_meetings']} undated meetings, "
+              f"{dropped['meetings_over_cap']} meetings over the per-plan cap, "
+              f"{dropped['summaries_over_cap']} summaries over the per-meeting cap "
+              f"left out of the composer's input.")
     if not data["meetings"]:
         return (
             f"# 7-Day Highlights: {period_start.isoformat()} – {period_end.isoformat()}\n"

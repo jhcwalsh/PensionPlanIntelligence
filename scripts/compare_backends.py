@@ -22,6 +22,7 @@ import datetime as dt
 import hashlib
 import pathlib
 import sys
+from datetime import date
 from decimal import Decimal
 
 import sqlalchemy as sa
@@ -95,6 +96,10 @@ CASES = {
     "recent_summaries": {"args": (None, 50)},
     "corpus_stats": {"args": ()},
     "plan_coverage_rows": {"args": ()},
+    # Fixed dates so both backends see the same window: today would move
+    # between the two runs.
+    "plan_reference_rows": {"args": (6, date(2026, 9, 12))},
+    "aum_coverage": {"args": (60, date(2026, 9, 12))},
     "plans_index_rows": {"args": ()},
     "cafr_coverage_rows": {"args": ()},
     "cafr_plan_detail": {"args": ("opers",)},
