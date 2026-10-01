@@ -35,6 +35,10 @@
     "canonical": "hedge_funds_absolute_return",
     "confidence": "high"
   },
+  "Absolute Return / Hedged Strategies": {
+    "canonical": "hedge_funds_absolute_return",
+    "confidence": "high"
+  },
   "Absolute Return / LARS": {
     "canonical": "hedge_funds_absolute_return",
     "confidence": "medium"
@@ -63,8 +67,20 @@
     "canonical": "hedge_funds_absolute_return",
     "confidence": "high"
   },
+  "Absolute Return, Fixed Income": {
+    "canonical": "hedge_funds_absolute_return",
+    "confidence": "medium"
+  },
   "Absolute return": {
     "canonical": "hedge_funds_absolute_return",
+    "confidence": "high"
+  },
+  "Active Core (Large Cap Domestic)": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
+  "Active Core (Small Cap Domestic)": {
+    "canonical": "public_equity_us",
     "confidence": "high"
   },
   "Active International Small Capitalization Equity": {
@@ -80,6 +96,10 @@
     "confidence": "high"
   },
   "Actuarial Assumption": {
+    "canonical": "unmapped",
+    "confidence": "high"
+  },
+  "Actuarial Services": {
     "canonical": "unmapped",
     "confidence": "high"
   },
@@ -106,6 +126,10 @@
   "Advisory Services": {
     "canonical": "unmapped",
     "confidence": "high"
+  },
+  "Affiliate Funds": {
+    "canonical": "unmapped",
+    "confidence": "medium"
   },
   "Affiliate/Agency Pool": {
     "canonical": "unmapped",
@@ -163,11 +187,23 @@
     "canonical": "public_equity_global",
     "confidence": "medium"
   },
+  "All-Cap Core Equity": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
+  "All-Cap Non-U.S.": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
   "Alpha": {
     "canonical": "hedge_funds_absolute_return",
     "confidence": "medium"
   },
   "Alpha Overlay": {
+    "canonical": "hedge_funds_absolute_return",
+    "confidence": "medium"
+  },
+  "Alpha Pool": {
     "canonical": "hedge_funds_absolute_return",
     "confidence": "medium"
   },
@@ -192,6 +228,10 @@
     "confidence": "medium"
   },
   "Alternative Credit": {
+    "canonical": "private_credit",
+    "confidence": "high"
+  },
+  "Alternative Credit / Direct Lending": {
     "canonical": "private_credit",
     "confidence": "high"
   },
@@ -223,8 +263,16 @@
     "canonical": "private_credit",
     "confidence": "high"
   },
+  "Alternative Investment": {
+    "canonical": "opportunistic_other",
+    "confidence": "medium"
+  },
   "Alternative Investments": {
     "canonical": "opportunistic_other",
+    "confidence": "medium"
+  },
+  "Alternative Liquid Credit": {
+    "canonical": "private_credit",
     "confidence": "medium"
   },
   "Alternative Retirement Plan - Annuities": {
@@ -319,6 +367,10 @@
     "canonical": "public_equity_non_us",
     "confidence": "medium"
   },
+  "BND CD Match Program": {
+    "canonical": "unmapped",
+    "confidence": "low"
+  },
   "Bank Collective Investment Funds": {
     "canonical": "unmapped",
     "confidence": "low"
@@ -347,6 +399,14 @@
     "canonical": "fixed_income_core",
     "confidence": "high"
   },
+  "Bonds Plus Portable Alpha": {
+    "canonical": "hedge_funds_absolute_return",
+    "confidence": "medium"
+  },
+  "Bonds Plus Portable Alpha / Hedge Funds": {
+    "canonical": "hedge_funds_absolute_return",
+    "confidence": "medium"
+  },
   "Boston Partners - Value": {
     "canonical": "public_equity_us",
     "confidence": "medium"
@@ -359,8 +419,16 @@
     "canonical": "public_equity_global",
     "confidence": "medium"
   },
+  "Broad International Equity": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
   "Broad Non-US Equity": {
     "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
+  "Broad U.S. Fixed Income": {
+    "canonical": "fixed_income_core",
     "confidence": "high"
   },
   "Broad US Equity": {
@@ -370,6 +438,10 @@
   "Business Loans / Economic Development": {
     "canonical": "private_credit",
     "confidence": "low"
+  },
+  "CRO (Crisis Risk Offset)": {
+    "canonical": "hedge_funds_absolute_return",
+    "confidence": "medium"
   },
   "Capital Accumulation Plans": {
     "canonical": "unmapped",
@@ -387,11 +459,23 @@
     "canonical": "public_equity_global",
     "confidence": "low"
   },
+  "Capital Infrastructure": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "high"
+  },
+  "Capital/Infrastructure Financing": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "high"
+  },
   "Cash": {
     "canonical": "cash_short_term",
     "confidence": "high"
   },
   "Cash & Cash Equivalents": {
+    "canonical": "cash_short_term",
+    "confidence": "high"
+  },
+  "Cash & Cash Overlay": {
     "canonical": "cash_short_term",
     "confidence": "high"
   },
@@ -411,7 +495,19 @@
     "canonical": "cash_short_term",
     "confidence": "high"
   },
+  "Cash (KERS Hazardous Pension Fund and KRS Insurance Trust Fund)": {
+    "canonical": "cash_short_term",
+    "confidence": "high"
+  },
+  "Cash (KERS Non-Hazardous Pension Fund and SPRS Pension Plan)": {
+    "canonical": "cash_short_term",
+    "confidence": "high"
+  },
   "Cash (Self-Directed)": {
+    "canonical": "cash_short_term",
+    "confidence": "high"
+  },
+  "Cash / Liquidity": {
     "canonical": "cash_short_term",
     "confidence": "high"
   },
@@ -432,6 +528,10 @@
     "confidence": "high"
   },
   "Cash Equivalents / Currency": {
+    "canonical": "cash_short_term",
+    "confidence": "high"
+  },
+  "Cash Flow-Matched Liquidity": {
     "canonical": "cash_short_term",
     "confidence": "high"
   },
@@ -479,9 +579,25 @@
     "canonical": "cash_short_term",
     "confidence": "high"
   },
+  "Cash — BRIM Strategic": {
+    "canonical": "cash_short_term",
+    "confidence": "high"
+  },
+  "Cash — Revenue Shortfall Reserve Fund Strategic": {
+    "canonical": "cash_short_term",
+    "confidence": "high"
+  },
+  "Cash — Workers' Comp Old Fund / CWPF / Uninsured Fund / Self-Insured Guaranty Pool / Self-Insured Security Pool Strategic": {
+    "canonical": "cash_short_term",
+    "confidence": "high"
+  },
   "Cash/Financing": {
     "canonical": "cash_short_term",
     "confidence": "high"
+  },
+  "Cash/Fund Transfer": {
+    "canonical": "unmapped",
+    "confidence": "medium"
   },
   "Cash/Liquid Assets": {
     "canonical": "cash_short_term",
@@ -499,9 +615,21 @@
     "canonical": "cash_short_term",
     "confidence": "high"
   },
+  "Certificates of Deposit (STIP)": {
+    "canonical": "cash_short_term",
+    "confidence": "high"
+  },
+  "Charitable/Planned Giving": {
+    "canonical": "unmapped",
+    "confidence": "high"
+  },
   "Chautauqua International Growth": {
     "canonical": "public_equity_non_us",
     "confidence": "medium"
+  },
+  "Clean Energy / Renewables": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "high"
   },
   "Climate Solutions": {
     "canonical": "opportunistic_other",
@@ -542,6 +670,14 @@
   "Commercial Mortgages": {
     "canonical": "real_estate",
     "confidence": "medium"
+  },
+  "Commercial Paper": {
+    "canonical": "cash_short_term",
+    "confidence": "high"
+  },
+  "Commercial Paper (STIP)": {
+    "canonical": "cash_short_term",
+    "confidence": "high"
   },
   "Commingled Public Equity": {
     "canonical": "public_equity_global",
@@ -595,11 +731,19 @@
     "canonical": "unmapped",
     "confidence": "high"
   },
+  "Core (Defensive Fixed Income)": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
   "Core / Core Plus Bonds": {
     "canonical": "fixed_income_core",
     "confidence": "high"
   },
   "Core Bonds": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "Core Bonds, Overlay Strategies": {
     "canonical": "fixed_income_core",
     "confidence": "high"
   },
@@ -619,6 +763,22 @@
     "canonical": "fixed_income_core",
     "confidence": "high"
   },
+  "Core Fixed Income (Interim)": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "Core Fixed Income (KERS Hazardous Pension Fund and KRS Insurance Trust Fund)": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "Core Fixed Income (KERS Non-Hazardous Pension Fund and SPRS Pension Plan)": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "Core Fixed Income (Long-Term)": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
   "Core Fixed Income / US Equity / Cash": {
     "canonical": "total",
     "confidence": "medium"
@@ -631,11 +791,35 @@
     "canonical": "total",
     "confidence": "medium"
   },
+  "Core Infrastructure": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "high"
+  },
+  "Core Infrastructure / Real Assets": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "high"
+  },
   "Core Investments": {
     "canonical": "total",
     "confidence": "medium"
   },
+  "Core Plus": {
+    "canonical": "fixed_income_core",
+    "confidence": "medium"
+  },
+  "Core Plus Bonds": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
   "Core Plus Fixed Income": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "Core Plus Fixed Income (Interim)": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "Core Plus Fixed Income (Long-Term)": {
     "canonical": "fixed_income_core",
     "confidence": "high"
   },
@@ -649,6 +833,14 @@
   },
   "Core Real Estate": {
     "canonical": "real_estate",
+    "confidence": "high"
+  },
+  "Core Securitized": {
+    "canonical": "fixed_income_core",
+    "confidence": "medium"
+  },
+  "Core U.S. Fixed Income": {
+    "canonical": "fixed_income_core",
     "confidence": "high"
   },
   "Core U.S. fixed": {
@@ -671,11 +863,27 @@
     "canonical": "real_estate",
     "confidence": "high"
   },
+  "Corporate Bonds": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
   "Corporate Equity": {
     "canonical": "public_equity_us",
     "confidence": "medium"
   },
+  "Corporate Finance/Buyouts": {
+    "canonical": "private_equity",
+    "confidence": "high"
+  },
+  "Corporate Notes (STIP)": {
+    "canonical": "cash_short_term",
+    "confidence": "high"
+  },
   "Credit": {
+    "canonical": "fixed_income_credit",
+    "confidence": "medium"
+  },
+  "Credit / Fixed Income": {
     "canonical": "fixed_income_credit",
     "confidence": "medium"
   },
@@ -699,6 +907,10 @@
     "canonical": "hedge_funds_absolute_return",
     "confidence": "medium"
   },
+  "Credit/Alternative": {
+    "canonical": "opportunistic_other",
+    "confidence": "low"
+  },
   "Credit/Debt Strategies": {
     "canonical": "fixed_income_credit",
     "confidence": "medium"
@@ -711,6 +923,10 @@
     "canonical": "hedge_funds_absolute_return",
     "confidence": "low"
   },
+  "Crisis Protection Class / Volatility Protection": {
+    "canonical": "hedge_funds_absolute_return",
+    "confidence": "medium"
+  },
   "Crisis Risk Offset": {
     "canonical": "hedge_funds_absolute_return",
     "confidence": "low"
@@ -718,6 +934,10 @@
   "Crisis Risk Offset (CRO)": {
     "canonical": "hedge_funds_absolute_return",
     "confidence": "low"
+  },
+  "Cross-Asset Class": {
+    "canonical": "unmapped",
+    "confidence": "medium"
   },
   "Currency Hedge / International Equity": {
     "canonical": "public_equity_non_us",
@@ -736,6 +956,14 @@
     "confidence": "high"
   },
   "Custody": {
+    "canonical": "unmapped",
+    "confidence": "high"
+  },
+  "Custody Services": {
+    "canonical": "unmapped",
+    "confidence": "high"
+  },
+  "Custody/Banking": {
     "canonical": "unmapped",
     "confidence": "high"
   },
@@ -767,6 +995,10 @@
     "canonical": "hedge_funds_absolute_return",
     "confidence": "medium"
   },
+  "Defensive Fixed Income": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
   "Defensive/Hedged Equity": {
     "canonical": "hedge_funds_absolute_return",
     "confidence": "medium"
@@ -783,7 +1015,19 @@
     "canonical": "unmapped",
     "confidence": "high"
   },
+  "Deferred Compensation / 457(b) Plan": {
+    "canonical": "unmapped",
+    "confidence": "high"
+  },
   "Deferred Compensation / Target Date Funds": {
+    "canonical": "unmapped",
+    "confidence": "high"
+  },
+  "Deferred Compensation Plan": {
+    "canonical": "unmapped",
+    "confidence": "high"
+  },
+  "Defined Benefit / Pension": {
     "canonical": "unmapped",
     "confidence": "high"
   },
@@ -823,6 +1067,10 @@
     "canonical": "unmapped",
     "confidence": "high"
   },
+  "Defined Contribution / 457(b) Plan": {
+    "canonical": "unmapped",
+    "confidence": "high"
+  },
   "Defined Contribution / ARP": {
     "canonical": "unmapped",
     "confidence": "high"
@@ -836,6 +1084,10 @@
     "confidence": "high"
   },
   "Defined Contribution / Multi-Asset": {
+    "canonical": "unmapped",
+    "confidence": "high"
+  },
+  "Defined Contribution / Ohio Deferred Compensation": {
     "canonical": "unmapped",
     "confidence": "high"
   },
@@ -879,6 +1131,14 @@
     "canonical": "public_equity_non_us",
     "confidence": "high"
   },
+  "Developed Market Equity (non-US) (Interim)": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
+  "Developed Market Equity (non-US) (Long-Term)": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
   "Developed Market ex US Equity": {
     "canonical": "public_equity_non_us",
     "confidence": "high"
@@ -915,6 +1175,10 @@
     "canonical": "private_equity",
     "confidence": "medium"
   },
+  "Digital Infrastructure / Real Assets": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "high"
+  },
   "Direct Investments": {
     "canonical": "unmapped",
     "confidence": "low"
@@ -929,6 +1193,10 @@
   },
   "Distressed Debt": {
     "canonical": "fixed_income_credit",
+    "confidence": "high"
+  },
+  "Diverse Managers": {
+    "canonical": "unmapped",
     "confidence": "high"
   },
   "Diversified": {
@@ -947,11 +1215,19 @@
     "canonical": "fixed_income_core",
     "confidence": "high"
   },
+  "Diversified Opportunities": {
+    "canonical": "opportunistic_other",
+    "confidence": "medium"
+  },
   "Diversifiers": {
     "canonical": "opportunistic_other",
     "confidence": "low"
   },
   "Diversifiers (Glide-Path Pool)": {
+    "canonical": "opportunistic_other",
+    "confidence": "low"
+  },
+  "Diversifying": {
     "canonical": "opportunistic_other",
     "confidence": "low"
   },
@@ -969,6 +1245,10 @@
   },
   "Diversifying Strategies": {
     "canonical": "opportunistic_other",
+    "confidence": "medium"
+  },
+  "Diversifying Strategies / Alternatives": {
+    "canonical": "hedge_funds_absolute_return",
     "confidence": "medium"
   },
   "Diversifying Strategies / Hedge Fund": {
@@ -995,9 +1275,25 @@
     "canonical": "public_equity_us",
     "confidence": "high"
   },
+  "Domestic Equities - Large Cap": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
+  "Domestic Equities - Small/mid Cap": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
   "Domestic Equities and Fixed Income": {
     "canonical": "total",
     "confidence": "medium"
+  },
+  "Domestic Equities – Large Cap": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
+  "Domestic Equities – Small-Mid Cap": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
   },
   "Domestic Equity": {
     "canonical": "public_equity_us",
@@ -1028,6 +1324,10 @@
     "confidence": "high"
   },
   "Domestic Equity - Microcap Value": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
+  "Domestic Equity - SMID Cap": {
     "canonical": "public_equity_us",
     "confidence": "high"
   },
@@ -1067,11 +1367,35 @@
     "canonical": "fixed_income_core",
     "confidence": "high"
   },
+  "Domestic Large Cap": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
+  "Domestic Large Cap Equity": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
+  "Domestic Large Cap Value Equity": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
+  "Domestic Mid Cap": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
+  "Domestic Small Cap": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
   "Domestic Small Cap Core Equity": {
     "canonical": "public_equity_us",
     "confidence": "high"
   },
   "Domestic Small Cap Core and Growth Equity": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
+  "Domestic Small Cap Growth": {
     "canonical": "public_equity_us",
     "confidence": "high"
   },
@@ -1085,6 +1409,10 @@
   },
   "Domestic Stocks": {
     "canonical": "public_equity_us",
+    "confidence": "high"
+  },
+  "Domestic and International Equity": {
+    "canonical": "public_equity_global",
     "confidence": "high"
   },
   "Domestic equities": {
@@ -1151,6 +1479,10 @@
     "canonical": "real_estate",
     "confidence": "high"
   },
+  "ESG / All Asset Classes": {
+    "canonical": "unmapped",
+    "confidence": "high"
+  },
   "ETI": {
     "canonical": "unmapped",
     "confidence": "low"
@@ -1164,6 +1496,10 @@
     "confidence": "high"
   },
   "Emerging International Equities": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
+  "Emerging International Equity": {
     "canonical": "public_equity_non_us",
     "confidence": "high"
   },
@@ -1207,6 +1543,14 @@
     "canonical": "public_equity_non_us",
     "confidence": "high"
   },
+  "Emerging Market Equity (Interim)": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
+  "Emerging Market Equity (Long-Term)": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
   "Emerging Market Equity ex-China": {
     "canonical": "public_equity_non_us",
     "confidence": "high"
@@ -1219,9 +1563,17 @@
     "canonical": "public_equity_non_us",
     "confidence": "medium"
   },
+  "Emerging Markets / Private Equity": {
+    "canonical": "private_equity",
+    "confidence": "medium"
+  },
   "Emerging Markets All-Cap": {
     "canonical": "public_equity_non_us",
     "confidence": "high"
+  },
+  "Emerging Markets Bonds": {
+    "canonical": "fixed_income_credit",
+    "confidence": "medium"
   },
   "Emerging Markets Debt": {
     "canonical": "fixed_income_core",
@@ -1230,6 +1582,10 @@
   "Emerging Markets Debt Composite": {
     "canonical": "fixed_income_core",
     "confidence": "medium"
+  },
+  "Emerging Markets Eq.": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
   },
   "Emerging Markets Equity": {
     "canonical": "public_equity_non_us",
@@ -1249,6 +1605,18 @@
   },
   "Emerging markets": {
     "canonical": "public_equity_non_us",
+    "confidence": "medium"
+  },
+  "Endowment": {
+    "canonical": "unmapped",
+    "confidence": "high"
+  },
+  "Endowment / Fixed Income": {
+    "canonical": "fixed_income_core",
+    "confidence": "medium"
+  },
+  "Endowment / Royalties": {
+    "canonical": "real_assets_infrastructure",
     "confidence": "medium"
   },
   "Energy & Power": {
@@ -1307,6 +1675,10 @@
     "canonical": "total",
     "confidence": "medium"
   },
+  "Equity (includes Portable Alpha) — DB Plans / RHBT / WEF / BCDA / State Parks / Municipal Model A Strategic": {
+    "canonical": "public_equity_us",
+    "confidence": "medium"
+  },
   "Equity - IPO": {
     "canonical": "private_equity",
     "confidence": "medium"
@@ -1351,12 +1723,60 @@
     "canonical": "public_equity_global",
     "confidence": "high"
   },
+  "Equity — BRIM Strategic": {
+    "canonical": "public_equity_us",
+    "confidence": "medium"
+  },
+  "Equity — DB Plans / RHBT / WEF / BCDA / State Parks / Municipal Model A Base": {
+    "canonical": "public_equity_us",
+    "confidence": "medium"
+  },
+  "Equity — DEP Agency Strategic": {
+    "canonical": "public_equity_us",
+    "confidence": "medium"
+  },
+  "Equity — DEP Trust Strategic": {
+    "canonical": "public_equity_us",
+    "confidence": "medium"
+  },
+  "Equity — Municipal Model B Strategic": {
+    "canonical": "public_equity_us",
+    "confidence": "medium"
+  },
+  "Equity — PEIA Strategic": {
+    "canonical": "public_equity_us",
+    "confidence": "medium"
+  },
+  "Equity — Revenue Shortfall Reserve Fund Part B Strategic": {
+    "canonical": "public_equity_us",
+    "confidence": "medium"
+  },
+  "Equity — Revenue Shortfall Reserve Fund Strategic": {
+    "canonical": "public_equity_us",
+    "confidence": "medium"
+  },
+  "Equity — Workers' Comp Old Fund / CWPF / Uninsured Fund / Self-Insured Guaranty Pool / Self-Insured Security Pool Strategic": {
+    "canonical": "public_equity_us",
+    "confidence": "medium"
+  },
+  "Established International (Lg Cap)": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
+  "Established International (Sm Cap)": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
   "Exposure Management Portfolio": {
     "canonical": "opportunistic_other",
     "confidence": "low"
   },
   "Exposure Management Portfolio / Private Equity (AI/Tech)": {
     "canonical": "private_equity",
+    "confidence": "medium"
+  },
+  "External Finance / Revenue Bonds": {
+    "canonical": "fixed_income_core",
     "confidence": "medium"
   },
   "FFVSF": {
@@ -1391,8 +1811,16 @@
     "canonical": "total",
     "confidence": "medium"
   },
+  "Farmland": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "high"
+  },
   "Farmland / Real Assets": {
     "canonical": "real_assets_infrastructure",
+    "confidence": "high"
+  },
+  "Federal Agencies (STIP)": {
+    "canonical": "cash_short_term",
     "confidence": "high"
   },
   "Fiera Comox Global Agricultural Fund": {
@@ -1411,7 +1839,19 @@
     "canonical": "fixed_income_core",
     "confidence": "high"
   },
+  "Fixed Income (ODC)": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "Fixed Income (TFIP)": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
   "Fixed Income (including Cash)": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "Fixed Income + Cash (High-Level Exposure)": {
     "canonical": "fixed_income_core",
     "confidence": "high"
   },
@@ -1499,6 +1939,10 @@
     "canonical": "fixed_income_core",
     "confidence": "high"
   },
+  "Fixed Income - U.S. Treasury": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
   "Fixed Income / Absolute Return": {
     "canonical": "hedge_funds_absolute_return",
     "confidence": "medium"
@@ -1522,6 +1966,10 @@
   "Fixed Income / Equity": {
     "canonical": "opportunistic_other",
     "confidence": "low"
+  },
+  "Fixed Income / Floating Rate Bank Loans": {
+    "canonical": "fixed_income_credit",
+    "confidence": "high"
   },
   "Fixed Income / Global Equity": {
     "canonical": "opportunistic_other",
@@ -1549,6 +1997,10 @@
   },
   "Fixed Income / Private Debt": {
     "canonical": "private_credit",
+    "confidence": "high"
+  },
+  "Fixed Income / Sovereign Bonds": {
+    "canonical": "fixed_income_core",
     "confidence": "high"
   },
   "Fixed Income / TIPS": {
@@ -1619,9 +2071,69 @@
     "canonical": "fixed_income_core",
     "confidence": "high"
   },
+  "Fixed Income and Equities": {
+    "canonical": "total",
+    "confidence": "medium"
+  },
   "Fixed Income to Cash": {
     "canonical": "fixed_income_core",
     "confidence": "medium"
+  },
+  "Fixed Income – Cash": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "Fixed Income – Core": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "Fixed Income – Core Plus": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "Fixed Income – Credit": {
+    "canonical": "fixed_income_credit",
+    "confidence": "high"
+  },
+  "Fixed Income — BRIM Strategic": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "Fixed Income — DB Plans / RHBT / WEF / BCDA / State Parks / Municipal Model A Base": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "Fixed Income — DB Plans / RHBT / WEF / BCDA / State Parks / Municipal Model A Strategic": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "Fixed Income — DEP Agency Strategic": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "Fixed Income — DEP Trust Strategic": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "Fixed Income — Municipal Model B Strategic": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "Fixed Income — PEIA Strategic": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "Fixed Income — Revenue Shortfall Reserve Fund Part B Strategic": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "Fixed Income — Revenue Shortfall Reserve Fund Strategic": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "Fixed Income — Workers' Comp Old Fund / CWPF / Uninsured Fund / Self-Insured Guaranty Pool / Self-Insured Security Pool Strategic": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
   },
   "Fixed Income, Private Debt": {
     "canonical": "private_credit",
@@ -1639,7 +2151,19 @@
     "canonical": "public_equity_non_us",
     "confidence": "high"
   },
+  "Fossil Fuels / Energy": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "medium"
+  },
+  "Fund Administration": {
+    "canonical": "unmapped",
+    "confidence": "high"
+  },
   "Futures / Cash Equitization": {
+    "canonical": "unmapped",
+    "confidence": "high"
+  },
+  "Futures Overlay": {
     "canonical": "unmapped",
     "confidence": "high"
   },
@@ -1667,11 +2191,19 @@
     "canonical": "unmapped",
     "confidence": "high"
   },
+  "General Investments": {
+    "canonical": "unmapped",
+    "confidence": "medium"
+  },
   "Global Allocation": {
     "canonical": "total",
     "confidence": "medium"
   },
   "Global Bonds": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "Global Bonds (Active)": {
     "canonical": "fixed_income_core",
     "confidence": "high"
   },
@@ -1695,6 +2227,10 @@
     "canonical": "public_equity_global",
     "confidence": "high"
   },
+  "Global Equities (Active)": {
+    "canonical": "public_equity_global",
+    "confidence": "high"
+  },
   "Global Equities / Global Fixed Income": {
     "canonical": "total",
     "confidence": "medium"
@@ -1715,8 +2251,28 @@
     "canonical": "public_equity_global",
     "confidence": "high"
   },
+  "Global Equity - Emerging Markets": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
+  "Global Equity - Large Cap Core": {
+    "canonical": "public_equity_global",
+    "confidence": "high"
+  },
+  "Global Equity - Low Volatility": {
+    "canonical": "public_equity_global",
+    "confidence": "medium"
+  },
   "Global Equity / Cash": {
     "canonical": "total",
+    "confidence": "medium"
+  },
+  "Global Equity / Multi-Asset": {
+    "canonical": "public_equity_global",
+    "confidence": "medium"
+  },
+  "Global Equity / Opportunistic": {
+    "canonical": "opportunistic_other",
     "confidence": "medium"
   },
   "Global Equity / Private Equity": {
@@ -1737,6 +2293,10 @@
   },
   "Global Equity Strategies": {
     "canonical": "public_equity_global",
+    "confidence": "medium"
+  },
+  "Global Equity to Real Assets": {
+    "canonical": "real_assets_infrastructure",
     "confidence": "medium"
   },
   "Global Equity, Fixed Income": {
@@ -1775,6 +2335,10 @@
     "canonical": "real_assets_infrastructure",
     "confidence": "high"
   },
+  "Global Listed Infrastructure / Real Assets": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "high"
+  },
   "Global Low Volatility Equity": {
     "canonical": "public_equity_global",
     "confidence": "high"
@@ -1787,12 +2351,24 @@
     "canonical": "total",
     "confidence": "medium"
   },
+  "Global Multi-Sector": {
+    "canonical": "opportunistic_other",
+    "confidence": "medium"
+  },
+  "Global Multi-Sector Credit": {
+    "canonical": "fixed_income_credit",
+    "confidence": "medium"
+  },
   "Global Multi-Sector Fixed Income": {
     "canonical": "fixed_income_core",
     "confidence": "high"
   },
   "Global Multi-Sector/Opportunistic": {
     "canonical": "opportunistic_other",
+    "confidence": "medium"
+  },
+  "Global Opportunistic Credit": {
+    "canonical": "fixed_income_credit",
     "confidence": "medium"
   },
   "Global Private Credit": {
@@ -1809,6 +2385,10 @@
   },
   "Global Public Equity": {
     "canonical": "public_equity_global",
+    "confidence": "high"
+  },
+  "Global REITs": {
+    "canonical": "real_estate",
     "confidence": "high"
   },
   "Global Real Assets": {
@@ -1833,6 +2413,10 @@
   },
   "Global equity": {
     "canonical": "public_equity_global",
+    "confidence": "high"
+  },
+  "Global ex-US Equity": {
+    "canonical": "public_equity_non_us",
     "confidence": "high"
   },
   "Global income": {
@@ -1871,6 +2455,14 @@
     "canonical": "public_equity_global",
     "confidence": "medium"
   },
+  "Growth (Interim Total)": {
+    "canonical": "unmapped",
+    "confidence": "medium"
+  },
+  "Growth (International)": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
   "Growth Asset Category": {
     "canonical": "public_equity_global",
     "confidence": "medium"
@@ -1883,7 +2475,15 @@
     "canonical": "real_estate",
     "confidence": "high"
   },
+  "Growth/Capital Appreciation": {
+    "canonical": "public_equity_global",
+    "confidence": "medium"
+  },
   "Growth/Equity": {
+    "canonical": "public_equity_global",
+    "confidence": "medium"
+  },
+  "Growth/Equity (total)": {
     "canonical": "public_equity_global",
     "confidence": "medium"
   },
@@ -2107,6 +2707,14 @@
     "canonical": "unmapped",
     "confidence": "high"
   },
+  "Healthcare / Innovation": {
+    "canonical": "opportunistic_other",
+    "confidence": "low"
+  },
+  "Healthcare Facilities": {
+    "canonical": "real_estate",
+    "confidence": "medium"
+  },
   "Healthcare Operations/Population Health": {
     "canonical": "unmapped",
     "confidence": "high"
@@ -2143,7 +2751,39 @@
     "canonical": "hedge_funds_absolute_return",
     "confidence": "high"
   },
+  "Hedge Funds / Portable Alpha": {
+    "canonical": "hedge_funds_absolute_return",
+    "confidence": "high"
+  },
   "Hedge Funds and Other Diversification Strategies": {
+    "canonical": "hedge_funds_absolute_return",
+    "confidence": "high"
+  },
+  "Hedge Funds — BRIM Strategic": {
+    "canonical": "hedge_funds_absolute_return",
+    "confidence": "high"
+  },
+  "Hedge Funds — DB Plans / RHBT / WEF / BCDA / State Parks / Municipal Model A Strategic": {
+    "canonical": "hedge_funds_absolute_return",
+    "confidence": "high"
+  },
+  "Hedge Funds — DEP Agency Strategic": {
+    "canonical": "hedge_funds_absolute_return",
+    "confidence": "high"
+  },
+  "Hedge Funds — DEP Trust Strategic": {
+    "canonical": "hedge_funds_absolute_return",
+    "confidence": "high"
+  },
+  "Hedge Funds — PEIA Strategic": {
+    "canonical": "hedge_funds_absolute_return",
+    "confidence": "high"
+  },
+  "Hedge Funds — Revenue Shortfall Reserve Fund Part B Strategic": {
+    "canonical": "hedge_funds_absolute_return",
+    "confidence": "high"
+  },
+  "Hedge Funds — Workers' Comp Old Fund / CWPF / Uninsured Fund / Self-Insured Guaranty Pool / Self-Insured Security Pool Strategic": {
     "canonical": "hedge_funds_absolute_return",
     "confidence": "high"
   },
@@ -2159,6 +2799,10 @@
     "canonical": "hedge_funds_absolute_return",
     "confidence": "medium"
   },
+  "Hedged Funds": {
+    "canonical": "hedge_funds_absolute_return",
+    "confidence": "high"
+  },
   "High Yield": {
     "canonical": "fixed_income_credit",
     "confidence": "high"
@@ -2171,6 +2815,14 @@
     "canonical": "fixed_income_credit",
     "confidence": "high"
   },
+  "High Yield Bonds & Bank Loans": {
+    "canonical": "fixed_income_credit",
+    "confidence": "high"
+  },
+  "High Yield Bonds (Active)": {
+    "canonical": "fixed_income_credit",
+    "confidence": "high"
+  },
   "High Yield Bonds / Non-US Developed Equity / Private Equity": {
     "canonical": "opportunistic_other",
     "confidence": "medium"
@@ -2180,6 +2832,10 @@
     "confidence": "high"
   },
   "High Yield Composite": {
+    "canonical": "fixed_income_credit",
+    "confidence": "high"
+  },
+  "High Yield Corp. Credit": {
     "canonical": "fixed_income_credit",
     "confidence": "high"
   },
@@ -2207,9 +2863,17 @@
     "canonical": "fixed_income_credit",
     "confidence": "high"
   },
+  "Huff Energy": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "medium"
+  },
   "IFM Global Infrastructure Fund": {
     "canonical": "real_assets_infrastructure",
     "confidence": "high"
+  },
+  "Illiquid Assets": {
+    "canonical": "opportunistic_other",
+    "confidence": "low"
   },
   "Illiquid Assets (Private Equity, Private Credit, Real Estate)": {
     "canonical": "opportunistic_other",
@@ -2231,17 +2895,41 @@
     "canonical": "fixed_income_core",
     "confidence": "medium"
   },
+  "Impact / Real Assets": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "medium"
+  },
   "In-State Loans": {
     "canonical": "unmapped",
     "confidence": "medium"
+  },
+  "In-state Equity": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
+  "In-state Fixed Income": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "In-state Infrastructure Loan": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "high"
   },
   "Income": {
     "canonical": "unmapped",
     "confidence": "low"
   },
+  "Income (Interim Total)": {
+    "canonical": "unmapped",
+    "confidence": "medium"
+  },
   "Income Strategies": {
     "canonical": "unmapped",
     "confidence": "low"
+  },
+  "Income/Capital Preservation": {
+    "canonical": "fixed_income_core",
+    "confidence": "medium"
   },
   "Income/Fixed Income": {
     "canonical": "fixed_income_core",
@@ -2258,6 +2946,10 @@
   "Index Assets": {
     "canonical": "public_equity_global",
     "confidence": "medium"
+  },
+  "Index Equity": {
+    "canonical": "public_equity_global",
+    "confidence": "high"
   },
   "Index Funds": {
     "canonical": "public_equity_global",
@@ -2281,6 +2973,10 @@
   },
   "Index Funds / Passive Equity": {
     "canonical": "public_equity_global",
+    "confidence": "medium"
+  },
+  "Inflation Hedge": {
+    "canonical": "real_assets_infrastructure",
     "confidence": "medium"
   },
   "Inflation Linked - Fixed Income Fund": {
@@ -2323,6 +3019,14 @@
     "canonical": "real_assets_infrastructure",
     "confidence": "high"
   },
+  "Infrastructure (Interim)": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "high"
+  },
+  "Infrastructure (Long-Term)": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "high"
+  },
   "Infrastructure (Public)": {
     "canonical": "real_assets_infrastructure",
     "confidence": "high"
@@ -2335,6 +3039,10 @@
     "canonical": "real_assets_infrastructure",
     "confidence": "high"
   },
+  "Infrastructure / Private Equity": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "medium"
+  },
   "Infrastructure / Real Assets": {
     "canonical": "real_assets_infrastructure",
     "confidence": "high"
@@ -2343,7 +3051,15 @@
     "canonical": "real_assets_infrastructure",
     "confidence": "high"
   },
+  "Infrastructure Secondaries / Real Assets": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "high"
+  },
   "Infrastructure Strategies": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "high"
+  },
+  "Infrastructure and Real Estate": {
     "canonical": "real_assets_infrastructure",
     "confidence": "high"
   },
@@ -2355,6 +3071,10 @@
     "canonical": "unmapped",
     "confidence": "low"
   },
+  "Insurance Company Contracts": {
+    "canonical": "unmapped",
+    "confidence": "medium"
+  },
   "Insurance Pool": {
     "canonical": "unmapped",
     "confidence": "low"
@@ -2364,6 +3084,10 @@
     "confidence": "medium"
   },
   "Int'l Equity": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
+  "Int'l. Dev. Markets Eq.": {
     "canonical": "public_equity_non_us",
     "confidence": "high"
   },
@@ -2383,6 +3107,14 @@
     "canonical": "fixed_income_credit",
     "confidence": "high"
   },
+  "Internal Fund Rebalancing": {
+    "canonical": "unmapped",
+    "confidence": "high"
+  },
+  "Internal Funds": {
+    "canonical": "unmapped",
+    "confidence": "high"
+  },
   "Internal Staffing": {
     "canonical": "unmapped",
     "confidence": "high"
@@ -2391,7 +3123,19 @@
     "canonical": "public_equity_non_us",
     "confidence": "medium"
   },
+  "International (Non-U.S.) Equity": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
+  "International Bonds": {
+    "canonical": "fixed_income_core",
+    "confidence": "medium"
+  },
   "International Common Stock": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
+  "International Developed": {
     "canonical": "public_equity_non_us",
     "confidence": "high"
   },
@@ -2403,7 +3147,15 @@
     "canonical": "public_equity_non_us",
     "confidence": "high"
   },
+  "International Developed Small": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
   "International Emerging": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
+  "International Emerging Markets": {
     "canonical": "public_equity_non_us",
     "confidence": "high"
   },
@@ -2412,6 +3164,30 @@
     "confidence": "low"
   },
   "International Equities": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
+  "International Equities (Active)": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
+  "International Equities (Passive)": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
+  "International Equities - Developed": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
+  "International Equities - Emerging Markets": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
+  "International Equities – Developed Markets Large Cap": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
+  "International Equities – Emerging Markets": {
     "canonical": "public_equity_non_us",
     "confidence": "high"
   },
@@ -2443,6 +3219,10 @@
     "canonical": "public_equity_non_us",
     "confidence": "high"
   },
+  "International Equity (Developed Markets Passive)": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
   "International Equity (EAFE)": {
     "canonical": "public_equity_non_us",
     "confidence": "high"
@@ -2467,13 +3247,25 @@
     "canonical": "public_equity_non_us",
     "confidence": "high"
   },
+  "International Equity (rebalancing sub-class)": {
+    "canonical": "public_equity_non_us",
+    "confidence": "medium"
+  },
   "International Equity - Emerging Managers Fund of Funds": {
     "canonical": "public_equity_non_us",
     "confidence": "medium"
   },
+  "International Equity - Emerging Markets": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
   "International Equity - Fund of Funds": {
     "canonical": "public_equity_non_us",
     "confidence": "medium"
+  },
+  "International Equity - Passive": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
   },
   "International Equity / Defined Contribution": {
     "canonical": "public_equity_non_us",
@@ -2559,6 +3351,10 @@
     "canonical": "public_equity_non_us",
     "confidence": "high"
   },
+  "International Small Cap": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
   "International Small Cap Equity": {
     "canonical": "public_equity_non_us",
     "confidence": "high"
@@ -2612,6 +3408,10 @@
     "confidence": "high"
   },
   "Investment Consulting": {
+    "canonical": "unmapped",
+    "confidence": "high"
+  },
+  "Investment Consulting Services": {
     "canonical": "unmapped",
     "confidence": "high"
   },
@@ -2799,11 +3599,19 @@
     "canonical": "public_equity_us",
     "confidence": "high"
   },
+  "Large Capitalization Domestic": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
   "Large-Cap Growth Equity": {
     "canonical": "public_equity_us",
     "confidence": "high"
   },
   "Large-Cap Value Equity": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
+  "Large/Mid Cap U.S. Equity": {
     "canonical": "public_equity_us",
     "confidence": "high"
   },
@@ -2831,9 +3639,17 @@
     "canonical": "unmapped",
     "confidence": "high"
   },
+  "Leverage Loans": {
+    "canonical": "private_credit",
+    "confidence": "medium"
+  },
   "Life Settlements": {
     "canonical": "opportunistic_other",
     "confidence": "low"
+  },
+  "Lifecycle/Target Date Funds": {
+    "canonical": "total",
+    "confidence": "medium"
   },
   "Liquid Assets": {
     "canonical": "cash_short_term",
@@ -2846,6 +3662,10 @@
   "Liquid Credit / Emerging Market Debt": {
     "canonical": "fixed_income_credit",
     "confidence": "medium"
+  },
+  "Liquid Credit / High Yield": {
+    "canonical": "fixed_income_credit",
+    "confidence": "high"
   },
   "Liquid Policy Portfolio": {
     "canonical": "unmapped",
@@ -2870,6 +3690,10 @@
   "Liquidity / Cash": {
     "canonical": "cash_short_term",
     "confidence": "high"
+  },
+  "Liquidity / Multi-Asset": {
+    "canonical": "opportunistic_other",
+    "confidence": "low"
   },
   "Liquidity/Cash": {
     "canonical": "cash_short_term",
@@ -2903,6 +3727,10 @@
     "canonical": "fixed_income_core",
     "confidence": "high"
   },
+  "Long Treasury": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
   "Long Volatility": {
     "canonical": "hedge_funds_absolute_return",
     "confidence": "low"
@@ -2923,9 +3751,17 @@
     "canonical": "fixed_income_core",
     "confidence": "high"
   },
+  "Long/Short Equity, Opportunistic": {
+    "canonical": "hedge_funds_absolute_return",
+    "confidence": "high"
+  },
   "Loomis Sayles": {
     "canonical": "unmapped",
     "confidence": "high"
+  },
+  "Low Beta": {
+    "canonical": "public_equity_us",
+    "confidence": "medium"
   },
   "Low Volatility": {
     "canonical": "hedge_funds_absolute_return",
@@ -2940,6 +3776,10 @@
     "confidence": "high"
   },
   "MLPs": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "high"
+  },
+  "MLPs (Master Limited Partnerships)": {
     "canonical": "real_assets_infrastructure",
     "confidence": "high"
   },
@@ -2995,6 +3835,10 @@
     "canonical": "real_assets_infrastructure",
     "confidence": "high"
   },
+  "Mezzanine": {
+    "canonical": "private_credit",
+    "confidence": "medium"
+  },
   "Mid-Cap Core Equity": {
     "canonical": "public_equity_us",
     "confidence": "high"
@@ -3035,15 +3879,31 @@
     "canonical": "cash_short_term",
     "confidence": "high"
   },
+  "Money Market Funds (STIP)": {
+    "canonical": "cash_short_term",
+    "confidence": "high"
+  },
   "Money Market Instruments": {
     "canonical": "cash_short_term",
     "confidence": "high"
+  },
+  "Montana State Fund": {
+    "canonical": "unmapped",
+    "confidence": "low"
   },
   "Multi-Asset": {
     "canonical": "total",
     "confidence": "medium"
   },
+  "Multi-Asset (80% equity / 20% bonds, passive)": {
+    "canonical": "total",
+    "confidence": "high"
+  },
   "Multi-Asset (Global Equity, Fixed Income, Private Markets)": {
+    "canonical": "total",
+    "confidence": "high"
+  },
+  "Multi-Asset (Global Equity, US Fixed Income, Real Assets, TIPS, Cash)": {
     "canonical": "total",
     "confidence": "high"
   },
@@ -3059,6 +3919,10 @@
     "canonical": "total",
     "confidence": "high"
   },
+  "Multi-Asset (WSI Fund)": {
+    "canonical": "total",
+    "confidence": "medium"
+  },
   "Multi-Asset / Alternatives": {
     "canonical": "opportunistic_other",
     "confidence": "medium"
@@ -3066,6 +3930,10 @@
   "Multi-Asset / Asset Allocation": {
     "canonical": "total",
     "confidence": "high"
+  },
+  "Multi-Asset / Cash": {
+    "canonical": "total",
+    "confidence": "medium"
   },
   "Multi-Asset / Climate Solutions": {
     "canonical": "opportunistic_other",
@@ -3087,12 +3955,20 @@
     "canonical": "opportunistic_other",
     "confidence": "medium"
   },
+  "Multi-Asset / Index and Active": {
+    "canonical": "total",
+    "confidence": "medium"
+  },
   "Multi-Asset / Internal Transfer": {
     "canonical": "unmapped",
     "confidence": "high"
   },
   "Multi-Asset / Investment Cost Efficiency (Public and Private Markets)": {
     "canonical": "total",
+    "confidence": "medium"
+  },
+  "Multi-Asset / Opportunistic": {
+    "canonical": "opportunistic_other",
     "confidence": "medium"
   },
   "Multi-Asset / Overlay": {
@@ -3103,6 +3979,14 @@
     "canonical": "total",
     "confidence": "high"
   },
+  "Multi-Asset / Private Markets": {
+    "canonical": "opportunistic_other",
+    "confidence": "medium"
+  },
+  "Multi-Asset / Thematic": {
+    "canonical": "opportunistic_other",
+    "confidence": "low"
+  },
   "Multi-Asset / Total Fund": {
     "canonical": "total",
     "confidence": "high"
@@ -3110,6 +3994,14 @@
   "Multi-Asset / Total Pension Fund": {
     "canonical": "total",
     "confidence": "high"
+  },
+  "Multi-Asset / Total Return Investment Pool": {
+    "canonical": "total",
+    "confidence": "medium"
+  },
+  "Multi-Asset / Working Capital": {
+    "canonical": "total",
+    "confidence": "low"
   },
   "Multi-Asset Class": {
     "canonical": "total",
@@ -3127,12 +4019,32 @@
     "canonical": "total",
     "confidence": "high"
   },
+  "Multi-Asset/SmartSave Plan": {
+    "canonical": "total",
+    "confidence": "medium"
+  },
   "Multi-Asset/Total Fund": {
     "canonical": "total",
     "confidence": "high"
   },
   "Multi-Factor / Equity": {
     "canonical": "public_equity_global",
+    "confidence": "medium"
+  },
+  "Multi-Risk": {
+    "canonical": "unmapped",
+    "confidence": "low"
+  },
+  "Multi-Sector": {
+    "canonical": "opportunistic_other",
+    "confidence": "low"
+  },
+  "Multi-Sector Bonds": {
+    "canonical": "fixed_income_core",
+    "confidence": "medium"
+  },
+  "Multi-Sector Credit": {
+    "canonical": "fixed_income_credit",
     "confidence": "medium"
   },
   "Multi-Sector Fixed Income": {
@@ -3159,6 +4071,10 @@
     "canonical": "total",
     "confidence": "high"
   },
+  "Multi-asset / Partnership": {
+    "canonical": "total",
+    "confidence": "low"
+  },
   "Multi-asset portfolio rebalancing": {
     "canonical": "total",
     "confidence": "medium"
@@ -3167,6 +4083,10 @@
     "canonical": "unmapped",
     "confidence": "high"
   },
+  "Multiple (Target Date, Index Funds)": {
+    "canonical": "total",
+    "confidence": "medium"
+  },
   "Multiple (U.S. Equity, Non-U.S. Equity, Core Fixed Income)": {
     "canonical": "total",
     "confidence": "high"
@@ -3174,6 +4094,10 @@
   "Multiple - Emerging Markets Equity, International Small Cap Equity, High Yield Fixed Income": {
     "canonical": "total",
     "confidence": "high"
+  },
+  "Multiple/General": {
+    "canonical": "unmapped",
+    "confidence": "low"
   },
   "Multisector Fixed Income": {
     "canonical": "fixed_income_core",
@@ -3184,6 +4108,10 @@
     "confidence": "medium"
   },
   "Municipal Bonds / Affordable Housing": {
+    "canonical": "fixed_income_core",
+    "confidence": "medium"
+  },
+  "Municipal Loans": {
     "canonical": "fixed_income_core",
     "confidence": "medium"
   },
@@ -3211,6 +4139,10 @@
     "canonical": "real_assets_infrastructure",
     "confidence": "high"
   },
+  "Natural Resources & Infrastructure": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "high"
+  },
   "Natural Resources and Commodities": {
     "canonical": "real_assets_infrastructure",
     "confidence": "high"
@@ -3234,6 +4166,10 @@
   "Non-Core Fixed Income": {
     "canonical": "fixed_income_credit",
     "confidence": "high"
+  },
+  "Non-Core Fixed Income (TFIP)": {
+    "canonical": "fixed_income_credit",
+    "confidence": "medium"
   },
   "Non-Core Fixed Income Composite": {
     "canonical": "fixed_income_credit",
@@ -3266,6 +4202,18 @@
   "Non-Traditional Growth": {
     "canonical": "opportunistic_other",
     "confidence": "medium"
+  },
+  "Non-U.S. Bonds / U.S. Equity / Non-U.S. Developed Equity": {
+    "canonical": "total",
+    "confidence": "medium"
+  },
+  "Non-U.S. Developed Bonds": {
+    "canonical": "fixed_income_core",
+    "confidence": "medium"
+  },
+  "Non-U.S. Developed Equity": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
   },
   "Non-U.S. Developed Large Cap": {
     "canonical": "public_equity_non_us",
@@ -3347,7 +4295,19 @@
     "canonical": "public_equity_non_us",
     "confidence": "high"
   },
+  "Non-US Equity (EAFE Value)": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
+  "Non-US Equity (Small Cap Growth)": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
   "Non-US Equity Portfolio (Hedged)": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
+  "Non-US Large Cap Equity": {
     "canonical": "public_equity_non_us",
     "confidence": "high"
   },
@@ -3364,6 +4324,10 @@
     "confidence": "high"
   },
   "Oaktree Capital Management": {
+    "canonical": "unmapped",
+    "confidence": "high"
+  },
+  "Ohio Deferred Compensation": {
     "canonical": "unmapped",
     "confidence": "high"
   },
@@ -3397,6 +4361,14 @@
   },
   "Opportunistic & Tactical Investments": {
     "canonical": "opportunistic_other",
+    "confidence": "medium"
+  },
+  "Opportunistic / Private Credit": {
+    "canonical": "private_credit",
+    "confidence": "medium"
+  },
+  "Opportunistic Absolute Return Strategies": {
+    "canonical": "hedge_funds_absolute_return",
     "confidence": "medium"
   },
   "Opportunistic Composite": {
@@ -3443,6 +4415,10 @@
     "canonical": "fixed_income_credit",
     "confidence": "medium"
   },
+  "Opportunistic/Absolute Return": {
+    "canonical": "hedge_funds_absolute_return",
+    "confidence": "medium"
+  },
   "Opportunistic/Absolute Return Strategy": {
     "canonical": "hedge_funds_absolute_return",
     "confidence": "medium"
@@ -3466,6 +4442,10 @@
   "Opportunity": {
     "canonical": "opportunistic_other",
     "confidence": "low"
+  },
+  "Opportunity Fund": {
+    "canonical": "opportunistic_other",
+    "confidence": "medium"
   },
   "Opportunity Fund Strategies": {
     "canonical": "opportunistic_other",
@@ -3539,6 +4519,10 @@
     "canonical": "unmapped",
     "confidence": "medium"
   },
+  "Overlay / Risk Management": {
+    "canonical": "unmapped",
+    "confidence": "high"
+  },
   "PEARLS / Venture Capital": {
     "canonical": "private_equity",
     "confidence": "high"
@@ -3555,6 +4539,14 @@
     "canonical": "cash_short_term",
     "confidence": "medium"
   },
+  "Passive Core (International)": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
+  "Passive Core (Large Cap Domestic)": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
   "Passive Equity": {
     "canonical": "public_equity_global",
     "confidence": "high"
@@ -3567,7 +4559,31 @@
     "canonical": "total",
     "confidence": "medium"
   },
+  "Passport Fund": {
+    "canonical": "unmapped",
+    "confidence": "low"
+  },
+  "Passport Funds": {
+    "canonical": "unmapped",
+    "confidence": "low"
+  },
+  "Passport Funds - Equity": {
+    "canonical": "unmapped",
+    "confidence": "low"
+  },
+  "Pension": {
+    "canonical": "unmapped",
+    "confidence": "high"
+  },
   "Pension Assets": {
+    "canonical": "unmapped",
+    "confidence": "high"
+  },
+  "Pension Fund": {
+    "canonical": "unmapped",
+    "confidence": "high"
+  },
+  "Pension Fund Assets": {
     "canonical": "unmapped",
     "confidence": "high"
   },
@@ -3579,7 +4595,19 @@
     "canonical": "total",
     "confidence": "medium"
   },
+  "Pension/Liquidity": {
+    "canonical": "unmapped",
+    "confidence": "high"
+  },
+  "Policy/Cryptocurrency": {
+    "canonical": "unmapped",
+    "confidence": "high"
+  },
   "Portable Alpha": {
+    "canonical": "hedge_funds_absolute_return",
+    "confidence": "medium"
+  },
+  "Portable Alpha / Marketable Alternatives": {
     "canonical": "hedge_funds_absolute_return",
     "confidence": "medium"
   },
@@ -3598,6 +4626,10 @@
   "Portfolio Completion Strategies / Other Credit Opportunities": {
     "canonical": "private_credit",
     "confidence": "medium"
+  },
+  "Portfolio Overlay": {
+    "canonical": "unmapped",
+    "confidence": "high"
   },
   "Portfolio Redeployment": {
     "canonical": "unmapped",
@@ -3627,6 +4659,18 @@
     "canonical": "private_credit",
     "confidence": "high"
   },
+  "Private Credit (Interim)": {
+    "canonical": "private_credit",
+    "confidence": "high"
+  },
+  "Private Credit (Long-Term)": {
+    "canonical": "private_credit",
+    "confidence": "high"
+  },
+  "Private Credit - Direct Lending": {
+    "canonical": "private_credit",
+    "confidence": "high"
+  },
   "Private Credit - Direct Lending Real Estate": {
     "canonical": "private_credit",
     "confidence": "high"
@@ -3651,6 +4695,10 @@
     "canonical": "private_credit",
     "confidence": "high"
   },
+  "Private Credit / Direct Lending": {
+    "canonical": "private_credit",
+    "confidence": "high"
+  },
   "Private Credit / Innovation Portfolio": {
     "canonical": "private_credit",
     "confidence": "medium"
@@ -3660,6 +4708,10 @@
     "confidence": "high"
   },
   "Private Credit / Middle Market Direct Lending": {
+    "canonical": "private_credit",
+    "confidence": "high"
+  },
+  "Private Credit / Opportunistic Credit": {
     "canonical": "private_credit",
     "confidence": "high"
   },
@@ -3674,6 +4726,10 @@
   "Private Credit / Private Real Asset Debt": {
     "canonical": "private_credit",
     "confidence": "high"
+  },
+  "Private Credit / Real Assets": {
+    "canonical": "private_credit",
+    "confidence": "medium"
   },
   "Private Credit / Real Estate Credit": {
     "canonical": "private_credit",
@@ -3699,6 +4755,38 @@
     "canonical": "private_credit",
     "confidence": "high"
   },
+  "Private Credit Secondaries": {
+    "canonical": "private_credit",
+    "confidence": "high"
+  },
+  "Private Credit and Income — BRIM Strategic": {
+    "canonical": "private_credit",
+    "confidence": "high"
+  },
+  "Private Credit and Income — DB Plans / RHBT / WEF / BCDA / State Parks / Municipal Model A Strategic": {
+    "canonical": "private_credit",
+    "confidence": "high"
+  },
+  "Private Credit and Income — DEP Agency Strategic": {
+    "canonical": "private_credit",
+    "confidence": "high"
+  },
+  "Private Credit and Income — PEIA Strategic": {
+    "canonical": "private_credit",
+    "confidence": "high"
+  },
+  "Private Credit and Income — Revenue Shortfall Reserve Fund Part B Strategic": {
+    "canonical": "private_credit",
+    "confidence": "high"
+  },
+  "Private Credit and Income — Workers' Comp Old Fund / CWPF / Uninsured Fund / Self-Insured Guaranty Pool / Self-Insured Security Pool Strategic": {
+    "canonical": "private_credit",
+    "confidence": "high"
+  },
+  "Private Credit and Real Assets": {
+    "canonical": "private_credit",
+    "confidence": "medium"
+  },
   "Private Credit, Infrastructure, Real Estate": {
     "canonical": "opportunistic_other",
     "confidence": "medium"
@@ -3708,6 +4796,10 @@
     "confidence": "medium"
   },
   "Private Debt": {
+    "canonical": "private_credit",
+    "confidence": "high"
+  },
+  "Private Debt - Direct Lending": {
     "canonical": "private_credit",
     "confidence": "high"
   },
@@ -3743,11 +4835,35 @@
     "canonical": "private_equity",
     "confidence": "high"
   },
+  "Private Equity (Interim)": {
+    "canonical": "private_equity",
+    "confidence": "high"
+  },
+  "Private Equity (KERS Hazardous Pension Fund and KRS Insurance Trust Fund)": {
+    "canonical": "private_equity",
+    "confidence": "high"
+  },
+  "Private Equity (KERS Non-Hazardous Pension Fund and SPRS Pension Plan)": {
+    "canonical": "private_equity",
+    "confidence": "high"
+  },
+  "Private Equity (Long-Term)": {
+    "canonical": "private_equity",
+    "confidence": "high"
+  },
   "Private Equity (PEARLS Buyout)": {
     "canonical": "private_equity",
     "confidence": "high"
   },
+  "Private Equity (Secondaries)": {
+    "canonical": "private_equity",
+    "confidence": "high"
+  },
   "Private Equity (actual)": {
+    "canonical": "private_equity",
+    "confidence": "high"
+  },
+  "Private Equity - Alternative Strategies": {
     "canonical": "private_equity",
     "confidence": "high"
   },
@@ -3763,6 +4879,14 @@
     "canonical": "private_equity",
     "confidence": "medium"
   },
+  "Private Equity - Emerging Managers": {
+    "canonical": "private_equity",
+    "confidence": "high"
+  },
+  "Private Equity - Emerging Markets": {
+    "canonical": "private_equity",
+    "confidence": "high"
+  },
   "Private Equity - Energy": {
     "canonical": "private_equity",
     "confidence": "high"
@@ -3775,11 +4899,31 @@
     "canonical": "private_equity",
     "confidence": "high"
   },
+  "Private Equity - Fund of One": {
+    "canonical": "private_equity",
+    "confidence": "high"
+  },
   "Private Equity - Growth Equity": {
     "canonical": "private_equity",
     "confidence": "high"
   },
+  "Private Equity - Healthcare": {
+    "canonical": "private_equity",
+    "confidence": "high"
+  },
+  "Private Equity - Infrastructure": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "medium"
+  },
+  "Private Equity - Opportunistic": {
+    "canonical": "private_equity",
+    "confidence": "high"
+  },
   "Private Equity - Secondaries": {
+    "canonical": "private_equity",
+    "confidence": "high"
+  },
+  "Private Equity - Technology": {
     "canonical": "private_equity",
     "confidence": "high"
   },
@@ -3799,6 +4943,10 @@
     "canonical": "private_equity",
     "confidence": "medium"
   },
+  "Private Equity / Biotech": {
+    "canonical": "private_equity",
+    "confidence": "high"
+  },
   "Private Equity / Co-Investment": {
     "canonical": "private_equity",
     "confidence": "high"
@@ -3815,6 +4963,10 @@
     "canonical": "private_equity",
     "confidence": "medium"
   },
+  "Private Equity / Emerging Markets": {
+    "canonical": "private_equity",
+    "confidence": "high"
+  },
   "Private Equity / Energy": {
     "canonical": "private_equity",
     "confidence": "high"
@@ -3823,15 +4975,27 @@
     "canonical": "private_equity",
     "confidence": "high"
   },
+  "Private Equity / Impact": {
+    "canonical": "private_equity",
+    "confidence": "high"
+  },
   "Private Equity / Infrastructure": {
     "canonical": "private_equity",
     "confidence": "medium"
+  },
+  "Private Equity / International": {
+    "canonical": "private_equity",
+    "confidence": "high"
   },
   "Private Equity / Marketable Alternatives": {
     "canonical": "private_equity",
     "confidence": "medium"
   },
   "Private Equity / Opportunistic": {
+    "canonical": "private_equity",
+    "confidence": "medium"
+  },
+  "Private Equity / Opportunistic / Real Estate": {
     "canonical": "private_equity",
     "confidence": "medium"
   },
@@ -3871,6 +5035,10 @@
     "canonical": "private_equity",
     "confidence": "medium"
   },
+  "Private Equity / Specialty Credit": {
+    "canonical": "private_equity",
+    "confidence": "medium"
+  },
   "Private Equity / Strategic Lending": {
     "canonical": "private_equity",
     "confidence": "medium"
@@ -3880,6 +5048,10 @@
     "confidence": "low"
   },
   "Private Equity / Venture Capital": {
+    "canonical": "private_equity",
+    "confidence": "high"
+  },
+  "Private Equity / Venture Growth": {
     "canonical": "private_equity",
     "confidence": "high"
   },
@@ -3935,7 +5107,35 @@
     "canonical": "private_equity",
     "confidence": "high"
   },
+  "Private Equity — BRIM Strategic": {
+    "canonical": "private_equity",
+    "confidence": "high"
+  },
+  "Private Equity — DB Plans / RHBT / WEF / BCDA / State Parks / Municipal Model A Strategic": {
+    "canonical": "private_equity",
+    "confidence": "high"
+  },
+  "Private Equity — DEP Agency Strategic": {
+    "canonical": "private_equity",
+    "confidence": "high"
+  },
+  "Private Equity — PEIA Strategic": {
+    "canonical": "private_equity",
+    "confidence": "high"
+  },
+  "Private Equity — Revenue Shortfall Reserve Fund Part B Strategic": {
+    "canonical": "private_equity",
+    "confidence": "high"
+  },
+  "Private Equity — Workers' Comp Old Fund / CWPF / Uninsured Fund / Self-Insured Guaranty Pool / Self-Insured Security Pool Strategic": {
+    "canonical": "private_equity",
+    "confidence": "high"
+  },
   "Private Equity, Alternative Credit": {
+    "canonical": "private_equity",
+    "confidence": "medium"
+  },
+  "Private Equity, Commodities": {
     "canonical": "private_equity",
     "confidence": "medium"
   },
@@ -3983,6 +5183,10 @@
     "canonical": "private_equity",
     "confidence": "medium"
   },
+  "Private Equity, Private Debt, Infrastructure": {
+    "canonical": "opportunistic_other",
+    "confidence": "medium"
+  },
   "Private Equity, Private Debt, Real Assets": {
     "canonical": "private_equity",
     "confidence": "medium"
@@ -3990,6 +5194,10 @@
   "Private Equity, Public Equity": {
     "canonical": "private_equity",
     "confidence": "low"
+  },
+  "Private Equity, Real Estate": {
+    "canonical": "opportunistic_other",
+    "confidence": "medium"
   },
   "Private Equity, Real Estate, Credit": {
     "canonical": "private_equity",
@@ -4043,6 +5251,10 @@
     "canonical": "real_assets_infrastructure",
     "confidence": "high"
   },
+  "Private Infrastructure / Real Estate": {
+    "canonical": "opportunistic_other",
+    "confidence": "medium"
+  },
   "Private Infrastructure Portfolio (Hedged)": {
     "canonical": "real_assets_infrastructure",
     "confidence": "high"
@@ -4068,6 +5280,10 @@
     "confidence": "medium"
   },
   "Private Market Debt": {
+    "canonical": "private_credit",
+    "confidence": "high"
+  },
+  "Private Market Debt/Credit": {
     "canonical": "private_credit",
     "confidence": "high"
   },
@@ -4119,6 +5335,10 @@
     "canonical": "private_equity",
     "confidence": "medium"
   },
+  "Private Markets - Infrastructure": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "high"
+  },
   "Private Markets - Invested": {
     "canonical": "opportunistic_other",
     "confidence": "low"
@@ -4147,6 +5367,10 @@
     "canonical": "private_credit",
     "confidence": "high"
   },
+  "Private Markets / Credit Markets / Real Assets": {
+    "canonical": "opportunistic_other",
+    "confidence": "medium"
+  },
   "Private Markets / Energy Transition": {
     "canonical": "real_assets_infrastructure",
     "confidence": "medium"
@@ -4163,6 +5387,10 @@
     "canonical": "real_estate",
     "confidence": "high"
   },
+  "Private Markets / Secondary": {
+    "canonical": "opportunistic_other",
+    "confidence": "medium"
+  },
   "Private Markets / Tactical Opportunities": {
     "canonical": "opportunistic_other",
     "confidence": "medium"
@@ -4170,6 +5398,18 @@
   "Private Markets / US Equity": {
     "canonical": "private_equity",
     "confidence": "medium"
+  },
+  "Private Markets – Private Credit": {
+    "canonical": "private_credit",
+    "confidence": "high"
+  },
+  "Private Markets – Private Equity": {
+    "canonical": "private_equity",
+    "confidence": "high"
+  },
+  "Private Markets – Private Real Assets": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "high"
   },
   "Private Markets, Invested": {
     "canonical": "opportunistic_other",
@@ -4195,6 +5435,14 @@
     "canonical": "real_assets_infrastructure",
     "confidence": "high"
   },
+  "Private Real Assets - Infrastructure": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "high"
+  },
+  "Private Real Assets - Natural Resources": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "high"
+  },
   "Private Real Assets / Infrastructure": {
     "canonical": "real_assets_infrastructure",
     "confidence": "high"
@@ -4204,6 +5452,10 @@
     "confidence": "high"
   },
   "Private Real Assets / Real Estate": {
+    "canonical": "real_estate",
+    "confidence": "high"
+  },
+  "Private Real Assets – Real Estate": {
     "canonical": "real_estate",
     "confidence": "high"
   },
@@ -4271,6 +5523,14 @@
     "canonical": "fixed_income_credit",
     "confidence": "high"
   },
+  "Public Credit (Interim)": {
+    "canonical": "fixed_income_core",
+    "confidence": "medium"
+  },
+  "Public Credit (Long-Term)": {
+    "canonical": "fixed_income_core",
+    "confidence": "medium"
+  },
   "Public Credit Fixed Income": {
     "canonical": "fixed_income_credit",
     "confidence": "high"
@@ -4282,6 +5542,10 @@
   "Public Employees Retirement System": {
     "canonical": "unmapped",
     "confidence": "high"
+  },
+  "Public Equities": {
+    "canonical": "public_equity_global",
+    "confidence": "medium"
   },
   "Public Equities - Domestic": {
     "canonical": "public_equity_us",
@@ -4299,11 +5563,23 @@
     "canonical": "public_equity_us",
     "confidence": "medium"
   },
+  "Public Equity (KERS Hazardous Pension Fund and KRS Insurance Trust Fund)": {
+    "canonical": "public_equity_us",
+    "confidence": "medium"
+  },
+  "Public Equity (KERS Non-Hazardous Pension Fund and SPRS Pension Plan)": {
+    "canonical": "public_equity_us",
+    "confidence": "medium"
+  },
   "Public Equity - Emerging Managers (Fund of Funds)": {
     "canonical": "public_equity_us",
     "confidence": "medium"
   },
   "Public Equity - Emerging Markets": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
+  "Public Equity - International": {
     "canonical": "public_equity_non_us",
     "confidence": "high"
   },
@@ -4319,7 +5595,23 @@
     "canonical": "public_equity_us",
     "confidence": "high"
   },
+  "Public Equity / Fixed Income": {
+    "canonical": "total",
+    "confidence": "medium"
+  },
   "Public Equity / Marketable Alternatives": {
+    "canonical": "opportunistic_other",
+    "confidence": "medium"
+  },
+  "Public Equity / Multi-Asset": {
+    "canonical": "total",
+    "confidence": "medium"
+  },
+  "Public Equity / Opportunistic Equity": {
+    "canonical": "opportunistic_other",
+    "confidence": "medium"
+  },
+  "Public Equity / Private Equity": {
     "canonical": "opportunistic_other",
     "confidence": "medium"
   },
@@ -4335,11 +5627,23 @@
     "canonical": "total",
     "confidence": "medium"
   },
+  "Public Equity – Domestic": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
+  "Public Equity – Emerging Markets": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
   "Public Equity – International": {
     "canonical": "public_equity_non_us",
     "confidence": "high"
   },
   "Public Equity – International (ACWI ex-U.S.)": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
+  "Public Equity – International Developed": {
     "canonical": "public_equity_non_us",
     "confidence": "high"
   },
@@ -4379,9 +5683,17 @@
     "canonical": "real_assets_infrastructure",
     "confidence": "high"
   },
+  "Public Leveraged Loans / Specialty Credit": {
+    "canonical": "fixed_income_credit",
+    "confidence": "high"
+  },
   "Public Markets": {
     "canonical": "total",
     "confidence": "medium"
+  },
+  "Public Markets / Quantitative": {
+    "canonical": "public_equity_global",
+    "confidence": "low"
   },
   "Public Markets / Transition Management": {
     "canonical": "total",
@@ -4399,6 +5711,10 @@
     "canonical": "real_assets_infrastructure",
     "confidence": "high"
   },
+  "Public Real Assets / Commodities": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "high"
+  },
   "Public Real Estate": {
     "canonical": "real_estate",
     "confidence": "high"
@@ -4406,6 +5722,10 @@
   "Public Real Estate / Public Equity / Private Real Estate / Private Infrastructure": {
     "canonical": "total",
     "confidence": "low"
+  },
+  "Public Real Estate / REIT": {
+    "canonical": "real_estate",
+    "confidence": "high"
   },
   "Public Real Estate Portfolio (Hedged)": {
     "canonical": "real_estate",
@@ -4418,6 +5738,10 @@
   "Public real assets": {
     "canonical": "real_assets_infrastructure",
     "confidence": "high"
+  },
+  "Public/Private Fixed Income": {
+    "canonical": "fixed_income_core",
+    "confidence": "medium"
   },
   "Publicly Traded Fixed Income": {
     "canonical": "fixed_income_core",
@@ -4438,6 +5762,10 @@
   "Qualified Pension Plan - Variable Fund": {
     "canonical": "unmapped",
     "confidence": "high"
+  },
+  "RE Opportunistic": {
+    "canonical": "real_estate",
+    "confidence": "medium"
   },
   "REIT Equities": {
     "canonical": "real_estate",
@@ -4471,11 +5799,23 @@
     "canonical": "real_assets_infrastructure",
     "confidence": "high"
   },
+  "Real Assets (Infrastructure, Energy)": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "high"
+  },
+  "Real Assets (TFIP)": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "medium"
+  },
   "Real Assets (excluding Real Estate)": {
     "canonical": "real_assets_infrastructure",
     "confidence": "high"
   },
   "Real Assets - Timber": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "high"
+  },
+  "Real Assets / Commodities": {
     "canonical": "real_assets_infrastructure",
     "confidence": "high"
   },
@@ -4487,11 +5827,23 @@
     "canonical": "real_assets_infrastructure",
     "confidence": "medium"
   },
+  "Real Assets / Energy": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "high"
+  },
   "Real Assets / Fixed Income": {
     "canonical": "total",
     "confidence": "medium"
   },
+  "Real Assets / Global Equity": {
+    "canonical": "opportunistic_other",
+    "confidence": "low"
+  },
   "Real Assets / Infrastructure": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "high"
+  },
+  "Real Assets / Infrastructure / Energy": {
     "canonical": "real_assets_infrastructure",
     "confidence": "high"
   },
@@ -4519,6 +5871,14 @@
     "canonical": "real_estate",
     "confidence": "high"
   },
+  "Real Assets / Renewables": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "high"
+  },
+  "Real Assets / Secondary Infrastructure": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "high"
+  },
   "Real Assets / TIPS": {
     "canonical": "real_assets_infrastructure",
     "confidence": "medium"
@@ -4539,6 +5899,10 @@
     "canonical": "real_assets_infrastructure",
     "confidence": "high"
   },
+  "Real Assets/Infrastructure": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "high"
+  },
   "Real Assets/Real Estate": {
     "canonical": "real_estate",
     "confidence": "high"
@@ -4548,6 +5912,22 @@
     "confidence": "high"
   },
   "Real Estate (Advisory/Operational)": {
+    "canonical": "real_estate",
+    "confidence": "high"
+  },
+  "Real Estate (Interim)": {
+    "canonical": "real_estate",
+    "confidence": "high"
+  },
+  "Real Estate (KERS Hazardous Pension Fund and KRS Insurance Trust Fund)": {
+    "canonical": "real_estate",
+    "confidence": "high"
+  },
+  "Real Estate (KERS Non-Hazardous Pension Fund and SPRS Pension Plan)": {
+    "canonical": "real_estate",
+    "confidence": "high"
+  },
+  "Real Estate (Long-Term)": {
     "canonical": "real_estate",
     "confidence": "high"
   },
@@ -4567,11 +5947,27 @@
     "canonical": "real_estate",
     "confidence": "high"
   },
+  "Real Estate (TFIP)": {
+    "canonical": "real_estate",
+    "confidence": "high"
+  },
   "Real Estate - Core": {
     "canonical": "real_estate",
     "confidence": "high"
   },
+  "Real Estate - Idaho Commercial Mortgages": {
+    "canonical": "real_estate",
+    "confidence": "high"
+  },
+  "Real Estate - Infrastructure": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "high"
+  },
   "Real Estate - Light Industrial": {
+    "canonical": "real_estate",
+    "confidence": "high"
+  },
+  "Real Estate - Manufactured Housing": {
     "canonical": "real_estate",
     "confidence": "high"
   },
@@ -4599,6 +5995,10 @@
     "canonical": "real_assets_infrastructure",
     "confidence": "high"
   },
+  "Real Estate / Multifamily": {
+    "canonical": "real_estate",
+    "confidence": "high"
+  },
   "Real Estate / Multifamily Value-Add": {
     "canonical": "real_estate",
     "confidence": "high"
@@ -4611,6 +6011,10 @@
     "canonical": "real_estate",
     "confidence": "medium"
   },
+  "Real Estate / Property": {
+    "canonical": "real_estate",
+    "confidence": "high"
+  },
   "Real Estate / Real Assets": {
     "canonical": "real_assets_infrastructure",
     "confidence": "medium"
@@ -4620,6 +6024,10 @@
     "confidence": "high"
   },
   "Real Estate Composite": {
+    "canonical": "real_estate",
+    "confidence": "high"
+  },
+  "Real Estate Core": {
     "canonical": "real_estate",
     "confidence": "high"
   },
@@ -4659,6 +6067,10 @@
     "canonical": "real_estate",
     "confidence": "medium"
   },
+  "Real Estate Securities": {
+    "canonical": "real_estate",
+    "confidence": "high"
+  },
   "Real Estate Strategies": {
     "canonical": "real_estate",
     "confidence": "medium"
@@ -4687,7 +6099,39 @@
     "canonical": "real_estate",
     "confidence": "high"
   },
+  "Real Estate — BRIM Strategic": {
+    "canonical": "real_estate",
+    "confidence": "high"
+  },
+  "Real Estate — DB Plans / RHBT / WEF / BCDA / State Parks / Municipal Model A Strategic": {
+    "canonical": "real_estate",
+    "confidence": "high"
+  },
+  "Real Estate — DEP Agency Strategic": {
+    "canonical": "real_estate",
+    "confidence": "high"
+  },
+  "Real Estate — PEIA Strategic": {
+    "canonical": "real_estate",
+    "confidence": "high"
+  },
+  "Real Estate — Revenue Shortfall Reserve Fund Part B Strategic": {
+    "canonical": "real_estate",
+    "confidence": "high"
+  },
+  "Real Estate — Workers' Comp Old Fund / CWPF / Uninsured Fund / Self-Insured Guaranty Pool / Self-Insured Security Pool Strategic": {
+    "canonical": "real_estate",
+    "confidence": "high"
+  },
+  "Real Estate, Fixed Income, Public Equities": {
+    "canonical": "total",
+    "confidence": "high"
+  },
   "Real Estate, Real Assets": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "high"
+  },
+  "Real Estate/Infrastructure": {
     "canonical": "real_assets_infrastructure",
     "confidence": "high"
   },
@@ -4695,8 +6139,24 @@
     "canonical": "real_assets_infrastructure",
     "confidence": "medium"
   },
+  "Real Estate/REITS": {
+    "canonical": "real_estate",
+    "confidence": "high"
+  },
   "Real Return": {
     "canonical": "real_assets_infrastructure",
+    "confidence": "medium"
+  },
+  "Real Return (Interim Total)": {
+    "canonical": "total",
+    "confidence": "medium"
+  },
+  "Real Return (KERS Hazardous Pension Fund and KRS Insurance Trust Fund)": {
+    "canonical": "total",
+    "confidence": "medium"
+  },
+  "Real Return (KERS Non-Hazardous Pension Fund and SPRS Pension Plan)": {
+    "canonical": "total",
     "confidence": "medium"
   },
   "Real Return / Infrastructure": {
@@ -4735,6 +6195,10 @@
     "canonical": "unmapped",
     "confidence": "medium"
   },
+  "Rebalancing Leverage (High-Level Exposure)": {
+    "canonical": "unmapped",
+    "confidence": "high"
+  },
   "Resource Investments": {
     "canonical": "real_assets_infrastructure",
     "confidence": "medium"
@@ -4742,6 +6206,18 @@
   "Resources": {
     "canonical": "real_assets_infrastructure",
     "confidence": "low"
+  },
+  "Retirement Savings": {
+    "canonical": "unmapped",
+    "confidence": "high"
+  },
+  "Retirement Savings / Defined Contribution": {
+    "canonical": "unmapped",
+    "confidence": "high"
+  },
+  "Retirement Savings / Target Date": {
+    "canonical": "unmapped",
+    "confidence": "high"
   },
   "Return Seeking Fixed Income": {
     "canonical": "fixed_income_credit",
@@ -4767,6 +6243,10 @@
     "canonical": "unmapped",
     "confidence": "high"
   },
+  "Risk Mitigation (Interim Total)": {
+    "canonical": "total",
+    "confidence": "medium"
+  },
   "Risk Mitigation Strategies": {
     "canonical": "unmapped",
     "confidence": "low"
@@ -4786,6 +6266,10 @@
   "Risk Reduction and Mitigation": {
     "canonical": "unmapped",
     "confidence": "low"
+  },
+  "SMID": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
   },
   "SMID Cap Value Equity": {
     "canonical": "public_equity_us",
@@ -4807,9 +6291,25 @@
     "canonical": "public_equity_us",
     "confidence": "high"
   },
+  "Secondary Infrastructure / Real Assets": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "high"
+  },
+  "Secondary Real Estate": {
+    "canonical": "real_estate",
+    "confidence": "high"
+  },
   "Securities Lending": {
     "canonical": "unmapped",
     "confidence": "high"
+  },
+  "Securities Litigation": {
+    "canonical": "unmapped",
+    "confidence": "high"
+  },
+  "Securitized Bonds": {
+    "canonical": "fixed_income_core",
+    "confidence": "medium"
   },
   "Securitized Debt": {
     "canonical": "fixed_income_credit",
@@ -4823,11 +6323,27 @@
     "canonical": "fixed_income_credit",
     "confidence": "medium"
   },
+  "Short Duration Fixed Income": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
   "Short Term": {
     "canonical": "cash_short_term",
     "confidence": "medium"
   },
+  "Short Term / Cash": {
+    "canonical": "cash_short_term",
+    "confidence": "high"
+  },
+  "Short Term Fixed Income": {
+    "canonical": "cash_short_term",
+    "confidence": "high"
+  },
   "Short Term Government Bonds": {
+    "canonical": "cash_short_term",
+    "confidence": "high"
+  },
+  "Short Term Investment Grade Bonds": {
     "canonical": "cash_short_term",
     "confidence": "high"
   },
@@ -4855,6 +6371,10 @@
     "canonical": "cash_short_term",
     "confidence": "high"
   },
+  "Short-Term Gov't/Credit": {
+    "canonical": "cash_short_term",
+    "confidence": "high"
+  },
   "Short-Term Investment Pool": {
     "canonical": "cash_short_term",
     "confidence": "high"
@@ -4866,6 +6386,18 @@
   "Short-Term Investments": {
     "canonical": "cash_short_term",
     "confidence": "high"
+  },
+  "Short-Term Investments / Community Deposits": {
+    "canonical": "cash_short_term",
+    "confidence": "high"
+  },
+  "Short-Term Treasuries (Interim)": {
+    "canonical": "cash_short_term",
+    "confidence": "high"
+  },
+  "Short-Term Treasuries (Long-Term)": {
+    "canonical": "cash_short_term",
+    "confidence": "medium"
   },
   "Short-term": {
     "canonical": "cash_short_term",
@@ -4899,6 +6431,10 @@
     "canonical": "public_equity_us",
     "confidence": "high"
   },
+  "Small Cap US Equity": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
   "Small Cap Value / College Savings": {
     "canonical": "public_equity_us",
     "confidence": "medium"
@@ -4907,7 +6443,15 @@
     "canonical": "public_equity_us",
     "confidence": "high"
   },
+  "Small Capitalization Domestic": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
   "Small-Cap Core": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
+  "Small-Cap Equity": {
     "canonical": "public_equity_us",
     "confidence": "high"
   },
@@ -4947,9 +6491,21 @@
     "canonical": "public_equity_us",
     "confidence": "medium"
   },
+  "Specialty Credit (KERS Hazardous Pension Fund and KRS Insurance Trust Fund)": {
+    "canonical": "fixed_income_credit",
+    "confidence": "high"
+  },
+  "Specialty Credit (KERS Non-Hazardous Pension Fund and SPRS Pension Plan)": {
+    "canonical": "fixed_income_credit",
+    "confidence": "high"
+  },
   "Specialty Credit / Bank Loans": {
     "canonical": "private_credit",
     "confidence": "medium"
+  },
+  "Specialty Credit / High Yield": {
+    "canonical": "fixed_income_credit",
+    "confidence": "high"
   },
   "Stabilized Growth": {
     "canonical": "unmapped",
@@ -4973,6 +6529,10 @@
   },
   "State Cash": {
     "canonical": "cash_short_term",
+    "confidence": "high"
+  },
+  "State Treasurer's Fund": {
+    "canonical": "unmapped",
     "confidence": "high"
   },
   "State-Sponsored Savings Plans": {
@@ -5039,6 +6599,18 @@
     "canonical": "fixed_income_credit",
     "confidence": "medium"
   },
+  "Student Housing": {
+    "canonical": "real_estate",
+    "confidence": "high"
+  },
+  "Supplemental Income / Total Fund": {
+    "canonical": "total",
+    "confidence": "medium"
+  },
+  "Supplemental Retirement Plan (Multi-Asset)": {
+    "canonical": "total",
+    "confidence": "medium"
+  },
   "Sustainable Investments": {
     "canonical": "opportunistic_other",
     "confidence": "medium"
@@ -5046,6 +6618,10 @@
   "Sustainable Investments / Multi-Asset Class": {
     "canonical": "opportunistic_other",
     "confidence": "medium"
+  },
+  "Sustainable/ESG": {
+    "canonical": "unmapped",
+    "confidence": "high"
   },
   "Systematic Financial Mgmt: Small Cap Value": {
     "canonical": "public_equity_us",
@@ -5075,7 +6651,31 @@
     "canonical": "fixed_income_core",
     "confidence": "high"
   },
+  "TIPS / Inflation-Linked Bonds": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
   "TIPS Composite": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "TIPS — BRIM Strategic": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "TIPS — PEIA Strategic": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "TIPS — Revenue Shortfall Reserve Fund Part B Strategic": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "TIPS — Revenue Shortfall Reserve Fund Strategic": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "TIPS — Workers' Comp Old Fund / CWPF / Uninsured Fund / Self-Insured Guaranty Pool / Self-Insured Security Pool Strategic": {
     "canonical": "fixed_income_core",
     "confidence": "high"
   },
@@ -5127,6 +6727,10 @@
     "canonical": "cash_short_term",
     "confidence": "high"
   },
+  "Tactical Opportunities": {
+    "canonical": "opportunistic_other",
+    "confidence": "medium"
+  },
   "Tactical Tilts / Gold": {
     "canonical": "real_assets_infrastructure",
     "confidence": "medium"
@@ -5143,6 +6747,14 @@
     "canonical": "real_assets_infrastructure",
     "confidence": "medium"
   },
+  "Tangible Assets - Aviation": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "medium"
+  },
+  "Tangible Assets - Power/Energy Infrastructure": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "high"
+  },
   "Tangible Assets / Aviation / Infrastructure": {
     "canonical": "real_assets_infrastructure",
     "confidence": "high"
@@ -5158,6 +6770,10 @@
   "Target Date / Balanced": {
     "canonical": "unmapped",
     "confidence": "high"
+  },
+  "Target Date / Multi-Asset": {
+    "canonical": "total",
+    "confidence": "medium"
   },
   "Target Date Fund": {
     "canonical": "unmapped",
@@ -5183,6 +6799,10 @@
     "canonical": "unmapped",
     "confidence": "high"
   },
+  "Target Date Portfolios": {
+    "canonical": "total",
+    "confidence": "medium"
+  },
   "Target date funds": {
     "canonical": "unmapped",
     "confidence": "high"
@@ -5190,6 +6810,10 @@
   "Targeted Investments": {
     "canonical": "opportunistic_other",
     "confidence": "low"
+  },
+  "Tax-Deferred Annuity": {
+    "canonical": "unmapped",
+    "confidence": "high"
   },
   "Tax-Deferred Annuity / Qualified Pension Plan": {
     "canonical": "unmapped",
@@ -5275,9 +6899,21 @@
     "canonical": "public_equity_non_us",
     "confidence": "high"
   },
+  "Total Equities": {
+    "canonical": "total",
+    "confidence": "high"
+  },
+  "Total Equities (including REITs)": {
+    "canonical": "total",
+    "confidence": "high"
+  },
   "Total Equity": {
     "canonical": "public_equity_global",
     "confidence": "medium"
+  },
+  "Total Equity (High-Level Exposure)": {
+    "canonical": "total",
+    "confidence": "high"
   },
   "Total Equity Composite": {
     "canonical": "total",
@@ -5300,6 +6936,14 @@
     "confidence": "high"
   },
   "Total Fund (Investment Consulting)": {
+    "canonical": "total",
+    "confidence": "high"
+  },
+  "Total Fund - DB": {
+    "canonical": "total",
+    "confidence": "high"
+  },
+  "Total Fund - HC": {
     "canonical": "total",
     "confidence": "high"
   },
@@ -5331,6 +6975,10 @@
     "canonical": "total",
     "confidence": "high"
   },
+  "Total Fund / Investment Consulting": {
+    "canonical": "total",
+    "confidence": "high"
+  },
   "Total Fund / Multi-Asset": {
     "canonical": "total",
     "confidence": "high"
@@ -5340,6 +6988,10 @@
     "confidence": "high"
   },
   "Total Fund / Operations": {
+    "canonical": "total",
+    "confidence": "high"
+  },
+  "Total Fund / Treasury": {
     "canonical": "total",
     "confidence": "high"
   },
@@ -5407,6 +7059,10 @@
     "canonical": "total",
     "confidence": "high"
   },
+  "Total Hedged Funds": {
+    "canonical": "hedge_funds_absolute_return",
+    "confidence": "high"
+  },
   "Total High Yield Income (Legacy)": {
     "canonical": "total",
     "confidence": "high"
@@ -5435,6 +7091,14 @@
     "canonical": "total",
     "confidence": "high"
   },
+  "Total Non-U.S. Equity": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
+  "Total Notional Exposure (Including Leverage)": {
+    "canonical": "total",
+    "confidence": "medium"
+  },
   "Total Opportunistic/Alternatives": {
     "canonical": "total",
     "confidence": "high"
@@ -5446,6 +7110,10 @@
   "Total Other Real Assets": {
     "canonical": "total",
     "confidence": "high"
+  },
+  "Total Private Assets": {
+    "canonical": "total",
+    "confidence": "medium"
   },
   "Total Private Credit (Legacy)": {
     "canonical": "total",
@@ -5489,6 +7157,10 @@
   },
   "Total Real Estate (Legacy)": {
     "canonical": "total",
+    "confidence": "high"
+  },
+  "Total Real Estate (ex REITs)": {
+    "canonical": "real_estate",
     "confidence": "high"
   },
   "Total Real Return": {
@@ -5560,6 +7232,10 @@
     "confidence": "high"
   },
   "Treasuries": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "Treasury": {
     "canonical": "fixed_income_core",
     "confidence": "high"
   },
@@ -5683,9 +7359,25 @@
     "canonical": "public_equity_us",
     "confidence": "high"
   },
+  "U.S. Fixed Income": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "U.S. Fixed Income (rebalancing sub-class)": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "U.S. Government Debt": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
   "U.S. Government Securities / Corporate Stocks": {
     "canonical": "total",
     "confidence": "medium"
+  },
+  "U.S. High Yield": {
+    "canonical": "fixed_income_credit",
+    "confidence": "high"
   },
   "U.S. High Yield Bonds": {
     "canonical": "fixed_income_credit",
@@ -5695,12 +7387,52 @@
     "canonical": "fixed_income_core",
     "confidence": "high"
   },
+  "U.S. Intermediate Gov't Bonds": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
   "U.S. Investment Grade Corporate Bonds": {
     "canonical": "fixed_income_core",
     "confidence": "high"
   },
+  "U.S. Investment Grade Fixed Income": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "U.S. Large Cap": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
+  "U.S. Large Cap Equity (rebalancing sub-class)": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
+  "U.S. Large Cap Equity - Core": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
+  "U.S. Large Cap Equity - Core Index": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
+  "U.S. Large Cap Equity - Growth": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
+  "U.S. Large Cap Equity - Value": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
   "U.S. Large Cap Growth Equities": {
     "canonical": "public_equity_us",
+    "confidence": "high"
+  },
+  "U.S. Large Cap Growth Equity": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
+  "U.S. Long Gov't Bonds": {
+    "canonical": "fixed_income_core",
     "confidence": "high"
   },
   "U.S. Long-Term Treasury Bonds": {
@@ -5727,11 +7459,23 @@
     "canonical": "public_equity_us",
     "confidence": "high"
   },
+  "U.S. Short Term TIPS": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
   "U.S. Small Cap Core Equities": {
     "canonical": "public_equity_us",
     "confidence": "high"
   },
   "U.S. Small Cap Core Equity": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
+  "U.S. Small Cap Equities": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
+  "U.S. Small Cap Equity (rebalancing sub-class)": {
     "canonical": "public_equity_us",
     "confidence": "high"
   },
@@ -5756,6 +7500,10 @@
     "confidence": "high"
   },
   "U.S. Small-Cap Equity": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
+  "U.S. Small/Mid Cap": {
     "canonical": "public_equity_us",
     "confidence": "high"
   },
@@ -5815,6 +7563,14 @@
     "canonical": "public_equity_us",
     "confidence": "high"
   },
+  "US Equity (Interim)": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
+  "US Equity (Long-Term)": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
   "US Equity - Midcap": {
     "canonical": "public_equity_us",
     "confidence": "high"
@@ -5834,6 +7590,10 @@
   "US Equity - Small-Mid Cap": {
     "canonical": "public_equity_us",
     "confidence": "high"
+  },
+  "US Equity / Fixed Income / Cash": {
+    "canonical": "total",
+    "confidence": "medium"
   },
   "US Equity / Multi-Asset": {
     "canonical": "opportunistic_other",
@@ -5871,8 +7631,16 @@
     "canonical": "fixed_income_core",
     "confidence": "high"
   },
+  "US High Yield Bonds": {
+    "canonical": "fixed_income_credit",
+    "confidence": "high"
+  },
   "US Investment Grade Bonds": {
     "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "US Large": {
+    "canonical": "public_equity_us",
     "confidence": "high"
   },
   "US Large Cap": {
@@ -5887,11 +7655,23 @@
     "canonical": "public_equity_us",
     "confidence": "high"
   },
+  "US Large Cap Growth Equity": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
+  "US Public Equity": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
   "US SMID Cap Equity": {
     "canonical": "public_equity_us",
     "confidence": "high"
   },
   "US SMID Cap Value Equity": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
+  "US Small": {
     "canonical": "public_equity_us",
     "confidence": "high"
   },
@@ -5911,7 +7691,15 @@
     "canonical": "public_equity_us",
     "confidence": "high"
   },
+  "US TIPS": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
   "US Treasuries": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "US Treasury": {
     "canonical": "fixed_income_core",
     "confidence": "high"
   },
@@ -5935,9 +7723,17 @@
     "canonical": "unmapped",
     "confidence": "high"
   },
+  "Unknown - likely Global Equity or multi-asset": {
+    "canonical": "unmapped",
+    "confidence": "low"
+  },
   "Uranium / Commodities": {
     "canonical": "real_assets_infrastructure",
     "confidence": "high"
+  },
+  "Value (International)": {
+    "canonical": "public_equity_non_us",
+    "confidence": "medium"
   },
   "Value Added Real Estate": {
     "canonical": "real_estate",
@@ -5956,6 +7752,10 @@
     "confidence": "high"
   },
   "Various": {
+    "canonical": "unmapped",
+    "confidence": "high"
+  },
+  "Various asset classes and structures": {
     "canonical": "unmapped",
     "confidence": "high"
   },
@@ -5991,6 +7791,10 @@
     "canonical": "private_equity",
     "confidence": "high"
   },
+  "Venture/Growth Capital": {
+    "canonical": "private_equity",
+    "confidence": "high"
+  },
   "Volatility Protection": {
     "canonical": "hedge_funds_absolute_return",
     "confidence": "medium"
@@ -6006,6 +7810,14 @@
   "Wellington Global Total Return": {
     "canonical": "public_equity_global",
     "confidence": "medium"
+  },
+  "Working Capital": {
+    "canonical": "unmapped",
+    "confidence": "high"
+  },
+  "Working Capital / Cash": {
+    "canonical": "unmapped",
+    "confidence": "high"
   },
   "Xponance": {
     "canonical": "unmapped",
