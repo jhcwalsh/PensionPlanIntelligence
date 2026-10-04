@@ -19,6 +19,10 @@ Two layered systems sharing one SQLite database (`db/pension.db`, ~64 MB, tracke
 
 The Streamlit app (`app.py`) reads from the same DB and surfaces both layers as tabs.
 
+The product is **PensionGraph**, served at `https://pensiongraph.com` (`APP_BASE_URL` in
+`render.yaml`). The repository keeps its original name, PensionPlanIntelligence, on purpose: renaming
+it would break clones, checkout paths and Actions URLs for a name no reader sees.
+
 A third layer, the RFP alerts pipeline (`rfp/`, `lib/`, `api/`), was removed on
 2026-08-16 together with the FastAPI service that served it. The `rfp_records`
 table and its 189 rows are deliberately retained, frozen: `twin_builder`
@@ -30,8 +34,16 @@ twins' freshness dates on those facets stop advancing. See
 ## Common commands
 
 ```bash
+# Setup (Python 3.12) — requirements-pipeline.txt includes requirements.txt plus the pipeline and test deps
+pip install -r requirements-pipeline.txt
+pip install pytest-asyncio pyyaml        # CI adds these; test_deployment_config.py needs pyyaml
+playwright install chromium              # only for real fetches, not for tests
+cp .env.example .env                     # names only; DATABASE_URL is not in it, add it to reach Neon
+
 # Tests — both layers share the same conftest. Mock both LLM modes.
 LLM_MODE=mock pytest tests/ -q
+# ^ ~5 min wall clock (about 1 min of CPU); 1093 passed, 30 skipped on Python 3.12, 2026-10-04
+TEST_POSTGRES_URL=postgresql+psycopg://... pytest tests/postgres   # Postgres-only; skipped when unset
 LLM_MODE=mock pytest tests/test_weekly_e2e_mock.py -q          # one insights file
 LLM_MODE=mock pytest tests/ -k token                            # by name pattern
 
@@ -365,3 +377,111 @@ to avoid emailing a digest for a failed run.
 ## CI
 
 `.github/workflows/test.yml` runs `pytest tests/ -q` on every push/PR with `LLM_MODE=mock`.
+A second job in the same workflow runs `tests/postgres` against a `postgres:16` service container
+(`TEST_POSTGRES_URL`), for semantics SQLite cannot show. The SQLite job has `timeout-minutes: 5`.
+
+## Deploy
+
+- **Web:** Render builds the one web service from `render.yaml` (`pip install -r requirements.txt`,
+  then `streamlit run app.py`). Per README and `DECISIONS.md`, Render auto-deploys on push to `master`,
+  and the GHA crons push to `master` too (`notes/`, `cafr_summaries/`, `data/asset_class_mappings.json`),
+  so pull before you commit there. Secret values live in the Render dashboard (`sync: false`).
+- **Mac mini:** batch only, no port and no long-running service. `Dockerfile.pipeline` +
+  `docker-compose.pipeline.yml` (`docker compose -f docker-compose.pipeline.yml run --rm pipeline ...`),
+  repo bind-mounted so `git pull` needs no rebuild; launchd plist in `docs/mac-mini/`. See
+  "Where each cadence runs" above for what it runs and why the agent is not loaded.
+- `docs/mac-mini-hosting-runbook2.md` is a copy of the Mini hosting runbook kept in this repo.
+
+## Other docs, and how far to trust them
+
+- `README.md` is partly stale: it still describes committing `db/pension.db` and Render cron services.
+  This file and `render.yaml` describe the current setup.
+- `DECISIONS.md` records the original insights-automation choices (Render cron, approval gate); several
+  are superseded by the sections above.
+- `nextsteps.md` is a dated working doc. Read its entries as observations, and check a claim still holds
+  before acting on it.
+- Specs and plans are in `docs/superpowers/` (`specs/`, `plans/`, `notes/`).
+
+## Layout
+
+- Pipeline: `pipeline.py` (CLI), `fetcher.py`, `extractor.py`, `summarizer.py`, `pdf_store.py` (R2), `batching.py` (Message Batches).
+- CAFR / IPS / performance: `refresh_cafrs.py`, `fetch_cafr.py`, `extract_cafr_*.py`, `refresh_ips.py`,
+  `fetch_ips.py`, `extract_ips.py`, `extract_performance_reports.py`.
+- Recordings: `refresh_recordings.py`, `discover_video_sources.py`, `download_recordings.py`, `recording_scrapers.py`.
+- Data model and reads: `database.py` (all tables), `queries.py` (every read the UI makes; `app.py` holds no queries),
+  `costs.py` (model prices, `api_usage`).
+- `insights/`: one module per cadence plus `scheduler.py` (CLI), `cycle_common.py`, `compose.py`, `render.py`, `subscribers.py`.
+- `app.py`: the Streamlit site. `twin_builder.py`: per-plan digital-twin snapshots. `generate_notes.py`: analyst notes.
+- `scripts/`: one-off migrations and backfills, the preflight, `run_waf_plans.sh`, `waf_blocked_ids.py`.
+- `data/`: committed config (`known_plans.json`, WAF lists, asset-class and manager mappings), not data rows.
+- `notes/`, `cafr_summaries/`: published Markdown, committed by the workflows. `tests/postgres/` needs a server.
+
+<!-- BEGIN shared: James's house rules. Identical in every repo; change it everywhere, not here alone. -->
+## How James works
+
+This section and the two after it are the same in all of James's repos. **Where this repo's
+own rules above are stricter or more specific - about branches, pushing, deploying, editing,
+or spending on model calls - this repo's rules win.**
+
+**Talking to James**
+- Plain English, and short. Lead with the outcome. If something failed or was not checked, say that first.
+- Don't take yourself too seriously, and make suggestions: if there is a better way or a next step worth doing, say so in a line.
+- Numbers go in a small table, parallel items in a list. No walls of text.
+
+**Just do it, or ask first**
+- Just do anything reversible that the request implies: reading, editing, running tests, committing.
+- Ask first before deploying; touching live data, money, or other people's details; deleting
+  files or branches you did not create; adding a heavy dependency; or widening the job beyond
+  what was asked.
+- If a request is ambiguous and the readings lead to different work, ask one short question.
+  Otherwise pick the sensible reading, say which one, and carry on.
+
+**Done means verified**
+- Run the project's tests before saying done, and say what passed and what did not. Never
+  skip, xfail or delete a failing test to get green; report it.
+- For anything with a UI, see it working in a browser, not just building.
+- Regenerate generated files rather than hand-editing them.
+- Secrets stay out of git: `.env` is local, `.env.example` shows its shape.
+
+## Git, PRs and deploys
+
+- Commit message: a plain sentence saying what changed, then a short body saying why. One topic per commit.
+- The default branch is `main` in some repos and `master` in others; check before assuming.
+- Local sessions on James's machine: committing to the default branch is normal for work he
+  asked for, unless this repo's rules say otherwise. Push only when he says so.
+- Cloud sessions: work on the session's `claude/...` branch, open a draft PR, never push to the
+  default branch.
+- **In some repos a push to the default branch IS a deploy** (the Mini polls and rebuilds). Read
+  this repo's Deploy section before any push to it.
+- Apps run on the Mac mini (`JHCW-mini.local`) behind a Cloudflare tunnel. Where an app is
+  deployed by hand it is `deploy <app>` from James's PowerShell. Never deploy unless asked. A
+  cloud session cannot reach the Mini: say so and give him the command.
+- One host port per app on the Mini: 8501 test, 8502 terrarium, 8503 regimes, 8504 glidepath,
+  8505 states, 8506 brief, 8507 lampmold. A new app takes the next free port, checked on the box.
+  `MacMiniHosting/mac-mini-hosting-runbook2.md` on James's machine is the authority for the Mini.
+
+## Session notes
+
+Keep SESSION_NOTES.md in the repo root up to date.
+
+**When:** Before every git commit, update it and include it in
+the same commit. Also update it when I say "wrap up".
+
+**What:** Newest entry at the top, dated. Cover:
+- Done: what changed, and which files
+- Why: key decisions and reasoning
+- Broken / unsure: known bugs, hacks, untested bits
+- Next: the 1–3 most sensible next steps
+
+**How much:** A new entry for meaningful work, or a one-line
+append to today's entry for small fixes. Each entry under ~20
+lines, plain English, no code dumps.
+
+**Housekeeping:** Keep the last 10 entries in full and fold
+older ones into a short "History" section at the bottom.
+
+**Enforced:** `.claude/hooks/require-session-notes.sh` runs before every Bash command
+(`.claude/settings.json`) and refuses a commit in this repo unless SESSION_NOTES.md is staged,
+or staged by the same command. Merge commits pass, and so does a command that only mentions a
+commit. If it blocks you, write the entry; do not work around the hook.
+<!-- END shared -->
