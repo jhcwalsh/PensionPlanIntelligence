@@ -137,3 +137,9 @@ def test_every_claude_workflow_runs_the_preflight_before_its_work(name):
         env = job.get("env") or {}
         for var in ("RESEND_API_KEY", "APPROVAL_EMAIL_RECIPIENT", "APPROVAL_EMAIL_FROM"):
             assert var in env, f"{name}:{job_name} cannot email without {var}"
+        # The probe needs the key itself. monthly-cafr-refresh gave it only to
+        # the extract steps, so the preflight failed "key missing" on
+        # 2026-10-01 and the refresh step never ran.
+        step_env = steps[idx[0]].get("env") or {}
+        assert "ANTHROPIC_API_KEY" in env or "ANTHROPIC_API_KEY" in step_env, (
+            f"{name}:{job_name} preflight cannot see ANTHROPIC_API_KEY")

@@ -43,6 +43,8 @@ jobs:
       APPROVAL_EMAIL_RECIPIENT: ${{ secrets.APPROVAL_EMAIL_RECIPIENT }}
       APPROVAL_EMAIL_FROM: ${{ secrets.APPROVAL_EMAIL_FROM }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      # The credit preflight needs the key before any step-level env applies.
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}

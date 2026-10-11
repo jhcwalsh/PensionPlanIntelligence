@@ -47,6 +47,8 @@ jobs:
       APPROVAL_EMAIL_RECIPIENT: ${{ secrets.APPROVAL_EMAIL_RECIPIENT }}
       APPROVAL_EMAIL_FROM: ${{ secrets.APPROVAL_EMAIL_FROM }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      # The credit preflight needs the key before any step-level env applies.
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
     steps:
       - uses: actions/checkout@v5
 
