@@ -233,9 +233,12 @@ def refresh_plan(session, plan: dict, run_at: datetime,
         console.print(f"  [cyan]{abbrev}: trying FY{target_year} {url}[/cyan]")
         local_path, size = download_document(url, plan_dir, filename)
         if not local_path:
+            # Not a return: a template renders the newest FY's URL months
+            # before that ACFR exists, and the prior FY must still be tried.
             log_outcome(session, plan_id, run_at, target_year, "url_failed",
                         url_tried=url, notes="download_document returned no file")
-            return "url_failed"
+            last_result = "url_failed"
+            continue
 
         if size < MIN_PDF_BYTES:
             try:

@@ -24,6 +24,8 @@
   folder (`/2025/01/`), so 26 of 29 still 404 for FY2025 — they need `cafr_landing` pages instead.
   `_cafr_overrides.json` is not read by the monthly refresh at all.
 
+- Commit 2: refresh_cafrs.py now falls back to the prior FY after a failed download.
+
 **Next**
 1. Push, then dispatch the daily pipeline and confirm it gets past the preflight.
 2. Backfill the weekly → monthly → quarterly cascade in order.
