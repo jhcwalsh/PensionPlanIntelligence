@@ -116,7 +116,7 @@
     "sub_page_pattern": "trs\\.texas\\.gov/about/trustees/board-meetings/board-meeting-",
     "max_sub_pages": 8,
     "playwright_wait_selector": "a[href*=\"board-meetings/board-meeting-\"]",
-    "fiscal_year_end": "06-30",
+    "fiscal_year_end": "08-31",
     "cafr_url_template": "https://www.trs.texas.gov/sites/default/files/migrated/trs-acfr-{year}.pdf"
   },
   {
@@ -135,7 +135,7 @@
       "minutes"
     ],
     "cafr_landing": "https://www.ers.texas.gov/About-ERS/Reports-and-Studies/Reports-on-Overall-ERS-Operations-and-Financial-Management",
-    "fiscal_year_end": "06-30",
+    "fiscal_year_end": "08-31",
     "cafr_url_by_year": {
       "2025": "https://www.ers.texas.gov/about-ers/reports-and-studies/reports-on-overall-ers-operations-and-financial-ma/2025-acfr"
     }
@@ -178,7 +178,7 @@
       "board_pack",
       "minutes"
     ],
-    "fiscal_year_end": "06-30",
+    "fiscal_year_end": "12-31",
     "cafr_url_template": "https://www.opers.org/pubs-archive/financial/{year}-OPERS-Annual-Report.pdf",
     "cafr_url_by_year": {
       "2025": "https://www.opers.org/wp-content/uploads/2026/06/2025-OPERS-Annual-Report.pdf"
@@ -238,7 +238,7 @@
       "board_pack",
       "minutes"
     ],
-    "fiscal_year_end": "06-30",
+    "fiscal_year_end": "12-31",
     "cafr_url_by_year": {
       "2025": "https://www.sers.pa.gov/pdf/ACFR/2025_SERS_ACFR.pdf"
     }
@@ -258,7 +258,7 @@
       "board_pack",
       "minutes"
     ],
-    "fiscal_year_end": "06-30",
+    "fiscal_year_end": "12-31",
     "cafr_url_template": "https://secure.copera.org/staticcontent/digitalsnapshot/acfr-{year}/",
     "cafr_url_by_year": {
       "2025": "https://content.copera.org/wp-content/uploads/2026/06/2025-Annual-Comprehensive-Financial-Report.pdf"
@@ -357,7 +357,7 @@
       "board_pack",
       "minutes"
     ],
-    "fiscal_year_end": "06-30",
+    "fiscal_year_end": "12-31",
     "cafr_url_by_year": {
       "2025": "https://www.imrf.org/cmsmedia/files/multi-site-files/annual-reports/2025/2025-acfr.pdf"
     }
@@ -552,7 +552,7 @@
     "extra_pages": [
       "https://www.dpfp.org/-board/board-meeting-minutes/"
     ],
-    "fiscal_year_end": "06-30",
+    "fiscal_year_end": "12-31",
     "cafr_url_by_year": {
       "2025": "https://www.dpfp.org/Resources/7ad6f08a-2242-466b-bb4b-74405e461055/2025%20DPFP%20ACFR%20Final%20web.pdf"
     }
@@ -571,7 +571,7 @@
       "agenda",
       "minutes"
     ],
-    "fiscal_year_end": "06-30",
+    "fiscal_year_end": "12-31",
     "cafr_url_by_year": {
       "2025": "https://www.safppf.org/Financial%20Section.pdf"
     }
@@ -592,7 +592,7 @@
     ],
     "sub_page_pattern": "coaers\\.org/\\d{4}-\\d{2}-\\d{2}-coaers",
     "max_sub_pages": 12,
-    "fiscal_year_end": "06-30",
+    "fiscal_year_end": "12-31",
     "cafr_url_by_year": {
       "2025": "https://www.coaers.org/files/1e475242b/2025+ACFR_FINAL+6.3.26.pdf"
     }
@@ -860,7 +860,7 @@
       "minutes"
     ],
     "cafr_url": "https://www.urs.org/documents/byfilename/@Public%20Web%20Documents@URS@Reports@ACFR@2024_ACFR@@application@pdf/",
-    "fiscal_year_end": "06-30",
+    "fiscal_year_end": "12-31",
     "cafr_url_by_year": {
       "2025": "https://www.urs.org/documents/byfilename/@Public%20Web%20Documents@URS@Reports@ACFR@2025_ACFR@@application@pdf/"
     }
@@ -879,7 +879,7 @@
       "agenda",
       "minutes"
     ],
-    "fiscal_year_end": "06-30",
+    "fiscal_year_end": "12-31",
     "cafr_url_by_year": {
       "2025": "https://retirement.wyo.gov/wp-content/uploads/WRS-2025-Annual-Comprehensive-Financial-Report.pdf"
     }
@@ -1403,7 +1403,7 @@
       "board_pack",
       "minutes"
     ],
-    "fiscal_year_end": "06-30",
+    "fiscal_year_end": "12-31",
     "cafr_url_by_year": {
       "2025": "https://www.ocers.org/sites/main/files/file-attachments/ocers_2025_annual_report_final_digital.pdf?1782496362"
     }
@@ -1581,7 +1581,7 @@
     ],
     "playwright_wait_selector": "a[href*=\"sites/default/files\"]",
     "cafr_url_template": "https://dcrb.dc.gov/sites/default/files/dc/sites/dcrb/(DCRB)%20{year}%20ACFR_Web.pdf",
-    "fiscal_year_end": "06-30",
+    "fiscal_year_end": "09-30",
     "cafr_url_by_year": {
       "2025": "https://dcrb.dc.gov/sites/default/files/dc/sites/dcrb/DCRB%20ACFR%20FINAL%203.31.2026.pdf"
     }
@@ -1602,7 +1602,7 @@
       "minutes"
     ],
     "cafr_url": "https://assets.mersofmich.com/forms/AnnualFinancialReport_2024.pdf",
-    "fiscal_year_end": "06-30",
+    "fiscal_year_end": "12-31",
     "cafr_url_by_year": {
       "2025": "https://assets.mersofmich.com/forms/AnnualFinancialReport_2025.pdf"
     }
@@ -1715,7 +1715,7 @@
       "board_pack",
       "minutes"
     ],
-    "fiscal_year_end": "06-30",
+    "fiscal_year_end": "12-31",
     "cafr_url_by_year": {
       "2025": "https://www.acera.org/sites/main/files/file-attachments/aceras_2025_acfr_-_final.pdf?1782760217"
     }
@@ -1736,7 +1736,7 @@
       "minutes"
     ],
     "cafr_landing": "https://www.cccera.gov/2024-annual-comprehensive-financial-report",
-    "fiscal_year_end": "06-30"
+    "fiscal_year_end": "12-31"
   },
   {
     "id": "nhrs",
@@ -1990,7 +1990,7 @@
       "minutes"
     ],
     "cafr_url": "https://ohioauditor.gov/auditsearch/Reports/2025/Ohio_Police_&_Fire_Pension_Fund_24_Franklin_FINAL.pdf",
-    "fiscal_year_end": "06-30",
+    "fiscal_year_end": "12-31",
     "cafr_url_by_year": {
       "2025": "https://www.op-f.org/media/bd4oegx4/opf_acfr_2025.pdf"
     }
@@ -2096,7 +2096,7 @@
     ],
     "notes": "cityofboston.gov is dead; moved to boston.gov. No separate meetings sub-page; content on main dept page",
     "cafr_url": "https://www.boston.gov/sites/default/files/file/2025/07/Boston_Retirement_System_2024_FS_December%2031%202024.pdf",
-    "fiscal_year_end": "06-30",
+    "fiscal_year_end": "12-31",
     "cafr_url_by_year": {
       "2025": "https://www.boston.gov/sites/default/files/file/2026/08/Boston%20Retirement%20System%20Financial%20Statements%20as%20of%2012-31-2025.pdf"
     }
@@ -2117,7 +2117,7 @@
       "minutes"
     ],
     "notes": "Correct domain is fppaco.org not cofppa.org",
-    "fiscal_year_end": "06-30",
+    "fiscal_year_end": "12-31",
     "cafr_url_by_year": {
       "2025": "https://www.fppaco.org/files/718667f51/2025+Annual+Report+-+Final.pdf"
     }
@@ -2250,7 +2250,7 @@
     "sub_page_pattern": "derp-retirement-board-meeting-[\\d]+-[\\d]+-[\\d]+",
     "max_sub_pages": 12,
     "notes": "Main schedules-agendas-minutes page links to individual meeting sub-pages; PDFs in /wp-content/uploads/",
-    "fiscal_year_end": "06-30",
+    "fiscal_year_end": "12-31",
     "cafr_url_by_year": {
       "2025": "https://derp.org/wp-content/uploads/2026/06/2025-DERP-ACFR.pdf"
     }
@@ -2387,7 +2387,7 @@
       "board_pack",
       "minutes"
     ],
-    "fiscal_year_end": "06-30",
+    "fiscal_year_end": "12-31",
     "cafr_url_template": "https://scretire.org/Microsites/SCERA/Documents/Financial/{year}%20ACFR.pdf",
     "cafr_url_by_year": {
       "2025": "https://scretire.org/Microsites/SCERA/Documents/Financial/ACFR%202025.pdf"
@@ -2487,7 +2487,7 @@
     ],
     "notes": "Correct domain is cmers.com (City of Milwaukee Employes' Retirement System)",
     "cafr_url": "https://www.cmers.com/CMERS/Financial-Statements/CMERS-12-31-24-ACFR.pdf",
-    "fiscal_year_end": "06-30",
+    "fiscal_year_end": "12-31",
     "cafr_url_by_year": {
       "2025": "https://www.cmers.com/CMERS/Financial-Statements/CMERS-12-31-25-ACFR.pdf"
     }
@@ -2508,7 +2508,7 @@
     ],
     "notes": "jpfpension.com defunct; moved to jacksonville.gov",
     "cafr_url": "https://www.jacksonville.gov/getattachment/Departments/Police-Fire-Pension-Fund/Annual-Report/Jacksonville-PFPF-10-1-2024-Actuarial-Valuation-Report-FINAL-4-14-2025.pdf",
-    "fiscal_year_end": "06-30",
+    "fiscal_year_end": "09-30",
     "cafr_url_by_year": {
       "2025": "https://www.jacksonville.gov/getContentAsset/bc569a3a-75ee-4f3e-8569-7c566b94c04c/135b97c9-84fa-4e82-b956-0fbccec4aa1f/PFPF-FYE-2025-Audit-Final.pdf?language=en"
     }
@@ -2529,7 +2529,7 @@
       "minutes"
     ],
     "cafr_url": "https://sjcera.org/sites/default/files/2025-06/SJCERA_2024_ACFR-WEB.pdf",
-    "fiscal_year_end": "06-30",
+    "fiscal_year_end": "12-31",
     "cafr_url_by_year": {
       "2025": "https://www.sjcera.org/sites/default/files/2026-06/2025%20ACFR%20FINAL.pdf"
     }
