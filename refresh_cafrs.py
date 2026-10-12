@@ -276,6 +276,13 @@ def refresh_plan(session, plan: dict, run_at: datetime,
             continue
 
         cover_year = fiscal_year_from_pdf(local_path, max_year=run_at.year + 1)
+        # A URL curated for this exact year was checked by a person; the
+        # cover parser misreads "years ended 2025 and 2024" and image covers.
+        curated = url == (plan.get("cafr_url_by_year") or {}).get(str(target_year))
+        if curated and cover_year != target_year:
+            console.print(f"  [dim]{abbrev}: cover reads {cover_year}; "
+                          f"trusting curated FY{target_year}[/dim]")
+            cover_year = target_year
         if cover_year not in acceptable_years:
             log_outcome(
                 session, plan_id, run_at, target_year, "validation_failed",

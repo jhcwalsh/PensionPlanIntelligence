@@ -1,32 +1,26 @@
 # Session notes
 
-## 2026-10-11 — Every cron but weekly-watch stopped on 13 Sep
+## 2026-10-11 — Every cron but weekly-watch stopped on 13 Sep; CAFR refresh saved nothing
 
 **Done**
-- Put `ANTHROPIC_API_KEY` in the job-level `env` of seven workflows (daily-pipeline, weekly-insights,
-  monthly-cafr-refresh, monthly-ips, monthly-insights, quarterly-insights, annual-insights).
-- `tests/test_preflight_credit.py` now asserts the preflight step can see the key.
+- 7c4b000 (pushed): `ANTHROPIC_API_KEY` at job level in seven workflows. The credit preflight ran
+  before any step that set the key, failed "key missing" every run since 13 Sep, and skipped the work.
+- 6666794 (pushed): `refresh_cafrs.refresh_plan` falls back to the prior FY after a failed download.
+- `cafr_url_by_year` in `data/known_plans.json`, checked first by `fetch_cafr.resolve_cafr_url_for_year`;
+  74 plans given a curated FY2025 URL. A curated URL is saved as its curated year even when the cover parser disagrees.
 
 **Why**
-- The credit preflight (4b87202, 13 Sep) runs before any step that had the key in its own `env`, so it
-  failed "Anthropic API key missing" on every run and skipped the real work. Only weekly-watch had the
-  key at job level. The old test checked the mail variables but not the key itself.
-- Damage: daily pipeline has fetched nothing since 13 Sep; no weekly publications since then, so the
-  1 Oct monthly and quarterly briefings failed; the 1 Oct CAFR refresh never ran.
+- 1 Sep refresh saved 0 of 148. Templates bake in upload-date folders, and URLs carry `/2026/03/` folders or
+  "FY25" that `year_from_url` misreads; the cover parser reads "2025 and 2024" covers as 2024 and image covers
+  as None. Curating the URL per year sidesteps all three. Dry run against scratch SQLite: 74/74 saved as FY2025.
 
 **Broken / unsure**
-- Not pushed, so nothing is fixed on GHA until it is.
-- The missed runs need re-running once pushed: daily pipeline (one run catches up), the weekly
-  composes for the missed Sundays, then monthly (Sep period) and quarterly (Q3), then the CAFR refresh.
-- Separately, the CAFR refresh itself saves nothing: 1 Sep run was 143 no_strategy, 46 url_failed, 0 saved.
-  `refresh_cafrs.refresh_plan` returned on a failed download of the newest FY instead of trying the
-  prior one (fixed, `tests/test_refresh_cafrs.py`). But most `cafr_url_template`s bake in an upload-date
-  folder (`/2025/01/`), so 26 of 29 still 404 for FY2025 — they need `cafr_landing` pages instead.
-  `_cafr_overrides.json` is not read by the monthly refresh at all.
-
-- Commit 2: refresh_cafrs.py now falls back to the prior FY after a failed download.
+- `fiscal_year_end` is wrong in the registry for ~25 plans (many are 12-31; ers_texas 08-31, dcrb 09-30).
+- No FY2025 found: gmebs_ga, ri_ers (Cloudflare), pgcers_md, trs_texas (Imperva), sdrs_sd, wperp (not out),
+  ers_hi (not out), cccera (Issuu only), rcera_ca and ocers_fl (registry entries look wrong), atlanta_ers, ucrp.
+- `_cafr_overrides.json` is not read by the monthly refresh at all.
 
 **Next**
-1. Push, then dispatch the daily pipeline and confirm it gets past the preflight.
-2. Backfill the weekly → monthly → quarterly cascade in order.
-3. Find FY2025 CAFR URLs for the ~82 plans missing one.
+1. Dispatch monthly-cafr-refresh, then the missed weekly → monthly → quarterly runs.
+2. Fix `fiscal_year_end` from the research in the session scratchpad.
+3. Each year, add the new FY's URLs to `cafr_url_by_year` (or make landing scraping year-aware).

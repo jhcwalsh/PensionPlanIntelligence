@@ -68,3 +68,27 @@ def test_a_forced_year_still_stops_at_that_year(fake_net):
         assert fake_net == ["https://example.org/acfr-2026.pdf"]
     finally:
         session.close()
+
+
+def test_an_explicit_url_for_the_year_wins_over_the_template():
+    # Upload folders (/2026/03/), "FY25" and extensionless download links
+    # defeat year_from_url, so a curated URL per year is checked first.
+    from fetch_cafr import resolve_cafr_url_for_year
+    plan = dict(PLAN, cafr_url_by_year={"2025": "https://example.org/uploads/2026/03/acfr-fy25.pdf"})
+    assert resolve_cafr_url_for_year(plan, 2025) == "https://example.org/uploads/2026/03/acfr-fy25.pdf"
+    assert resolve_cafr_url_for_year(plan, 2026) == "https://example.org/acfr-2026.pdf"
+
+
+def test_a_curated_url_is_saved_as_its_curated_year_whatever_the_cover_says(fake_net, monkeypatch):
+    # "Years ended June 30, 2025 and 2024" covers parse as 2024, and image-only
+    # covers parse as None; both rejected real FY2025 reports on 2026-10-11.
+    monkeypatch.setattr(refresh_cafrs, "fiscal_year_from_pdf", lambda path, max_year=None: None)
+    plan = dict(PLAN, cafr_url_template=None,
+                cafr_url_by_year={"2025": "https://example.org/uploads/acfr-fy2025.pdf"})
+    session = database.get_session()
+    try:
+        assert refresh_cafrs.refresh_plan(session, plan, RUN_AT) == "saved"
+        doc = session.query(database.Document).filter_by(plan_id="tmplplan").one()
+        assert doc.fiscal_year == 2025
+    finally:
+        session.close()

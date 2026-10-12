@@ -208,11 +208,18 @@ def resolve_cafr_url_for_year(plan: dict, target_year: int) -> str | None:
     """Refresh-script helper: produce the best URL guess for a specific FY.
 
     Priority:
+      0. `cafr_url_by_year[str(target_year)]`, a curated URL for that FY.
+         Upload folders (/2026/03/), "FY25" and extensionless download links
+         all defeat year_from_url, so these are recorded by hand.
       1. `cafr_url_template` rendered with target_year.
       2. `cafr_landing` scraped; pick the link whose year_from_url == target_year.
       3. `cafr_url` (only if target_year matches its embedded year).
     Returns None when no candidate matches the requested year.
     """
+    curated = (plan.get("cafr_url_by_year") or {}).get(str(target_year))
+    if curated:
+        return curated
+
     template = plan.get("cafr_url_template")
     if template and "{year}" in template:
         return template.format(year=target_year)
