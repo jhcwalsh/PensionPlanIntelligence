@@ -1,5 +1,27 @@
 # Session notes
 
+## 2026-10-12 — Catch-up after the month-long cron outage
+
+**Done**
+- Neon `plans.fiscal_year_end` set to match the registry for the 24 corrected plans; twins rebuilt.
+- After the first green daily pipeline since 13 Sep (GHA, 21:35 UTC), ran the monthly-cafr-refresh steps
+  locally against Neon: 76 FY2025 CAFRs saved, 71 investment extracts, asset-class mappings (+329), twins.
+- Q3 2026 quarterly composed from the July and August monthlies, published and emailed.
+
+**Why**
+- A weekly reads "downloaded in the last 7 days" from when it runs, whatever period it is labelled with, so
+  missed weeklies cannot be backfilled: five would all hold today's catch-up. James chose to skip the
+  September monthly; September's meetings reach readers via the 18 Oct weekly and the October monthly.
+
+**Broken / unsure**
+- `extract_cafr_investments.py` exit 1: DPERS and ACERA fail with "'str' object has no attribute 'get'".
+- 7 FY2025 extracts saved with 0 rows (NJDPB, TMRS, SDCERA, DCRB, APERS, COAERS, FCERA).
+- ct_trs holds its 2025 actuarial valuation tagged as an FY2026 CAFR.
+
+**Next**
+1. Fix the DPERS/ACERA extraction crash and look at the 0-row extracts.
+2. Make `upsert_plan` update registry fields, so registry fixes reach the DB.
+
 ## 2026-10-11 — Every cron but weekly-watch stopped on 13 Sep; CAFR refresh saved nothing
 
 **Done**
