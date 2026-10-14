@@ -136,3 +136,89 @@ def test_standalone_format_feeds_the_whole_document(tmp_db, tmp_path, monkeypatc
     extract = session.query(CafrExtract).filter_by(document_id=doc.id).one()
     assert extract.pages_used == "1-21"
     session.close()
+
+
+# --- Malformed tool input, and a crash leaking into the next commit --------
+# On 2026-10-12 DPERS and ACERA failed with "'str' object has no attribute
+# 'get'": the tool call now and then carries a nested array as a JSON string,
+# so save_extract iterated its characters. The shared session was never
+# rolled back, so the next document's commit saved their half-written,
+# row-less extracts, whose matching hash then blocked any retry.
+
+def _cafr_doc(session, plan_id, aum, local_path=None):
+    session.add(Plan(id=plan_id, name=plan_id.upper(), abbreviation=plan_id.upper(),
+                     state="DE", aum_billions=aum))
+    doc = Document(plan_id=plan_id, url=f"https://x/{plan_id}.pdf",
+                   filename=f"{plan_id}.pdf", doc_type="cafr", fiscal_year=2025,
+                   downloaded_at=datetime(2026, 10, 12, tzinfo=timezone.utc),
+                   extraction_status="done", local_path=local_path)
+    session.add(doc)
+    session.flush()
+    return doc
+
+
+def test_a_stringified_array_is_decoded_and_non_object_rows_are_skipped(tmp_db):
+    from database import CafrAllocation, CafrPerformance
+    session = get_session()
+    doc = _cafr_doc(session, "de_pers", 14.7)
+    payload = {
+        "asset_allocation": '[{"asset_class": "Domestic Equity", "actual_pct": 43.3}]',
+        "performance": ["total fund 11.3%", {"scope": "total_fund", "period": "fy",
+                                             "return_pct": 11.3}],
+        "notes": None,
+    }
+    extract = eci.save_extract(session, doc, payload, pages_used="1-2", text_hash="h")
+
+    alloc = session.query(CafrAllocation).filter_by(cafr_extract_id=extract.id).all()
+    perf = session.query(CafrPerformance).filter_by(cafr_extract_id=extract.id).all()
+    assert [(a.asset_class, a.actual_pct) for a in alloc] == [("Domestic Equity", 43.3)]
+    assert [(p.scope, p.return_pct) for p in perf] == [("total_fund", 11.3)]
+    session.close()
+
+
+def test_a_crashed_document_leaves_no_extract_behind(tmp_db, monkeypatch):
+    session = get_session()
+    bad = _cafr_doc(session, "bad_plan", 20.0)     # larger AUM: processed first
+    good = _cafr_doc(session, "good_plan", 10.0)
+    session.commit()
+    bad_id, good_id = bad.id, good.id
+    session.close()
+
+    def fake_extract_one(session, doc, plan, **kw):
+        session.add(CafrExtract(plan_id=doc.plan_id, document_id=doc.id,
+                                fiscal_year=doc.fiscal_year, text_hash="h"))
+        session.flush()
+        if doc.plan_id == "bad_plan":
+            raise AttributeError("'str' object has no attribute 'get'")
+        session.commit()
+        return "saved"
+
+    monkeypatch.setattr(eci, "extract_one", fake_extract_one)
+    counts = eci.run_extraction()
+
+    assert counts == {"error": 1, "saved": 1}
+    session = get_session()
+    assert session.query(CafrExtract).filter_by(document_id=bad_id).count() == 0
+    assert session.query(CafrExtract).filter_by(document_id=good_id).count() == 1
+    session.close()
+
+
+def test_a_whole_result_serialised_into_one_field_is_unpacked():
+    # DPERS FY2025 on 2026-10-13: everything inside the asset_allocation
+    # string, and no top-level performance key at all.
+    payload = {
+        "asset_allocation": '{"asset_allocation": [{"asset_class": "Equity", '
+                            '"target_range_low": 50.0}], "performance": '
+                            '[{"scope": "total_fund", "period": "fy", "return_pct": 11.3}]}',
+        "investment_policy_text": "Prudent person rule.",
+        "notes": "Policy ranges only.",
+    }
+    out = eci._normalize_payload(payload)
+    assert out["asset_allocation"] == [{"asset_class": "Equity", "target_range_low": 50.0}]
+    assert out["performance"] == [{"scope": "total_fund", "period": "fy", "return_pct": 11.3}]
+    assert out["notes"] == "Policy ranges only."
+
+
+def test_undecodable_or_wrongly_typed_arrays_become_empty():
+    out = eci._normalize_payload({"asset_allocation": "not json", "performance": 7})
+    assert out["asset_allocation"] == [] and out["performance"] == []

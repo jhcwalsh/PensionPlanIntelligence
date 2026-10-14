@@ -726,6 +726,9 @@ def run_extraction(plan_ids: list[str] | None = None,
                         pendings.append(status)
                         continue
             except Exception as e:
+                # Same reason as the batch path below: the next commit would
+                # otherwise save this document's half-written rows.
+                session.rollback()
                 status = "failed"
                 console.print(f"  [red]{plan.abbreviation or doc.plan_id}: {e}[/red]")
             counts[status] = counts.get(status, 0) + 1

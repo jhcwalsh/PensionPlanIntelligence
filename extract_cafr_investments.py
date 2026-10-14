@@ -409,8 +409,43 @@ def _coerce_float(v) -> float | None:
         return None
 
 
+_ROW_KEYS = ("asset_allocation", "performance")
+
+
+def _normalize_payload(payload: dict) -> dict:
+    """The tool input with both arrays as lists of objects.
+
+    The model now and then sends an array as a JSON string, which iterated
+    as characters and crashed DPERS and ACERA on 2026-10-12. On DPERS the
+    string held the whole result, `performance` included, while the real
+    `performance` key was absent; that object is unpacked back into the
+    payload. Anything still not an object after decoding is dropped.
+    """
+    out = dict(payload)
+    for key in _ROW_KEYS:
+        value = out.get(key)
+        if isinstance(value, str):
+            try:
+                value = json.loads(value)
+            except json.JSONDecodeError:
+                value = []
+            if isinstance(value, dict):
+                for k, v in value.items():
+                    if k != key and (k not in out or isinstance(out[k], str)
+                                     and k in _ROW_KEYS):
+                        out[k] = v
+                value = value.get(key, [])
+            out[key] = value
+    for key in _ROW_KEYS:
+        rows = out.get(key)
+        out[key] = ([r for r in rows if isinstance(r, dict)]
+                    if isinstance(rows, list) else [])
+    return out
+
+
 def save_extract(session, doc: Document, payload: dict, *,
                  pages_used: str, text_hash: str) -> CafrExtract:
+    payload = _normalize_payload(payload)
     # If a previous extract exists for this document, replace it cleanly.
     existing = session.query(CafrExtract).filter_by(document_id=doc.id).first()
     if existing is not None:
@@ -431,7 +466,7 @@ def save_extract(session, doc: Document, payload: dict, *,
     session.add(extract)
     session.flush()  # populate extract.id
 
-    for row in payload.get("asset_allocation", []):
+    for row in payload["asset_allocation"]:
         session.add(CafrAllocation(
             cafr_extract_id=extract.id,
             asset_class=str(row.get("asset_class", ""))[:200],
@@ -442,7 +477,7 @@ def save_extract(session, doc: Document, payload: dict, *,
             notes=row.get("notes"),
         ))
 
-    for row in payload.get("performance", []):
+    for row in payload["performance"]:
         session.add(CafrPerformance(
             cafr_extract_id=extract.id,
             scope=str(row.get("scope", ""))[:200],
@@ -534,14 +569,15 @@ def _process_pdf(session, doc: Document, plan: Plan, label: str,
     )
 
     try:
-        payload = call_claude(plan.name, doc.fiscal_year, section_text)
+        payload = _normalize_payload(
+            call_claude(plan.name, doc.fiscal_year, section_text))
     except Exception as e:
         console.print(f"  [red]{label}: Claude error: {e}[/red]")
         return "api_error"
 
     save_extract(session, doc, payload, pages_used=pages_used, text_hash=text_hash)
-    n_alloc = len(payload.get("asset_allocation", []))
-    n_perf = len(payload.get("performance", []))
+    n_alloc = len(payload["asset_allocation"])
+    n_perf = len(payload["performance"])
     console.print(
         f"  [green]{label}: saved ({n_alloc} allocation rows, {n_perf} performance rows)[/green]"
     )
@@ -585,6 +621,9 @@ def run_extraction(plan_ids: list[str] | None = None,
                 status = extract_one(session, doc, plan, force=force,
                                      plan_meta=plan_meta_by_id.get(doc.plan_id))
             except Exception as e:
+                # Without this the next document's commit saves this one's
+                # half-written extract, and its matching hash blocks a retry.
+                session.rollback()
                 status = "error"
                 console.print(f"  [red]{plan.abbreviation}: {e}[/red]")
             counts[status] = counts.get(status, 0) + 1
