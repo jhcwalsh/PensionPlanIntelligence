@@ -17,12 +17,14 @@
 - Fixed 2026-10-13: DPERS/ACERA crash. The model sometimes sends an array as a JSON string (on DPERS the
   whole result inside `asset_allocation`); `_normalize_payload` decodes it. The crash also leaked a
   row-less extract into the next commit, blocking retries; both extractors now roll back. Both re-extracted.
-- 7 FY2025 extracts have 0 rows because the locator returned only the TOC page (NJDPB, TMRS, SDCERA,
-  DCRB, APERS, COAERS, FCERA).
+- Fixed 2026-10-13: the text-search locator took the contents page as the Investment Section. It now
+  skips pages naming 2+ sections and prefers "Investment Section" over a bare "Investments" label.
+  13 empty extracts re-extracted, all with rows now; 22 others with rows get tighter ranges on a --force run.
+  Still wide: lacers (29-103, no real header) and pers_phoenix (18-82, an org chart names the section).
 - ct_trs holds its 2025 actuarial valuation tagged as an FY2026 CAFR.
 
 **Next**
-1. Make `locate_investment_section` skip TOC-only ranges, then re-extract those 7.
+1. Optionally re-extract the 21 CAFRs whose old range was truncated (~$4); thin ones: frs, ers_hi, epcp_tx.
 2. Make `upsert_plan` update registry fields, so registry fixes reach the DB.
 
 ## 2026-10-11 — Every cron but weekly-watch stopped on 13 Sep; CAFR refresh saved nothing

@@ -151,33 +151,48 @@ def _locate_via_toc(doc: fitz.Document, start_patterns=None,
     return (start_page, end_page)
 
 
+_SECTION_NAME = re.compile(
+    r"\b(introductory|financial|investment|actuarial|statistical)\s+section\b",
+    re.IGNORECASE)
+
+
+def _is_contents_page(text: str) -> bool:
+    """A page naming two or more CAFR sections is a table of contents.
+
+    A divider page or a running header names one. Without this the contents
+    page's "Investment Section" line was taken as the start, its "Actuarial
+    Section" line just below as the end, and seven FY2025 CAFRs were
+    extracted from that single page on 2026-10-12.
+    """
+    return len({m.group(1).lower() for m in _SECTION_NAME.finditer(text)}) >= 2
+
+
 def _locate_via_text_search(doc: fitz.Document, start_patterns=None,
                             end_patterns=None) -> tuple[int, int] | None:
     """Fallback: scan page text for section header phrases.
 
     `start_patterns`/`end_patterns` default to the Investment Section's
-    module-level patterns, preserving current behavior for existing callers.
+    module-level patterns. Start patterns are tried in order of preference:
+    a bare "Investments" line is usually a table label in the financial
+    statements, so it is used only when no page carries "Investment Section".
+    Contents pages are never a start.
     """
     start_pats = start_patterns if start_patterns is not None else INV_START_PATTERNS
     end_pats = end_patterns if end_patterns is not None else INV_END_PATTERNS
+    texts = [doc.load_page(i).get_text() for i in range(doc.page_count)]
     start = None
-    end = None
-    for i in range(doc.page_count):
-        text = doc.load_page(i).get_text()
-        if start is None:
-            for pat in start_pats:
-                if pat.search(text):
-                    start = i + 1  # PyMuPDF pages are 0-indexed; we use 1-indexed externally
-                    break
-        elif end is None:
-            for pat in end_pats:
-                if pat.search(text):
-                    end = i  # the page BEFORE the next section header
-                    break
+    for pat in start_pats:
+        # PyMuPDF pages are 0-indexed; we use 1-indexed externally
+        start = next((i + 1 for i, text in enumerate(texts)
+                      if pat.search(text) and not _is_contents_page(text)), None)
+        if start is not None:
+            break
     if start is None:
         return None
-    if end is None:
-        end = doc.page_count
+    # The 0-based index of the next section's header is the 1-based number
+    # of the page before it, which is where this section ends.
+    end = next((i for i in range(start, len(texts))
+                if any(pat.search(texts[i]) for pat in end_pats)), len(texts))
     if end < start:
         return None
     return (start, end)

@@ -222,3 +222,38 @@ def test_a_whole_result_serialised_into_one_field_is_unpacked():
 def test_undecodable_or_wrongly_typed_arrays_become_empty():
     out = eci._normalize_payload({"asset_allocation": "not json", "performance": 7})
     assert out["asset_allocation"] == [] and out["performance"] == []
+
+
+# --- Text search: the table of contents is not the section -----------------
+# Seven FY2025 CAFRs with no usable outline (NJDPB, TMRS, SDCERA, DCRB, APERS,
+# COAERS, FCERA) had their "Investment Section" found on the contents page,
+# ended at the "Actuarial Section" line just below it, and were extracted
+# from that one page: zero rows each, on 2026-10-12.
+
+CONTENTS_1 = "Table of Contents\nFinancial Section\nIndependent Auditor's Report\nInvestment Section\n"
+CONTENTS_2 = "Report on Investment Activity\nActuarial Section\nStatistical Section\n"
+FILLER = "Narrative text about the plan and its members.\n"
+
+
+def test_text_search_skips_the_contents_pages(tmp_path):
+    path = _make_pdf(tmp_path / "c.pdf", [
+        "Cover\n", CONTENTS_1, CONTENTS_2,
+        "Statement of Fiduciary Net Position\nInvestments\n" + FILLER,   # a table label
+        FILLER,
+        "INVESTMENT\nSECTION\n",                                         # divider page
+        "Investment Section\nAsset allocation " + FILLER,
+        "Investment Section\nInvestment results " + FILLER,
+        "Actuarial Section\n" + FILLER,
+    ])
+    assert eci.locate_investment_section(path) == (6, 8)
+
+
+def test_text_search_finds_nothing_when_only_the_contents_names_the_section(tmp_path):
+    path = _make_pdf(tmp_path / "c.pdf", ["Cover\n", CONTENTS_1, CONTENTS_2, FILLER, FILLER])
+    assert eci.locate_investment_section(path) is None
+
+
+def test_text_search_falls_back_to_a_bare_investments_heading(tmp_path):
+    path = _make_pdf(tmp_path / "c.pdf", [
+        "Cover\n", FILLER, "Investments\n" + FILLER, FILLER, "Actuarial Section\n"])
+    assert eci.locate_investment_section(path) == (3, 4)
