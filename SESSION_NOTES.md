@@ -21,6 +21,7 @@
   skips pages naming 2+ sections and prefers "Investment Section" over a bare "Investments" label.
   13 empty extracts re-extracted, all with rows now; 22 others with rows get tighter ranges on a --force run.
   Still wide: lacers (29-103, no real header) and pers_phoenix (18-82, an org chart names the section).
+- Asset-class mappings refreshed for the re-extracted rows (+74), twins rebuilt for the 15 plans.
 - ct_trs holds its 2025 actuarial valuation tagged as an FY2026 CAFR.
 
 **Next**
