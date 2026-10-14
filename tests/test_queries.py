@@ -53,6 +53,22 @@ def test_recent_summaries_excludes_cafr_and_performance(seeded):
     assert kinds == {"minutes"}, kinds
 
 
+def test_actuarial_valuation_stays_out_of_the_meeting_feeds(seeded):
+    d = Document(plan_id="bbb", url="https://x/actval.pdf", filename="actval.pdf",
+                 doc_type="actuarial_valuation", extraction_status="done",
+                 meeting_date=datetime.utcnow() - timedelta(days=1),
+                 downloaded_at=datetime.utcnow() - timedelta(days=1))
+    seeded.add(d); seeded.flush()
+    seeded.add(Summary(document_id=d.id, summary_text="valuation"))
+    seeded.commit()
+
+    assert "actuarial_valuation" not in {
+        doc.doc_type for doc, _ in queries.recent_summaries(seeded)}
+    assert "actuarial_valuation" not in {
+        doc.doc_type for m in database.get_new_meetings(seeded, days=7)
+        for doc in m["all_docs"]}
+
+
 def test_recent_summaries_filters_by_plan(seeded):
     rows = queries.recent_summaries(seeded, "aaa")
     assert {d.plan_id for d, _ in rows} == {"aaa"}

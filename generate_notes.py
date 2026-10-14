@@ -28,7 +28,8 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 from database import (
     utcnow,
     sort_key,
-    Document, Plan, Summary, as_utc, get_new_meetings, get_session, init_db,
+    Document, NON_MEETING_DOC_TYPES, Plan, Summary, as_utc, get_new_meetings,
+    get_session, init_db,
 )
 
 # Reuse the summarizer's client setup (handles API key + OAuth fallback)
@@ -246,7 +247,7 @@ def _count_new_documents(session, days: int = 7) -> int:
     return (
         session.query(Document)
         .filter(Document.downloaded_at >= cutoff)
-        .filter(Document.doc_type.notin_(["cafr", "performance"]))
+        .filter(Document.doc_type.notin_(NON_MEETING_DOC_TYPES))
         .filter((Document.meeting_date.is_(None)) |
                 (Document.meeting_date <= future_cap))
         .count()

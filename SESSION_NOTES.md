@@ -1,5 +1,26 @@
 # Session notes
 
+## 2026-10-14 — ct_trs's "FY2026 CAFR" was its actuarial valuation
+
+**Done**
+- Neon document 3128 (`sr_actval25.pdf`) retagged from `cafr` FY2026 to `actuarial_valuation`, fiscal year
+  cleared. Its summary and section read are kept. ct_trs now shows "Missing CAFR" on the coverage page.
+- `data/known_plans.json`: dropped ct_trs's `cafr_url` (it pointed at the valuation) and noted why.
+- `database.NON_MEETING_DOC_TYPES` replaces three copies of `["cafr", "performance"]` (meeting feed,
+  Activity tab, notes count) and includes the new type; `queries.BOARD_MATERIAL_EXCLUDED_TYPES` too.
+  New test in `tests/test_queries.py`. Performance view rebuilt.
+
+**Why**
+- CT TRB publishes no standalone annual report; TRS sits in the State of Connecticut ACFR. The static
+  `cafr_url` re-claimed the valuation each month as "already have FY2026", so the gap was invisible.
+
+**Broken / unsure**
+- The valuation's FY2024 total return (11.49%) still feeds the performance view; it is a real figure.
+
+**Next**
+1. Make `upsert_plan` update registry fields, so registry fixes reach the DB.
+2. Tighten the lacers and pers_phoenix Investment Section ranges.
+
 ## 2026-10-12 — Catch-up after the month-long cron outage
 
 **Done**
@@ -25,11 +46,10 @@
 - Re-extracted the 21 CAFRs whose old range was cut short: performance rows up sharply (lacera 2 to 92,
   ri_ers 4 to 74). epcp_tx came back empty (its exhibits are images) and was restored from a backup.
   +52 mappings; twins rebuilt.
-- ct_trs holds its 2025 actuarial valuation tagged as an FY2026 CAFR.
+- ct_trs holds its 2025 actuarial valuation tagged as an FY2026 CAFR (fixed 2026-10-14).
 
 **Next**
 1. Make `upsert_plan` update registry fields, so registry fixes reach the DB.
-2. ct_trs: its FY2026 "CAFR" is an actuarial valuation; retag or delete.
 
 ## 2026-10-11 — Every cron but weekly-watch stopped on 13 Sep; CAFR refresh saved nothing
 

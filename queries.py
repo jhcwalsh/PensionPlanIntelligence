@@ -39,6 +39,7 @@ from database import (
     CafrRefreshLog,
     Document,
     DocumentSkip,
+    NON_MEETING_DOC_TYPES,
     ExtractionDetail,
     FetchRun,
     MeetingRecording,
@@ -76,7 +77,7 @@ def recent_summaries(session, plan_id=None, limit: int = 20):
     q = (
         session.query(Document, Summary)
         .join(Summary, Document.id == Summary.document_id)
-        .filter(Document.doc_type.notin_(["cafr", "performance"]))
+        .filter(Document.doc_type.notin_(NON_MEETING_DOC_TYPES))
         .filter((Document.meeting_date.is_(None)) |
                 (Document.meeting_date <= future_cap))
     )
@@ -139,7 +140,7 @@ def plan_coverage_rows(session) -> list[dict]:
     ]
 
 
-BOARD_MATERIAL_EXCLUDED_TYPES = ("cafr", "ips")
+BOARD_MATERIAL_EXCLUDED_TYPES = ("cafr", "ips", "actuarial_valuation")
 
 
 def _month_key(d: date) -> str:

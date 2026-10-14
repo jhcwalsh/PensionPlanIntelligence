@@ -1952,8 +1952,7 @@
     "extra_pages": [
       "https://portal.ct.gov/trb/content/other-resources/board-information-and-meeting-schedules/board-meetings/2025"
     ],
-    "notes": "Correct URL path is /trb/content/other-resources/.../board-meetings/[YEAR]; original /TRB/Content/ path 404s",
-    "cafr_url": "https://portal.ct.gov/-/media/trb/content/statisticsresearch/sr_actval25.pdf",
+    "notes": "Correct URL path is /trb/content/other-resources/.../board-meetings/[YEAR]; original /TRB/Content/ path 404s. No standalone CAFR: TRS is reported in the State of Connecticut ACFR. The old cafr_url (sr_actval25.pdf) was the actuarial valuation, retagged doc_type actuarial_valuation on 2026-10-14.",
     "fiscal_year_end": "06-30",
     "cafr_format": "aggregator"
   },

@@ -249,6 +249,13 @@ class Meeting(Base):
     )
 
 
+# Document types that are not board-meeting material, kept out of the meeting
+# feed and the Activity tab. "actuarial_valuation" holds a valuation report
+# filed for a plan with no standalone CAFR (ct_trs), so it is neither a CAFR
+# nor meeting material.
+NON_MEETING_DOC_TYPES = ("cafr", "performance", "actuarial_valuation")
+
+
 class Document(Base):
     __tablename__ = "documents"
 
@@ -257,7 +264,7 @@ class Document(Base):
     meeting_id = Column(Integer, ForeignKey("meetings.id"), nullable=True)
     url = Column(String, nullable=False, unique=True)
     filename = Column(String)
-    doc_type = Column(String)           # agenda, board_pack, minutes, performance
+    doc_type = Column(String)           # agenda, board_pack, minutes, performance, cafr, actuarial_valuation
     local_path = Column(String)         # path to downloaded file
     file_size_bytes = Column(Integer)
     downloaded_at = Column(DateTime(timezone=True))
@@ -1807,7 +1814,7 @@ def get_new_meetings(session: Session, days: int = 7) -> list[dict]:
     recent_docs = (
         session.query(Document)
         .filter(Document.downloaded_at >= cutoff)
-        .filter(Document.doc_type.notin_(["cafr", "performance"]))
+        .filter(Document.doc_type.notin_(NON_MEETING_DOC_TYPES))
         .filter((Document.meeting_date.is_(None)) |
                 (Document.meeting_date <= future_cap))
         .order_by(Document.meeting_date.desc().nullslast(),
