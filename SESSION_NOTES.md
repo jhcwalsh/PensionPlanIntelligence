@@ -22,11 +22,14 @@
   13 empty extracts re-extracted, all with rows now; 22 others with rows get tighter ranges on a --force run.
   Still wide: lacers (29-103, no real header) and pers_phoenix (18-82, an org chart names the section).
 - Asset-class mappings refreshed for the re-extracted rows (+74), twins rebuilt for the 15 plans.
+- Re-extracted the 21 CAFRs whose old range was cut short: performance rows up sharply (lacera 2 to 92,
+  ri_ers 4 to 74). epcp_tx came back empty (its exhibits are images) and was restored from a backup.
+  +52 mappings; twins rebuilt.
 - ct_trs holds its 2025 actuarial valuation tagged as an FY2026 CAFR.
 
 **Next**
-1. Optionally re-extract the 21 CAFRs whose old range was truncated (~$4); thin ones: frs, ers_hi, epcp_tx.
-2. Make `upsert_plan` update registry fields, so registry fixes reach the DB.
+1. Make `upsert_plan` update registry fields, so registry fixes reach the DB.
+2. ct_trs: its FY2026 "CAFR" is an actuarial valuation; retag or delete.
 
 ## 2026-10-11 — Every cron but weekly-watch stopped on 13 Sep; CAFR refresh saved nothing
 
