@@ -1737,11 +1737,23 @@ def get_session() -> Session:
 
 
 def upsert_plan(session: Session, plan_data: dict) -> Plan:
+    """Insert the plan, or bring an existing row in line with the registry.
+
+    ``data/known_plans.json`` is the source of truth for these columns. Only
+    keys present in ``plan_data`` are written, so a partial dict never blanks
+    a column. Before 2026-10-14 this only inserted, and registry fixes
+    (fiscal_year_end, moved websites) never reached the database.
+    """
+    fields = {k: v for k, v in plan_data.items()
+              if k in Plan.__table__.columns.keys()}
     plan = session.get(Plan, plan_data["id"])
     if plan is None:
-        plan = Plan(**{k: v for k, v in plan_data.items()
-                       if k in Plan.__table__.columns.keys()})
+        plan = Plan(**fields)
         session.add(plan)
+    else:
+        for k, v in fields.items():
+            if k != "id" and getattr(plan, k) != v:
+                setattr(plan, k, v)
     return plan
 
 

@@ -18,8 +18,13 @@
 - The valuation's FY2024 total return (11.49%) still feeds the performance view; it is a real figure.
 
 **Next**
-1. Make `upsert_plan` update registry fields, so registry fixes reach the DB.
-2. Tighten the lacers and pers_phoenix Investment Section ranges.
+1. Tighten the lacers and pers_phoenix Investment Section ranges.
+
+**Later the same day: registry edits now reach the database.** `database.upsert_plan` updated nothing on an
+existing row, so Neon had drifted: 53 materials URLs, 12 websites and SamCERA's abbreviation were stale. It
+now writes every registry key present in the entry (absent keys left alone); new `tests/test_upsert_plan.py`.
+Neon synced once by hand (0 fields differ) and 13 twins rewritten. The daily pipeline keeps cloud plans in
+step from now on; WAF-blocked plans only sync when the Mac mini job runs, which is still not loaded.
 
 ## 2026-10-12 — Catch-up after the month-long cron outage
 
