@@ -1,5 +1,30 @@
 # Session notes
 
+## 2026-10-15 — CAFR outline locator: flat, stitched and scrambled bookmarks
+
+**Done**
+- `extract_cafr_investments._locate_via_toc` (also used by the actuarial extractor): a bookmark naming a
+  section ("Investment Section") now wins over looser matches; the earliest one not on a contents page is
+  taken, and the range ends where the next other section starts. Page-less bookmarks (-1, PDFs stitched from
+  separate files) take their children's first page (`_toc_page`). 3 new tests; the ipopif_il fixture now
+  has a real contents page and a next section, and expects 56-73 as the real PDF gives.
+- lacers 29-103 -> 84-99 (allocation 13 -> 7: the 6 dropped rows were actuarial-note duplicates; returns
+  unchanged). pers_phoenix 18-82 -> 61-84 (allocation 15 -> 21, performance 26 -> 97). Backup in scratchpad.
+  +42 asset-class mappings; both twins rebuilt. Actuarial extracts were already on the right pages.
+
+**Why**
+- pers_phoenix's flat outline put "Consultant's Report" at the section's own level and page, so the range
+  was empty and text search took an org chart. lacers's section bookmarks had no page at all.
+
+**Broken / unsure**
+- Old vs new over all 137 latest CAFRs: 12 change, every one checked against its dividers and right.
+  Not yet re-extracted: ipopif_il, nmerb, vrs (0 rows), nv_pers (0/2), kpers_ks (no returns) all sat on
+  1-3 page ranges; bcers_md, hpops, or_pers, pera_colorado have rows but wide ranges. Actuarial extracts
+  for the changed plans are already on the right pages.
+
+**Next**
+1. Re-extract those 9 investment sections (about $3).
+
 ## 2026-10-14 — ct_trs's "FY2026 CAFR" was its actuarial valuation
 
 **Done**

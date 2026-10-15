@@ -407,6 +407,10 @@
     "canonical": "unmapped",
     "confidence": "high"
   },
+  "Artisan Global Opportunities": {
+    "canonical": "hedge_funds_absolute_return",
+    "confidence": "medium"
+  },
   "Asia-Pacific Equity": {
     "canonical": "public_equity_non_us",
     "confidence": "high"
@@ -439,9 +443,17 @@
     "canonical": "public_equity_non_us",
     "confidence": "medium"
   },
+  "BH-DG Systematic Trading (Hedge Fund of Funds)": {
+    "canonical": "hedge_funds_absolute_return",
+    "confidence": "high"
+  },
   "BND CD Match Program": {
     "canonical": "unmapped",
     "confidence": "low"
+  },
+  "Baillie Gifford": {
+    "canonical": "unmapped",
+    "confidence": "medium"
   },
   "Bank Collective Investment Funds": {
     "canonical": "unmapped",
@@ -463,6 +475,10 @@
     "canonical": "private_credit",
     "confidence": "medium"
   },
+  "Barclays High Yield": {
+    "canonical": "fixed_income_credit",
+    "confidence": "high"
+  },
   "Biotech / Alternatives": {
     "canonical": "private_equity",
     "confidence": "medium"
@@ -483,8 +499,20 @@
     "canonical": "real_estate",
     "confidence": "high"
   },
+  "Bloomberg Aggregate": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
   "Bloomberg Commodities Index": {
     "canonical": "real_assets_infrastructure",
+    "confidence": "high"
+  },
+  "Bloomberg Long US Government": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "Bloomberg TIPS": {
+    "canonical": "fixed_income_core",
     "confidence": "high"
   },
   "Bloomberg U.S. Aggregate Index": {
@@ -1587,6 +1615,10 @@
     "canonical": "public_equity_non_us",
     "confidence": "high"
   },
+  "Developed Non-US Equity": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
   "Developed ex-U.S. Equity": {
     "canonical": "public_equity_non_us",
     "confidence": "high"
@@ -1720,6 +1752,10 @@
     "confidence": "high"
   },
   "Domestic Equities - Small/mid Cap": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
+  "Domestic Equities Funds": {
     "canonical": "public_equity_us",
     "confidence": "high"
   },
@@ -1903,6 +1939,10 @@
     "canonical": "fixed_income_core",
     "confidence": "medium"
   },
+  "Driehaus International": {
+    "canonical": "public_equity_non_us",
+    "confidence": "medium"
+  },
   "EAFE Markets": {
     "canonical": "public_equity_non_us",
     "confidence": "high"
@@ -1975,6 +2015,10 @@
     "canonical": "opportunistic_other",
     "confidence": "medium"
   },
+  "Eagle Asset Management": {
+    "canonical": "unmapped",
+    "confidence": "low"
+  },
   "Eclipse Fund V": {
     "canonical": "private_equity",
     "confidence": "medium"
@@ -2028,6 +2072,14 @@
     "confidence": "high"
   },
   "Emerging Market Equities": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
+  "Emerging Market Equities - GQG": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
+  "Emerging Market Equities - LSV": {
     "canonical": "public_equity_non_us",
     "confidence": "high"
   },
@@ -2371,9 +2423,17 @@
     "canonical": "real_assets_infrastructure",
     "confidence": "high"
   },
+  "Fir Tree International": {
+    "canonical": "public_equity_non_us",
+    "confidence": "medium"
+  },
   "Fire A Plan": {
     "canonical": "unmapped",
     "confidence": "high"
+  },
+  "First Eagle": {
+    "canonical": "public_equity_global",
+    "confidence": "medium"
   },
   "First Responders / Private Income Strategies": {
     "canonical": "private_credit",
@@ -2778,6 +2838,10 @@
   "Futures Overlay": {
     "canonical": "unmapped",
     "confidence": "high"
+  },
+  "GQG": {
+    "canonical": "unmapped",
+    "confidence": "low"
   },
   "General": {
     "canonical": "unmapped",
@@ -3615,6 +3679,14 @@
     "canonical": "fixed_income_credit",
     "confidence": "high"
   },
+  "High Yield Bonds - Brigade Capital Management": {
+    "canonical": "fixed_income_credit",
+    "confidence": "high"
+  },
+  "High Yield Bonds - Polen Capital Management": {
+    "canonical": "fixed_income_credit",
+    "confidence": "high"
+  },
   "High Yield Bonds / Non-US Developed Equity / Private Equity": {
     "canonical": "opportunistic_other",
     "confidence": "medium"
@@ -3872,6 +3944,10 @@
     "confidence": "high"
   },
   "Infrastructure (actual)": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "high"
+  },
+  "Infrastructure - Neuberger Berman Sonoran (Tranche D)": {
     "canonical": "real_assets_infrastructure",
     "confidence": "high"
   },
@@ -4475,6 +4551,10 @@
     "canonical": "total",
     "confidence": "high"
   },
+  "LSV": {
+    "canonical": "unmapped",
+    "confidence": "low"
+  },
   "LSV Asset Management": {
     "canonical": "unmapped",
     "confidence": "high"
@@ -4783,7 +4863,23 @@
     "canonical": "real_assets_infrastructure",
     "confidence": "high"
   },
+  "MSCI China": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
+  "MSCI EAFE": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
+  "MSCI EAFE (Local)": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
   "MSCI EAFE Index": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
+  "MSCI EM": {
     "canonical": "public_equity_non_us",
     "confidence": "high"
   },
@@ -5188,6 +5284,10 @@
     "confidence": "high"
   },
   "Natural Resources & Infrastructure": {
+    "canonical": "real_assets_infrastructure",
+    "confidence": "high"
+  },
+  "Natural Resources - Neuberger Berman Sonoran (Tranche C)": {
     "canonical": "real_assets_infrastructure",
     "confidence": "high"
   },
@@ -6131,6 +6231,10 @@
     "canonical": "private_equity",
     "confidence": "high"
   },
+  "Private Equity - Buyouts (Europe)": {
+    "canonical": "private_equity",
+    "confidence": "high"
+  },
   "Private Equity - Buyouts (PEARLS)": {
     "canonical": "private_equity",
     "confidence": "high"
@@ -6183,6 +6287,14 @@
     "canonical": "real_assets_infrastructure",
     "confidence": "medium"
   },
+  "Private Equity - Neuberger Berman Sonoran (Tranche A)": {
+    "canonical": "private_equity",
+    "confidence": "high"
+  },
+  "Private Equity - Neuberger Berman Sonoran (Tranche B)": {
+    "canonical": "private_equity",
+    "confidence": "high"
+  },
   "Private Equity - Opportunistic": {
     "canonical": "private_equity",
     "confidence": "high"
@@ -6195,7 +6307,15 @@
     "canonical": "private_equity",
     "confidence": "high"
   },
+  "Private Equity - Technology Buyouts": {
+    "canonical": "private_equity",
+    "confidence": "high"
+  },
   "Private Equity - Venture Capital": {
+    "canonical": "private_equity",
+    "confidence": "high"
+  },
+  "Private Equity - Venture Capital Secondaries": {
     "canonical": "private_equity",
     "confidence": "high"
   },
@@ -7599,6 +7719,10 @@
     "canonical": "real_assets_infrastructure",
     "confidence": "medium"
   },
+  "Real Return Fund - PIMCO All Asset": {
+    "canonical": "opportunistic_other",
+    "confidence": "medium"
+  },
   "Real Return and Opportunistic": {
     "canonical": "opportunistic_other",
     "confidence": "medium"
@@ -7687,6 +7811,18 @@
     "canonical": "unmapped",
     "confidence": "low"
   },
+  "Risk Mitigating Strategies - 36 South Kohinoor": {
+    "canonical": "hedge_funds_absolute_return",
+    "confidence": "medium"
+  },
+  "Risk Mitigating Strategies - BH-DG Systematic Trading": {
+    "canonical": "hedge_funds_absolute_return",
+    "confidence": "high"
+  },
+  "Risk Mitigating Strategies - One River Dynamic Convexity": {
+    "canonical": "hedge_funds_absolute_return",
+    "confidence": "medium"
+  },
   "Risk Mitigation": {
     "canonical": "unmapped",
     "confidence": "high"
@@ -7727,6 +7863,14 @@
     "canonical": "public_equity_us",
     "confidence": "high"
   },
+  "Russell 3000": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
+  "S&P 500": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
   "S&P 500 Index": {
     "canonical": "public_equity_us",
     "confidence": "high"
@@ -7760,6 +7904,14 @@
     "confidence": "high"
   },
   "SSGA: Russell 1000 Index Fund": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
+  "SSgA FTSE RAFI Dev ex-US Low Vol": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
+  "SSgA FTSE RAFI US Low Vol": {
     "canonical": "public_equity_us",
     "confidence": "high"
   },
@@ -7800,6 +7952,14 @@
     "confidence": "high"
   },
   "Short Duration Bonds": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "Short Duration Bonds - Longfellow Short Duration": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "Short Duration Bonds - SSgA US 1-3 Year": {
     "canonical": "fixed_income_core",
     "confidence": "high"
   },
@@ -8224,6 +8384,10 @@
     "confidence": "high"
   },
   "TIPS": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "TIPS - SSgA US TIPS": {
     "canonical": "fixed_income_core",
     "confidence": "high"
   },
@@ -9424,6 +9588,10 @@
     "confidence": "high"
   },
   "US Government Debt": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "US Government Guaranteed": {
     "canonical": "fixed_income_core",
     "confidence": "high"
   },

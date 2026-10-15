@@ -124,31 +124,79 @@ def _locate_via_toc(doc: fitz.Document, start_patterns=None,
 
     plan_name_norm = _normalize_for_match(plan_name) if plan_name else None
 
+    candidates = [i for i, (level, title, page) in enumerate(toc)
+                  if not (plan_name_norm and plan_name_norm in _normalize_for_match(title))
+                  and any(pat.search(title) for pat in patterns)]
+
+    # An entry that names the section ("Investment Section") is the section
+    # itself, which beats any looser match such as "Schedule of Investment
+    # Returns". Outline levels are no guide among these: flat outlines put a
+    # section's sub-entries at its own level, and outlines stitched from
+    # separate files use arbitrary ones. So take the earliest page that is not
+    # the contents page, and end where the next other section starts.
+    named = []
+    for i in candidates:
+        page = _toc_page(toc, i)
+        if (page is not None and _SECTION_NAME.search(toc[i][1])
+                and not _is_contents_page(doc.load_page(page - 1).get_text())):
+            named.append((page, i))
+    if named:
+        start_page, inv_idx = min(named)
+        this = _SECTION_NAME.search(toc[inv_idx][1]).group(1).lower()
+        later = [page for j in range(len(toc))
+                 if (m := _SECTION_NAME.search(toc[j][1]))
+                 and m.group(1).lower() != this
+                 and (page := _toc_page(toc, j)) is not None
+                 and page > start_page]
+        end_page = min(later) - 1 if later else doc.page_count
+        return (start_page, end_page)
+
     inv_idx = None
     inv_level = None
-    for i, (level, title, page) in enumerate(toc):
-        if plan_name_norm and plan_name_norm in _normalize_for_match(title):
-            continue
-        if any(pat.search(title) for pat in patterns):
-            # Skip subheaders like "investment policy" if we already found a top-level "investments"
-            if inv_idx is None or level < inv_level:
-                inv_idx = i
-                inv_level = level
-                # Don't break — prefer the highest-level entry containing "investment"
+    for i in candidates:
+        level = toc[i][0]
+        # Skip subheaders like "investment policy" if we already found a top-level "investments"
+        if inv_idx is None or level < inv_level:
+            inv_idx = i
+            inv_level = level
+            # Don't break — prefer the highest-level entry containing "investment"
 
     if inv_idx is None:
         return None
 
-    start_page = toc[inv_idx][2]
+    start_page = _toc_page(toc, inv_idx)
+    if start_page is None:
+        return None
     # End = next TOC entry at the same or higher level (numerically lower number)
     end_page = doc.page_count
     for j in range(inv_idx + 1, len(toc)):
         if toc[j][0] <= inv_level:
-            end_page = toc[j][2] - 1
-            break
+            page = _toc_page(toc, j)
+            if page is not None:
+                end_page = page - 1
+                break
     if end_page < start_page:
         return None
     return (start_page, end_page)
+
+
+def _toc_page(toc: list, i: int) -> int | None:
+    """The page an outline entry points at.
+
+    A PDF stitched from separate files can carry a page-less bookmark per
+    file ("3. Investment Section.pdf", page -1); that entry starts on the
+    first page any of its children point at.
+    """
+    level, _, page = toc[i]
+    if page > 0:
+        return page
+    pages = []
+    for child_level, _, child_page in toc[i + 1:]:
+        if child_level <= level:
+            break
+        if child_page > 0:
+            pages.append(child_page)
+    return min(pages) if pages else None
 
 
 _SECTION_NAME = re.compile(

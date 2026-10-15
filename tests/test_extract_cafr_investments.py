@@ -57,9 +57,12 @@ def test_toc_excludes_own_name_even_as_a_substring(tmp_path):
     """Reproduces the ipopif_il shape: false match embeds the plan's name
     inside a longer title ("... Members of the Board of Trustees"), and a
     corrupted level-2 bookmark duplicate of the real title sits even
-    earlier in the TOC. The real, level-1, later entry must still win."""
+    earlier in the TOC, on the contents page. The real, later entry must
+    still win, and run to the next section as on the real PDF (56-73)."""
     path = tmp_path / "ipopif.pdf"
-    _make_pdf(path, ["Cover\n"] * 65, toc=[
+    pages = ["Cover\n"] * 80
+    pages[1] = CONTENTS_1 + CONTENTS_2
+    _make_pdf(path, pages, toc=[
         [1, "_Hlk118722755", 31],       # stray Word bookmark, doesn't match
         [1, "Table of Contents", 2],
         [2, "Investment Section", 2],   # corrupted duplicate bookmark, nested
@@ -67,10 +70,11 @@ def test_toc_excludes_own_name_even_as_a_substring(tmp_path):
             "Members of the Board of Trustees", 4],             # false match
         [1, "Investment Section", 56],                            # real
         [1, "Investment Policy", 63],
+        [1, "Statistical Section", 74],
     ])
     rng = eci.locate_investment_section(
         str(path), plan_name="Illinois Police Officers' Pension Investment Fund")
-    assert rng == (56, 62)
+    assert rng == (56, 73)
 
 
 def test_without_plan_name_the_collision_reproduces(tmp_path):
@@ -257,3 +261,62 @@ def test_text_search_falls_back_to_a_bare_investments_heading(tmp_path):
     path = _make_pdf(tmp_path / "c.pdf", [
         "Cover\n", FILLER, "Investments\n" + FILLER, FILLER, "Actuarial Section\n"])
     assert eci.locate_investment_section(path) == (3, 4)
+
+
+class _Outline:
+    """A real PDF behind a hand-written outline. PyMuPDF will not write the
+    page-less (-1) bookmarks that PDFs stitched from separate files carry."""
+
+    def __init__(self, path, toc):
+        self._doc, self._toc = fitz.open(path), toc
+        self.page_count = self._doc.page_count
+
+    def get_toc(self):
+        return self._toc
+
+    def load_page(self, i):
+        return self._doc.load_page(i)
+
+
+def test_flat_outline_ends_the_section_at_the_next_section(tmp_path):
+    """pers_phoenix: sub-entries share the section's level, the first on its page."""
+    path = _make_pdf(tmp_path / "flat.pdf", [FILLER] * 12, toc=[
+        [1, "FINANCIAL SECTION", 2],
+        [1, "Schedule of Investment Returns", 4],
+        [1, "INVESTMENT SECTION", 6],
+        [1, "Consultant's Report on Investment Activity", 6],
+        [1, "Schedule of Investment Results", 8],
+        [1, "ACTUARIAL SECTION", 10],
+    ])
+    assert eci.locate_investment_section(path) == (6, 9)
+
+
+def test_page_less_bookmarks_take_their_childrens_first_page(tmp_path):
+    """lacers: '3. Investment Section.pdf' points nowhere; its children do."""
+    path = _make_pdf(tmp_path / "stitched.pdf", [FILLER] * 12)
+    doc = _Outline(path, [
+        [1, "2.  Financial Section.pdf", -1],
+        [2, "Investment Income", 3],
+        [1, "3. Investment Section.pdf", -1],
+        [2, "Blank Page", 6],
+        [2, "Market Overview", 7],
+        [1, "4.  Actuarial Section.pdf", -1],
+        [2, "Actuarial certification", 11],
+        [2, "Blank Page", 10],
+    ])
+    assert eci._locate_via_toc(doc) == (6, 9)
+
+
+def test_scrambled_levels_take_the_earliest_section_page_past_the_contents(tmp_path):
+    """hpops: file-name bookmarks at arbitrary levels; ipopif_il: the contents
+    page has its own 'Investment Section' bookmark."""
+    pages = [FILLER] * 12
+    pages[1] = CONTENTS_1 + CONTENTS_2
+    path = _make_pdf(tmp_path / "scrambled.pdf", pages, toc=[
+        [1, "Investment Section", 2],
+        [1, "Investment Section Page 2025.pdf", 5],
+        [1, "Investment Section 2025.pdf", 7],
+        [1, "Actuarial Section Page 2025.pdf", 10],
+        [2, "Investment Section 2025.pdf", 8],
+    ])
+    assert eci.locate_investment_section(path) == (5, 9)
