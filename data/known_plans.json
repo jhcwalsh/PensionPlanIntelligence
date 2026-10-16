@@ -2172,7 +2172,11 @@
       "minutes"
     ],
     "fiscal_year_end": "06-30",
-    "cafr_url_template": "https://www.ipopif.org/Resources/4a4cf8de-755f-40a3-8c6b-751ee4db8c69/Annual%20Report%202024-{year}/"
+    "notes": "Annual reports are listed at https://www.ipopif.org/financial-reports/annual-reports/. Each year's report has its own /Resources/<id>/ and the path after the id is ignored, so no year template works: add each FY's link to cafr_url_by_year.",
+    "cafr_url_by_year": {
+      "2024": "https://www.ipopif.org/Resources/858645f6-938e-4f06-9be4-a94837fe0d61/Annual%20Report%202023-2024/",
+      "2025": "https://www.ipopif.org/Resources/4a4cf8de-755f-40a3-8c6b-751ee4db8c69/Annual%20Report%202024-2025/"
+    }
   },
   {
     "id": "sjpf_ca",

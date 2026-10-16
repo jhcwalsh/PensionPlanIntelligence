@@ -35,9 +35,15 @@
   branch writes; all 15 values also sit on 4925). Its 3 refresh-log rows kept, unlinked. Backup in scratchpad.
   The PDF file and R2 object are 4925's too (same hash) and were left alone. Performance view rebuilt.
 
+- Later: ipopif_il's `cafr_url_template` replaced by `cafr_url_by_year` (2024, 2025). Each report has its
+  own /Resources/<id>/ and the path after it is ignored, so the template fetched the current report for any
+  year. Neon document 4925's URL corrected from the made-up ".../2024-2026/" to the real 2024-2025 link.
+- Later: full CAFR refresh run locally (monthly workflow steps): 0 new, 133 already have, 10 no URL, 2 failed
+  (ers_hi, trs_texas, as before); FY2026 links all 404 as expected before December. Investment step found
+  only the 15 long-standing skips; actuarial re-read 3 (lacers, bcers_md, pers_ms). $1.21.
+
 **Next**
-1. ipopif_il's `cafr_url_template` ("Annual Report 2024-{year}/") serves the current report whatever the
-   year, so the FY2026 report will be missed as "URL already in DB". Give it a `cafr_url_by_year` entry.
+1. Add ipopif_il's FY2026 link to `cafr_url_by_year` when the report appears (with the other curated plans).
 
 ## 2026-10-14 — ct_trs's "FY2026 CAFR" was its actuarial valuation
 
