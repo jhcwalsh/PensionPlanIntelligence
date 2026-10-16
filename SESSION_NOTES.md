@@ -30,8 +30,14 @@
   (0/0 -> 10/111). +21 mappings. ipopif_il has no FY2024: its second "FY2025" document (id 3109) is the
   same report at another URL, with an empty extract. The app uses the good one (4925).
 
+- Later: ipopif_il duplicate document 3109 deleted (James's OK) with its extract, summary, section reads,
+  derived performance rows and 15 `performance_observation` rows (a table only the unmerged pdf-retention
+  branch writes; all 15 values also sit on 4925). Its 3 refresh-log rows kept, unlinked. Backup in scratchpad.
+  The PDF file and R2 object are 4925's too (same hash) and were left alone. Performance view rebuilt.
+
 **Next**
-1. Delete ipopif_il's duplicate document 3109 and its empty extract (needs James's OK).
+1. ipopif_il's `cafr_url_template` ("Annual Report 2024-{year}/") serves the current report whatever the
+   year, so the FY2026 report will be missed as "URL already in DB". Give it a `cafr_url_by_year` entry.
 
 ## 2026-10-14 — ct_trs's "FY2026 CAFR" was its actuarial valuation
 
