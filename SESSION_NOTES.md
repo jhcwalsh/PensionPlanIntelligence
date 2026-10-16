@@ -22,8 +22,12 @@
   1-3 page ranges; bcers_md, hpops, or_pers, pera_colorado have rows but wide ranges. Actuarial extracts
   for the changed plans are already on the right pages.
 
+- Later: those 9 re-extracted on their latest CAFR only ($0.71 with the mappings). ipopif_il 0 -> 22/8,
+  nmerb 0 -> 19/94, vrs 0 -> 10/31, nv_pers 0/2 -> 6/33, kpers_ks 8/0 -> 8/43 (allocation/performance);
+  the four wide ones about level. +49 mappings, 9 twins rebuilt. Backup in scratchpad.
+
 **Next**
-1. Re-extract those 9 investment sections (about $3).
+1. Their FY2024 extracts (ipopif_il, nv_pers, or_pers, vrs) still used the old ranges; redo if wanted.
 
 ## 2026-10-14 — ct_trs's "FY2026 CAFR" was its actuarial valuation
 
