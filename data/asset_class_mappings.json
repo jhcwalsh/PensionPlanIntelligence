@@ -535,6 +535,10 @@
     "canonical": "private_equity",
     "confidence": "high"
   },
+  "Bond Fund": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
   "Bonds": {
     "canonical": "fixed_income_core",
     "confidence": "high"
@@ -1306,6 +1310,10 @@
   "Cross-Asset Class": {
     "canonical": "unmapped",
     "confidence": "medium"
+  },
+  "Currency": {
+    "canonical": "unmapped",
+    "confidence": "high"
   },
   "Currency Hedge / International Equity": {
     "canonical": "public_equity_non_us",
@@ -3167,6 +3175,10 @@
     "canonical": "real_estate",
     "confidence": "high"
   },
+  "Global Real Estate Fund": {
+    "canonical": "real_estate",
+    "confidence": "high"
+  },
   "Global Smart Beta": {
     "canonical": "public_equity_global",
     "confidence": "high"
@@ -3779,6 +3791,10 @@
     "canonical": "fixed_income_credit",
     "confidence": "high"
   },
+  "High-Yield Bond Fund": {
+    "canonical": "fixed_income_credit",
+    "confidence": "high"
+  },
   "High-Yield Bonds": {
     "canonical": "fixed_income_credit",
     "confidence": "high"
@@ -3976,6 +3992,10 @@
     "confidence": "high"
   },
   "Inflation-Protected Bond": {
+    "canonical": "fixed_income_core",
+    "confidence": "high"
+  },
+  "Inflation-Protected Bond Fund": {
     "canonical": "fixed_income_core",
     "confidence": "high"
   },
@@ -4408,6 +4428,10 @@
     "confidence": "high"
   },
   "International Small Capitalization Equity": {
+    "canonical": "public_equity_non_us",
+    "confidence": "high"
+  },
+  "International Stock Fund": {
     "canonical": "public_equity_non_us",
     "confidence": "high"
   },
@@ -7931,6 +7955,10 @@
     "canonical": "real_assets_infrastructure",
     "confidence": "low"
   },
+  "Retirement Portfolio": {
+    "canonical": "total",
+    "confidence": "medium"
+  },
   "Retirement Savings": {
     "canonical": "unmapped",
     "confidence": "high"
@@ -8331,6 +8359,10 @@
     "canonical": "public_equity_us",
     "confidence": "high"
   },
+  "Small/Mid-Cap Stock Fund": {
+    "canonical": "public_equity_us",
+    "confidence": "high"
+  },
   "Small/Mid-Cap US Equity": {
     "canonical": "public_equity_us",
     "confidence": "high"
@@ -8430,6 +8462,10 @@
   "Statewide Volunteer Firefighter Plan": {
     "canonical": "unmapped",
     "confidence": "high"
+  },
+  "Stock Fund": {
+    "canonical": "public_equity_us",
+    "confidence": "medium"
   },
   "Stocks - Foreign Common & Preferred": {
     "canonical": "public_equity_non_us",
@@ -8703,6 +8739,42 @@
     "canonical": "total",
     "confidence": "medium"
   },
+  "Target Date 2025 Portfolio": {
+    "canonical": "total",
+    "confidence": "high"
+  },
+  "Target Date 2030 Portfolio": {
+    "canonical": "total",
+    "confidence": "high"
+  },
+  "Target Date 2035 Portfolio": {
+    "canonical": "total",
+    "confidence": "high"
+  },
+  "Target Date 2040 Portfolio": {
+    "canonical": "total",
+    "confidence": "high"
+  },
+  "Target Date 2045 Portfolio": {
+    "canonical": "total",
+    "confidence": "high"
+  },
+  "Target Date 2050 Portfolio": {
+    "canonical": "total",
+    "confidence": "high"
+  },
+  "Target Date 2055 Portfolio": {
+    "canonical": "total",
+    "confidence": "high"
+  },
+  "Target Date 2060 Portfolio": {
+    "canonical": "total",
+    "confidence": "high"
+  },
+  "Target Date 2065 Portfolio": {
+    "canonical": "total",
+    "confidence": "high"
+  },
   "Target Date Fund": {
     "canonical": "unmapped",
     "confidence": "high"
@@ -8810,6 +8882,10 @@
   "Total Cash and Cash Equivalents": {
     "canonical": "cash_short_term",
     "confidence": "high"
+  },
+  "Total Credit Strategies": {
+    "canonical": "fixed_income_credit",
+    "confidence": "medium"
   },
   "Total Debt": {
     "canonical": "total",
@@ -9138,6 +9214,10 @@
   "Total Private Equity (Legacy)": {
     "canonical": "total",
     "confidence": "high"
+  },
+  "Total Private Investment Partnerships": {
+    "canonical": "private_equity",
+    "confidence": "medium"
   },
   "Total Private Investments": {
     "canonical": "private_equity",
@@ -9905,6 +9985,10 @@
   },
   "Uranium / Commodities": {
     "canonical": "real_assets_infrastructure",
+    "confidence": "high"
+  },
+  "VRS Investment Portfolio (VRSIP)": {
+    "canonical": "total",
     "confidence": "high"
   },
   "Value (International)": {

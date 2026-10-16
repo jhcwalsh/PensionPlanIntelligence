@@ -26,8 +26,12 @@
   nmerb 0 -> 19/94, vrs 0 -> 10/31, nv_pers 0/2 -> 6/33, kpers_ks 8/0 -> 8/43 (allocation/performance);
   the four wide ones about level. +49 mappings, 9 twins rebuilt. Backup in scratchpad.
 
+- Later: FY2024 redone for nv_pers (0/1 -> 5/29), or_pers (pages 5-120 -> 107-120, 8/11 -> 8/30) and vrs
+  (0/0 -> 10/111). +21 mappings. ipopif_il has no FY2024: its second "FY2025" document (id 3109) is the
+  same report at another URL, with an empty extract. The app uses the good one (4925).
+
 **Next**
-1. Their FY2024 extracts (ipopif_il, nv_pers, or_pers, vrs) still used the old ranges; redo if wanted.
+1. Delete ipopif_il's duplicate document 3109 and its empty extract (needs James's OK).
 
 ## 2026-10-14 — ct_trs's "FY2026 CAFR" was its actuarial valuation
 
