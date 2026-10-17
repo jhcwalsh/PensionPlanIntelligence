@@ -34,6 +34,12 @@
   - Each batch is canonicalised on its own, so near-duplicates such as "State Street" vs "State Street
     Global Advisors" survive, and a few combined strings ("Baillie Gifford; State Street...") are kept whole.
   - The nightly roster build and the app read the committed file, so nothing changes in production until it is pushed.
+- Later: cross-batch cleanup. A single Sonnet call over all 1,239 canonicals proposed 122 merges.
+  - Vetoed 6 wrong ones (Meadow, Lightstone, NB Eagle, Clearwater Advisors, and two combined strings).
+  - Pointed Stonepeak and Stellex at the firm rather than a fund, and flipped Callan Associates to "Callan".
+    `test_build_manager_roster` reads the live file and expects "Callan".
+  - Canonicals went from 1,239 to 1,123 (166 raw entries rewritten). The one-off script, merge list and
+    pre-merge copy are in the session scratchpad.
 
 **Next**
 1. Spot-check 3–4 of the docs that lost perf rows; check that Sunday's weekly published.
