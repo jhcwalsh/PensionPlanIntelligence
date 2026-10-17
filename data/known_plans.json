@@ -2058,8 +2058,10 @@
       "board_pack",
       "minutes"
     ],
-    "notes": "PDFs loaded via JS dropdown <select> menus on single page; Playwright needed to render them",
+    "notes": "PDFs sit in <option value> entries of JS dropdown <select> menus, never in anchors, hence scan_embedded_urls; Playwright needed to render them",
     "playwright_wait_selector": ".psprs-accordion, .accordion-content, select",
+    "scan_embedded_urls": true,
+    "exclude_url_pattern": "Meeting-Notice",
     "fiscal_year_end": "06-30"
   },
   {

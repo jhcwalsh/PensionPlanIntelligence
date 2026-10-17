@@ -30,8 +30,18 @@
   Discovery-only check: 29 links, 11 from 2026 (Jan–Oct agendas and minutes). The daily pipeline fetches
   them next run. Investment Committee pages are not followed (no 2026 IC page exists yet).
 
+- Later: psprs_az fix. Its PDFs sit in `<select>` options, so it now uses `scan_embedded_urls`, plus a new
+  per-plan `exclude_url_pattern` (drops the one-page meeting notices).
+  - `fetcher.run_fetcher` now applies `MIN_DATE` before the cap, and the cap counts documents added
+    this run, not links looked at. Sliced first, a plan with more than 50 current links filled every slot
+    with ones already stored and never reached the rest.
+  - 3 new tests in `test_fetcher_retention.py`.
+  - Discovery check: 149 current PSPRS links, 50 new on the first run, no notices.
+  - Risk: any other plan that was stuck behind the old cap will also start fetching more. That is
+    summariser spend on the next daily run.
+
 **Next**
-1. psprs_az: `scan_embedded_urls` plus `MIN_DATE` before the 50-link cap in `run_fetcher`.
+1. Push the PSPRS commit (held back for the spend question).
 2. Check Sunday's weekly published (first since 30 Aug), and that SFERS docs arrived.
 3. Legistar (sbcera) and PrimeGov (vcera) discovery.
 

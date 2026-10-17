@@ -521,10 +521,14 @@ def discover_document_links(plan: dict) -> list[dict]:
             # extra_pages are already investment-scoped, skip filter
             found.extend(extract_doc_links(sub_soup, sub_url, investment_only=False))
 
-    # Deduplicate
+    # Deduplicate, dropping anything the plan's exclude_url_pattern names
+    # (PSPRS: one-page meeting notices published beside every agenda)
+    exclude = plan.get("exclude_url_pattern")
     seen = set()
     unique = []
     for d in found:
+        if exclude and re.search(exclude, d["url"], re.IGNORECASE):
+            continue
         if d["url"] not in seen:
             seen.add(d["url"])
             unique.append(d)
@@ -743,19 +747,24 @@ def run_fetcher(plan_ids: list[str] = None, max_docs_per_plan: int = 50):
         for plan_data in plans:
             console.rule(f"[bold]{plan_data['abbreviation']}[/bold]")
 
-            doc_links = discover_document_links(plan_data)
+            # Skip documents dated before MIN_DATE, and do it before the cap: a
+            # page listing years of history ahead of this year (PSPRS: 456
+            # links) would otherwise spend every slot on documents skipped
+            # here. date=None means the link carried no parseable date -- keep
+            # those, so a site that does not date its links is never silently
+            # truncated here.
+            doc_links = [d for d in discover_document_links(plan_data)
+                         if not (d.get("meeting_date") and d["meeting_date"] < MIN_DATE)]
             plan_dir = DOWNLOADS_DIR / plan_data["id"]
             new_count = 0
 
-            for doc_info in doc_links[:max_docs_per_plan]:
+            # The cap counts documents added this run, not links looked at:
+            # sliced first, a plan with more current links than the cap would
+            # fill every slot with ones already stored and never reach the rest.
+            for doc_info in doc_links:
+                if new_count >= max_docs_per_plan:
+                    break
                 url = doc_info["url"]
-
-                # Skip documents dated before MIN_DATE. date=None means the
-                # link carried no parseable date -- keep those, so a site that
-                # does not date its links is never silently truncated here.
-                doc_date = doc_info.get("meeting_date")
-                if doc_date and doc_date < MIN_DATE:
-                    continue
 
                 if document_exists(session, url):
                     continue

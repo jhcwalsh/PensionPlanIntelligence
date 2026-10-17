@@ -143,3 +143,64 @@ def test_fetcher_survives_real_store_document_failure(tmp_db, tmp_path, monkeypa
         assert doc.content_sha256 is None            # retention genuinely failed
     finally:
         session.close()
+
+
+def test_date_filter_runs_before_the_per_plan_cap(tmp_db, tmp_path, monkeypatch):
+    """A page listing old documents first must not spend the cap on them.
+    PSPRS lists 456 links, years of history ahead of this year's packets."""
+    from datetime import datetime
+
+    pdf = tmp_path / "x.pdf"
+    pdf.write_bytes(b"%PDF-1.4")
+    downloaded = []
+    monkeypatch.setattr(pdf_store, "store_document", lambda *a, **k: None)
+    monkeypatch.setattr(fetcher, "download_document",
+                        lambda url, d, f: (downloaded.append(url), (pdf, 8))[1])
+    old = [{"url": f"https://x/old{i}.pdf", "filename": f"old{i}.pdf",
+            "doc_type": "agenda", "meeting_date": datetime(2024, 1, 1)} for i in range(5)]
+    new = [{"url": "https://x/new.pdf", "filename": "new.pdf",
+            "doc_type": "agenda", "meeting_date": datetime(2026, 3, 1)}]
+    monkeypatch.setattr(fetcher, "discover_document_links", lambda p: old + new)
+    monkeypatch.setattr(fetcher, "load_plans", lambda: [
+        {"id": "p1", "abbreviation": "P1", "name": "Plan One"},
+    ])
+
+    fetcher.run_fetcher(max_docs_per_plan=3)
+
+    assert downloaded == ["https://x/new.pdf"]
+
+
+def test_exclude_url_pattern_drops_matching_links(monkeypatch):
+    from bs4 import BeautifulSoup
+
+    html = ('<a href="/2026-02-19-BOT-Meeting-Notice.pdf">notice</a>'
+            '<a href="/2026-02-19-BOT-Meeting-Agenda.pdf">agenda</a>')
+    monkeypatch.setattr(fetcher, "fetch_page",
+                        lambda plan, url=None: BeautifulSoup(html, "html.parser"))
+    plan = {"id": "p1", "abbreviation": "P1", "materials_url": "https://x/board/",
+            "investment_only": False, "exclude_url_pattern": "Meeting-Notice"}
+
+    urls = [d["url"] for d in fetcher.discover_document_links(plan)]
+
+    assert urls == ["https://x/2026-02-19-BOT-Meeting-Agenda.pdf"]
+
+
+def test_cap_counts_new_documents_not_links_already_stored(tmp_db, tmp_path, monkeypatch):
+    """Once the first `cap` links are stored, the next run must reach the rest."""
+    pdf = tmp_path / "x.pdf"
+    pdf.write_bytes(b"%PDF-1.4")
+    downloaded = []
+    monkeypatch.setattr(pdf_store, "store_document", lambda *a, **k: None)
+    monkeypatch.setattr(fetcher, "download_document",
+                        lambda url, d, f: (downloaded.append(url), (pdf, 8))[1])
+    links = [{"url": f"https://x/{i}.pdf", "filename": f"{i}.pdf",
+              "doc_type": "agenda", "meeting_date": None} for i in range(5)]
+    monkeypatch.setattr(fetcher, "discover_document_links", lambda p: links)
+    monkeypatch.setattr(fetcher, "load_plans", lambda: [
+        {"id": "p1", "abbreviation": "P1", "name": "Plan One"},
+    ])
+
+    fetcher.run_fetcher(max_docs_per_plan=2)
+    fetcher.run_fetcher(max_docs_per_plan=2)
+
+    assert downloaded == [f"https://x/{i}.pdf" for i in range(4)]
