@@ -28,9 +28,16 @@
 - The old summaries are backed up only in the session scratchpad (`summaries_backup_before_fulltext.json`),
   next to the one-off `resummarize_full.py`. Neither is committed.
 
+- Later: ran `scripts.normalize_managers` ($0.69, 23 calls): mapped the 1,325 new manager names
+  (1,061 managers, 264 rejected as funds, placeholders and similar) in `data/manager_mappings.json`.
+  Distinct canonicals went from 581 to 1,239; the 1,156 old entries are unchanged.
+  - Each batch is canonicalised on its own, so near-duplicates such as "State Street" vs "State Street
+    Global Advisors" survive, and a few combined strings ("Baillie Gifford; State Street...") are kept whole.
+  - The nightly roster build and the app read the committed file, so nothing changes in production until it is pushed.
+
 **Next**
 1. Spot-check 3–4 of the docs that lost perf rows; check that Sunday's weekly published.
-2. Manager-name normalisation (~$1) now has 53% more actions to work on.
+2. Push so the roster picks up the new manager mappings.
 3. Probe the top zero-coverage plans (SFERS, NYCPPF, MN PERA, SURS, WV IMB, SBCERA, FDNY, PSPRS).
 
 ## 2026-10-15 — CAFR outline locator: flat, stitched and scrambled bookmarks
