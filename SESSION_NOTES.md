@@ -1,5 +1,38 @@
 # Session notes
 
+## 2026-10-16 — Board-material catch-up, and full-text re-summaries of 892 long packs
+
+**Done** (Neon only; no repo code changed)
+- Freshness review: the daily pipeline is healthy, and 310 docs arrived in the catch-up after the outage.
+- Ran `pipeline.py --extract-only --retry-failed`, then re-downloaded failed docs that had no copy anywhere
+  into R2 and re-extracted them. 83 recovered; $2.49.
+- 141 still fail: 113 dead links, 13 not PDFs, 6 scanned board packs (OCR is off for that type),
+  and the rest WAF or timeouts.
+- Checked that the Sunday 18 Oct weekly will run now that the key fix (7c4b000) is in place and credit
+  is live. It covers 11–17 Oct.
+- Re-summarised 892 of 904 long board packs, agendas and minutes on Sonnet 5 in batch mode. Each now
+  reads up to 400k chars instead of 50k. $87.11.
+  - Investment actions 2,192 → 3,359 (+53%), decisions 4,571 → 5,558 (+22%), performance rows 6,506 → 7,343 (+13%).
+  - 13 `dedup:` copies were refreshed to match.
+- Performance reports: nothing to spend on. All 23 unextracted ones are excluded on purpose (DC menus,
+  mistagged docs).
+
+**Why**
+- API credit was due to expire, and the 50k excerpt cut most packs before the investment sections.
+- James chose this and the perf-report check, not the CAFR actuarial gaps or manager normalisation.
+
+**Broken / unsure**
+- 272 docs now have fewer perf rows than before; not checked. Probably duplicate tables in the old excerpts.
+- 2 docs hit JSON truncation and fell back to a 20k excerpt, which may be worse than the old summary.
+- 12 kept their old summaries (filename skips or errored results).
+- The old summaries are backed up only in the session scratchpad (`summaries_backup_before_fulltext.json`),
+  next to the one-off `resummarize_full.py`. Neither is committed.
+
+**Next**
+1. Spot-check 3–4 of the docs that lost perf rows; check that Sunday's weekly published.
+2. Manager-name normalisation (~$1) now has 53% more actions to work on.
+3. Probe the top zero-coverage plans (SFERS, NYCPPF, MN PERA, SURS, WV IMB, SBCERA, FDNY, PSPRS).
+
 ## 2026-10-15 — CAFR outline locator: flat, stitched and scrambled bookmarks
 
 **Done**
