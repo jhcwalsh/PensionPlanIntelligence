@@ -23,3 +23,6 @@ notes/pdfs/
 # committed SQLite file is preserved in history at e0d6f45 — recover it with
 #   git show e0d6f45:db/pension.db > db/pension.db
 db/pension.db
+
+# One-off data backups (old summaries etc.); local only, data not code
+backups/

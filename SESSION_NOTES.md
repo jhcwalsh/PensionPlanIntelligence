@@ -1,5 +1,34 @@
 # Session notes
 
+## 2026-10-17 — CAFR actuarial gaps filled; perf-row losses diagnosed; zero-coverage probe
+
+**Done**
+- Actuarial extraction for the 91 latest-per-FY CAFRs with no `cafr_actuarial` row: 68 sent in one batch,
+  all saved ($3.19). 20 had no locatable section and 3 had no PDF.
+  - Latest CAFR per plan with a funded ratio: 50 → 111 of 138. A sample of values looks plausible, with no outliers.
+- Backups and one-off scripts from 16–17 Oct moved to `backups/2026-10-16-fulltext-resummary/`.
+  `backups/` is now in `.gitignore`.
+- Today's daily pipeline was green (13:59 UTC), so the roster has picked up the merged manager names.
+  Credit preflight is OK for Sunday's weekly.
+
+**Broken / unsure**
+- The re-summary's perf-row drops are real, not duplicates. On 272 docs, rows fell 3,672 → 2,435.
+  - The full-text summaries keep headline rows and drop manager-level and secondary-period rows
+    (e.g. pmpf_pa manager returns, mcera FYTD/YTD).
+  - Proposed fix, no spend: old rows plus new rows for asset classes the old data lacked (+958),
+    about 4,630 rows. Not applied yet.
+- Zero-coverage probe (top 10 by AUM, read-only):
+  - sf_sfers is registry-only: point it at the full-board page.
+  - psprs_az needs `scan_embedded_urls` plus `MIN_DATE` applied before the 50-link cap.
+  - sbcera (Legistar) and vcera (PrimeGov) need fetcher patterns.
+  - nycppf/fdny are blocked by Akamai's headless check, even from a residential IP.
+  - mn_pera, wv_imb and surs_il publish nothing fetchable for 2026.
+
+**Next**
+1. Apply the perf-row merge (James's OK).
+2. sf_sfers registry fix; then the psprs_az cap fix.
+3. Check Sunday's weekly published (first since 30 Aug).
+
 ## 2026-10-16 — Board-material catch-up, and full-text re-summaries of 892 long packs
 
 **Done** (Neon only; no repo code changed)
