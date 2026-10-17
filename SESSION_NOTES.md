@@ -24,10 +24,16 @@
   - nycppf/fdny are blocked by Akamai's headless check, even from a residential IP.
   - mn_pera, wv_imb and surs_il publish nothing fetchable for 2026.
 
+- Later (James's OK): perf-row merge applied. 272 docs went from 2,435 → 4,630 rows, plus 6 dedup copies.
+  The script and the pre-merge rows are in `backups/`. The performance view was rebuilt with no shape change.
+- Later: sf_sfers registry now points at the Full Board index and follows its two newest year pages.
+  Discovery-only check: 29 links, 11 from 2026 (Jan–Oct agendas and minutes). The daily pipeline fetches
+  them next run. Investment Committee pages are not followed (no 2026 IC page exists yet).
+
 **Next**
-1. Apply the perf-row merge (James's OK).
-2. sf_sfers registry fix; then the psprs_az cap fix.
-3. Check Sunday's weekly published (first since 30 Aug).
+1. psprs_az: `scan_embedded_urls` plus `MIN_DATE` before the 50-link cap in `run_fetcher`.
+2. Check Sunday's weekly published (first since 30 Aug), and that SFERS docs arrived.
+3. Legistar (sbcera) and PrimeGov (vcera) discovery.
 
 ## 2026-10-16 — Board-material catch-up, and full-text re-summaries of 892 long packs
 

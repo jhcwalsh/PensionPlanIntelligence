@@ -1282,8 +1282,11 @@
     "state": "CA",
     "aum_billions": 35,
     "website": "https://www.mysfers.org",
-    "materials_url": "https://mysfers.org/about-sfers/retirement-board-3/agendas-minutes/investment-committee/",
+    "materials_url": "https://mysfers.org/about-sfers/retirement-board-3/agendas-minutes/full-board/",
     "materials_type": "playwright",
+    "sub_page_pattern": "/full-board/fb-",
+    "max_sub_pages": 2,
+    "sub_page_skip_committee_filter": true,
     "investment_only": false,
     "doc_types": [
       "agenda",
