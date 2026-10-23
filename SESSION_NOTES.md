@@ -1,33 +1,28 @@
 # Session notes
 
-## 2026-10-22 — Design: fund crowding tool ("who else is in this fund?")
+## 2026-10-22 — Fund crowding tool built ("who else is in this fund?")
 
 **Done**
-- Wrote `docs/superpowers/specs/2026-10-22-fund-crowding-design.md`, a tool for a future AI IC member
-  that lists which other plans committed to a given fund. Design only, no code yet.
-- Recon (read-only): 3,091 commitment actions across 98 plans in `summaries.investment_actions`.
-  The fund name survives only in free text. A crude regex already finds 151 funds held by 2+ plans.
+- Spec `docs/superpowers/specs/2026-10-22-fund-crowding-design.md`, plan `docs/superpowers/plans/2026-10-22-fund-crowding.md`.
+- `funds/` package: identity rules (`identity.py`), Haiku per-fund split (`extract.py`), table build (`build.py`),
+  queries (`query.py`), stdio MCP server (`mcp_server.py`). New tables `fund_action_extracts`, `funds`, `fund_commitments`.
+- Scripts: `build_fund_commitments` (nightly-ready), `propose_fund_mappings` (reviewed path), `fund_review_sheet`.
+- Live on Neon: 3,664 actions extracted for $1.40. 1,154 funds, 1,350 commitments, 76 plans.
+- Precision sample of 50 funds: 0 false merges (`docs/superpowers/notes/2026-10-22-fund-crowding-review.md`).
 
 **Why**
-- Plan: Haiku extracts a `fund_commitments` table from existing action text (~$1, no PDF re-reads).
-  Strict fund identity rules plus a git-reviewed mappings file, and a thin MCP server over two functions.
-- James: a false match is worse than a miss. Unnumbered funds merge only within 12 months.
-  Nightly merges on an exact key only. Claude checks 50 matches first, then James skims before nightly wiring.
+- James: a false match is worse than a miss. Holders are approved only; unnumbered funds match within 12 months.
+- An Opus review caught a real false-merge bug (Carlyle Realty VIII = Carlyle Partners VIII) and five others; all fixed with tests.
 
-**Build log** (plan: `docs/superpowers/plans/2026-10-22-fund-crowding.md`)
-- T1: `funds/identity.py` fund-name parsing and identity keys.
-- T2: `fund_action_extracts`, `funds`, `fund_commitments` models in `database.py`.
-- T3: `funds/extract.py` Haiku per-fund split; summariser now asks for `fund_name` on each action.
-- T4: `funds/build.py` + `scripts/build_fund_commitments.py` (extract new actions, rebuild tables); `data/fund_mappings.json`.
-- T5: `funds/query.py` `who_else_is_in` and `funds_held_alongside`, with coverage block.
-- T6: `funds/mcp_server.py` (stdio MCP, two tools), `requirements-mcp.txt` (mcp 1.30.0), CLAUDE.md section.
-- T7: `scripts/propose_fund_mappings.py`: fuzzy merges and new managers proposed into the JSON files only, for review.
-- T9: nightly "Build fund commitments" step kept on branch `fund-crowding-nightly` (not on master) until James OKs the review sheet.
-- Review fixes: series-bearing raw managers no longer wipe the series (Carlyle Realty VIII ≠ Carlyle Partners VIII); bare "Fund III" is manager-only; no action-total fallback on amounts. Partial names return candidates; the 12-month window is checked per mention. Dedup summaries only count for the original plan; a failing batch is halved and retried.
-- Live check: 3,664 actions extracted for $1.40; 1,154 funds, 1,350 commitments, 76 plans. Precision sample of 50 funds: 0 false merges (sheet in `docs/superpowers/notes/2026-10-22-fund-crowding-review.md`). An exact-name query now beats co-invest vehicles; the proposal script also flags identical fund names filed under different managers. Fund-alias proposals now use Sonnet with a stricter prompt (co-invest, annex, sidecar and growth sleeves are separate funds) and write a by-name report.
+**Broken / unsure**
+- Nightly step is on branch `fund-crowding-nightly`, NOT master. Merging and pushing it is James's call.
+- Uncommitted for James: 123 fund aliases + 241 manager spellings (`data/*.json`). Read the by-name list first:
+  `docs/superpowers/notes/2026-10-22-fund-alias-proposals.md` (one doubtful: Summit XI).
+- About 3 in 120 "approved" rows read like consideration, not a vote. Amounts are indicative.
 
 **Next**
-- Finish the build plan's tasks 2-9.
+- James reviews the sheet and the alias diff, then merges the nightly branch.
+- Optional: tighten the Haiku status prompt and re-extract (~$1.40); a Streamlit "most crowded funds" view.
 
 ## 2026-10-17 — CAFR actuarial gaps filled; perf-row losses diagnosed; zero-coverage probe
 
