@@ -19,13 +19,15 @@ def s(monkeypatch):
     sess.close()
 
 
-def _seed(s, plan, doc_id, actions, doc_type="minutes", date="2026-03-20", model="claude-haiku"):
+def _seed(s, plan, doc_id, actions, doc_type="minutes", date="2026-03-20", model="claude-haiku",
+          text_hash=None):
     if not s.get(Plan, plan):
         s.add(Plan(id=plan, name=plan.upper(), aum_billions=10.0))
     s.add(Document(id=doc_id, plan_id=plan, url=f"https://example.test/{doc_id}",
                    doc_type=doc_type,
                    meeting_date=datetime.fromisoformat(date) if date else None))
-    s.add(Summary(document_id=doc_id, investment_actions=json.dumps(actions), model_used=model))
+    s.add(Summary(document_id=doc_id, investment_actions=json.dumps(actions), model_used=model,
+                  text_hash=text_hash))
     s.commit()
 
 
@@ -115,8 +117,8 @@ def test_alias_applied(s, monkeypatch):
 
 def test_extract_pending_skips_cached_and_dedup_text(s):
     a = _commit("TPG Partners X", "TPG", 40)
-    _seed(s, "p", 1, [a])
-    _seed(s, "p", 2, [a], model="dedup:claude-haiku")
+    _seed(s, "p", 1, [a], text_hash="h")
+    _seed(s, "p", 2, [a], model="dedup:claude-haiku", text_hash="h")
     assert build.extract_pending(s, None) == (1, 0)
     assert build.extract_pending(s, None) == (0, 0)
     build.rebuild(s)
@@ -186,3 +188,24 @@ def test_single_item_without_amount_does_not_take_action_total(s):
     s.commit()
     build.rebuild(s)
     assert s.query(FundCommitment).one().amount_millions is None
+
+
+def test_dedup_summary_from_another_plan_is_not_credited(s):
+    a = _commit("TPG Partners X", "TPG", 40)
+    _seed(s, "p1", 1, [a], text_hash="h")
+    _seed(s, "p2", 2, [a], model="dedup:claude-haiku", text_hash="h")
+    _build(s)
+    assert [r.plan_id for r in s.query(FundCommitment)] == ["p1"]
+
+
+def test_failing_batch_is_split_and_retried(s, monkeypatch):
+    real = build.extract_batch
+
+    def picky(client, batch):
+        if len(batch) > 1:
+            raise ValueError("response cut off")
+        return real(client, batch)
+
+    monkeypatch.setattr(build, "extract_batch", picky)
+    _seed(s, "p", 1, [_commit(f"Fund Co Fund {n}", "Fund Co", n) for n in (1, 2, 3)])
+    assert build.extract_pending(s, None) == (3, 0)

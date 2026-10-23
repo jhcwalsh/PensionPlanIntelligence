@@ -76,6 +76,7 @@ def _iso(dt) -> str | None:
 def collect_actions(session) -> list[tuple[ActionInput, dict]]:
     rows = (
         session.query(Summary.document_id, Summary.investment_actions,
+                      Summary.model_used, Summary.text_hash,
                       Document.plan_id, Document.doc_type, Document.url,
                       Document.meeting_date, Meeting.meeting_date)
         .join(Document, Document.id == Summary.document_id)
@@ -83,8 +84,15 @@ def collect_actions(session) -> list[tuple[ActionInput, dict]]:
         .filter(Summary.investment_actions.isnot(None))
         .all()
     )
+    # A dedup summary copies the actions of whichever document first had the
+    # same text. Credit it only to the plan that document belongs to: a shared
+    # consultant deck must not make plan Q a holder of plan P's commitment.
+    original_plan = {r.text_hash: r.plan_id for r in rows
+                     if r.text_hash and not (r.model_used or "").startswith("dedup:")}
     out = []
-    for doc_id, actions_json, plan_id, doc_type, url, doc_date, mtg_date in rows:
+    for doc_id, actions_json, model_used, text_hash, plan_id, doc_type, url, doc_date, mtg_date in rows:
+        if (model_used or "").startswith("dedup:") and original_plan.get(text_hash) != plan_id:
+            continue
         date = _iso(doc_date or mtg_date)
         for action in _parse_json_list(actions_json):
             if not isinstance(action, dict) or action.get("action") not in ACTIONS:
@@ -104,13 +112,21 @@ def extract_pending(session, client, limit: int | None = None) -> tuple[int, int
     todo = list(pending.values())[:limit] if limit else list(pending.values())
 
     extracted = failed = 0
-    for i in range(0, len(todo), BATCH_SIZE):
-        batch = todo[i:i + BATCH_SIZE]
+    # A batch that fails (typically a response cut off by max_tokens on a
+    # bundle-heavy batch) is halved and retried, so one dense batch cannot
+    # fail the same way every night.
+    queue = [todo[i:i + BATCH_SIZE] for i in range(0, len(todo), BATCH_SIZE)]
+    while queue:
+        batch = queue.pop(0)
         try:
             result = extract_batch(client, batch)
         except Exception as exc:  # noqa: BLE001 - one bad batch must not stop the run
-            print(f"  batch {i // BATCH_SIZE + 1} FAILED: {type(exc).__name__}: {exc}")
             session.rollback()
+            if len(batch) > 1:
+                half = len(batch) // 2
+                queue[:0] = [batch[:half], batch[half:]]
+                continue
+            print(f"  action {batch[0].action_hash[:10]} FAILED: {type(exc).__name__}: {exc}")
             failed += 1
             continue
         for h, items in result.items():
