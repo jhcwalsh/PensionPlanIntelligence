@@ -9,12 +9,15 @@ anything ambiguous parses to something that will *not* collide.
 - Different numbers are different funds; a vintage year counts as a number.
 - Parallel vehicles ("III-A", "(Cayman)", "Parallel") roll up to the main
   fund, but the vehicle is kept so callers can show it.
-- No manager, or neither series nor number, means no key at all.
+- No manager, or neither series nor number, means no key at all. An empty
+  series keys only when the manager's own name was stripped from the fund
+  name ("Audax Fund III"); a bare "Fund III" says nothing about which of the
+  manager's products it is, so it gets no key.
 """
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 _STOPWORDS = {"fund", "funds", "the", "lp", "llc", "scsp", "inc", "ltd"}
 
@@ -40,6 +43,7 @@ class ParsedFund:
     series: str
     number: int | None
     vehicle: str | None
+    manager_stripped: bool = field(default=False, compare=False)
 
 
 def norm_tokens(s: str | None) -> list[str]:
@@ -94,15 +98,20 @@ def number_value(tok: str) -> int | None:
     return roman_to_int(tok)
 
 
-def _strip_manager(toks: list[str], manager: str | None) -> list[str]:
+def manager_tokens(manager: str | None) -> list[str]:
+    return [t for t in norm_manager(manager).split() if t not in _STOPWORDS]
+
+
+def _strip_manager(toks: list[str], manager: str | None) -> tuple[list[str], bool]:
     best = 0
-    for cand in (norm_tokens(manager), norm_manager(manager).split()):
+    full = [t for t in norm_tokens(manager) if t not in _STOPWORDS]
+    for cand in (full, manager_tokens(manager)):
         k = 0
         while (k < len(cand) and k < len(toks) and toks[k] == cand[k]
                and number_value(toks[k]) is None):
             k += 1
         best = max(best, k)
-    return toks[best:]
+    return toks[best:], best > 0
 
 
 def _split_vehicle_suffix(toks: list[str]) -> list[str]:
@@ -124,7 +133,8 @@ def parse_fund_name(raw: str, manager: str | None) -> ParsedFund:
     idx = next((i for i in range(len(toks) - 1, -1, -1)
                 if number_value(toks[i]) is not None), None)
     if idx is None:
-        return ParsedFund(" ".join(_strip_manager(toks, manager)), None, None)
+        rest, stripped = _strip_manager(toks, manager)
+        return ParsedFund(" ".join(rest), None, None, stripped)
 
     number = number_value(toks[idx])
     before, after = toks[:idx], toks[idx + 1:]
@@ -137,15 +147,17 @@ def parse_fund_name(raw: str, manager: str | None) -> ParsedFund:
     if after and all(t in _VEHICLE_AFTER for t in after):
         vehicle, after = after, []
 
-    before = _strip_manager(before, manager)
+    before, stripped = _strip_manager(before, manager)
     vehicle = [t for t in before if t in _VEHICLE_BEFORE] + vehicle
     before = [t for t in before if t not in _VEHICLE_BEFORE]
 
     series = before + (["#"] + after if after else [])
-    return ParsedFund(" ".join(series), number, " ".join(vehicle) or None)
+    return ParsedFund(" ".join(series), number, " ".join(vehicle) or None, stripped)
 
 
 def fund_key(manager_norm: str, parsed: ParsedFund) -> str | None:
     if not manager_norm or (not parsed.series and parsed.number is None):
+        return None
+    if not parsed.series and not parsed.manager_stripped:
         return None
     return f"{manager_norm}|{parsed.series}|{parsed.number if parsed.number is not None else ''}"

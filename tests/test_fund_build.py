@@ -142,3 +142,45 @@ def test_cli_mock_run_exits_zero(s):
     _seed(s, "p", 1, [_commit("GTCR Fund XV", "GTCR", 50)])
     assert main([]) == 0
     assert s.query(FundCommitment).count() == 1
+
+
+@pytest.mark.parametrize("a, b", [
+    (("Carlyle Realty Partners VIII", "Carlyle Realty Partners"), ("Carlyle Partners VIII", "Carlyle Partners")),
+    (("Blackstone Growth II", "Blackstone Growth II"), ("Blackstone Capital Partners II", "Blackstone Capital Partners")),
+])
+def test_series_bearing_raw_manager_does_not_merge_funds(s, monkeypatch, a, b):
+    monkeypatch.setattr(build, "load_manager_mappings", lambda: {
+        "Carlyle Realty Partners": "The Carlyle Group", "Carlyle Partners": "The Carlyle Group",
+        "Blackstone Growth II": "Blackstone", "Blackstone Capital Partners": "Blackstone"})
+    _seed(s, "p1", 1, [_commit(a[0], a[1])])
+    _seed(s, "p2", 2, [_commit(b[0], b[1])])
+    _build(s)
+    assert s.query(Fund).count() == 2
+
+
+def test_alternative_manager_spelling_still_strips(s, monkeypatch):
+    monkeypatch.setattr(build, "load_manager_mappings", lambda: {"Kohlberg Kravis Roberts & Co.": "KKR"})
+    _seed(s, "p1", 1, [_commit("KKR North America Fund XIV", "KKR")])
+    _seed(s, "p2", 2, [_commit("Kohlberg Kravis Roberts North America Fund XIV", "Kohlberg Kravis Roberts & Co.")])
+    _build(s)
+    assert s.query(Fund).count() == 1
+
+
+def test_generic_fund_name_becomes_manager_only(s):
+    _seed(s, "p1", 1, [_commit("Fund III", "Audax")])
+    _seed(s, "p2", 2, [_commit("Audax Fund III", "Audax")])
+    _build(s)
+    rows = {r.plan_id: r for r in s.query(FundCommitment)}
+    assert rows["p1"].fund_id is None and rows["p1"].match_confidence == "manager_only"
+    assert rows["p2"].fund_id is not None
+
+
+def test_single_item_without_amount_does_not_take_action_total(s):
+    action = _commit("Commitments including KKR GII V", "KKR", 500)
+    _seed(s, "p", 1, [action])
+    s.add(FundActionExtract(action_hash=action_hash(action), model="test", items_json=json.dumps([
+        {"fund_name": "KKR Global Infrastructure Investors V", "manager": "KKR",
+         "amount_millions": None, "status": "approved", "asset_class": None}])))
+    s.commit()
+    build.rebuild(s)
+    assert s.query(FundCommitment).one().amount_millions is None

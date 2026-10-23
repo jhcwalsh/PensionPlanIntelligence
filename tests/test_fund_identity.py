@@ -62,3 +62,13 @@ def test_roman_bounds():
     assert roman_to_int("xiv") == 14
     assert roman_to_int("iiii") is None
     assert roman_to_int("mix") is None
+
+
+def test_manager_stopwords_do_not_block_strip():
+    assert parse_fund_name("Carlyle Partners VIII", "The Carlyle Group") == ParsedFund("partners", 8, None)
+
+
+def test_generic_name_without_manager_words_has_no_key():
+    m = norm_manager("Audax")
+    assert fund_key(m, parse_fund_name("Fund III", "Audax")) is None
+    assert fund_key(m, parse_fund_name("Audax Fund III", "Audax")) == "audax||3"

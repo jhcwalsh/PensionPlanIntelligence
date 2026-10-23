@@ -21,7 +21,7 @@ from pathlib import Path
 
 from database import Document, Fund, FundActionExtract, FundCommitment, Meeting, Summary
 from funds.extract import BATCH_SIZE, MODEL, ActionInput, action_hash, extract_batch
-from funds.identity import fund_key, norm_manager, parse_fund_name
+from funds.identity import fund_key, manager_tokens, norm_manager, norm_tokens, parse_fund_name
 from twin_builder import (
     MANAGER_MAPPINGS_PATH,
     _parse_json_list,
@@ -129,10 +129,22 @@ def _canonical_manager(raw: str | None, mappings: dict) -> str | None:
 
 
 def _parse(fund_name: str, raw_manager: str | None, display: str | None):
-    """Strip whichever manager spelling leaves the shortest series, so
-    'KKR North America XIV' and 'Kohlberg Kravis Roberts North America Fund
-    XIV' (both canonical KKR) land on the same key."""
-    options = [parse_fund_name(fund_name, m) for m in {raw_manager, display} if m]
+    """Parse against the canonical manager, and also against the raw string
+    when it is another spelling of the manager, so 'KKR North America XIV' and
+    'Kohlberg Kravis Roberts North America Fund XIV' (both canonical KKR) land
+    on the same key.
+
+    A raw string that *extends* the canonical name is not a spelling of the
+    manager but a fund family ('Carlyle Realty Partners' under The Carlyle
+    Group); stripping it would wipe the series and merge Carlyle Realty
+    Partners VIII with Carlyle Partners VIII. Those are never stripped."""
+    managers = [display] if display else []
+    if raw_manager and raw_manager != display:
+        canon = manager_tokens(display)
+        raw = [t for t in norm_tokens(raw_manager) if t not in ("the",)]
+        if not canon or raw[:len(canon)] != canon:
+            managers.append(raw_manager)
+    options = [parse_fund_name(fund_name, m) for m in managers]
     options = options or [parse_fund_name(fund_name, None)]
     return min(options, key=lambda p: (len(p.series.split()), p.series))
 
@@ -170,9 +182,10 @@ def rebuild(session) -> dict:
             if act.get("action") == "hire" and not fund_name:
                 dropped += 1
                 continue
+            # Haiku sees the action's amount and decides which fund it belongs
+            # to; falling back to the action total would put a bundle's whole
+            # total on the one fund it managed to name.
             amount = _num(item.get("amount_millions"))
-            if amount is None and len(items) == 1:
-                amount = _num(act.get("amount_millions"))
             raw_mgr = item.get("manager") or act.get("manager")
             display = _canonical_manager(raw_mgr, manager_map)
             mnorm = norm_manager(display)
@@ -194,7 +207,12 @@ def rebuild(session) -> dict:
             parsed = _parse(fund_name, raw_mgr, display)
             key = fund_key(mnorm, parsed)
             if key is None:
-                dropped += 1
+                # A fund name too generic to identify ("Fund III") still says
+                # the plan committed to this manager.
+                if not mnorm:
+                    dropped += 1
+                    continue
+                groups[(ctx["plan_id"], "manager", mnorm)].append(obs)
                 continue
             key, obs["aliased"] = resolve_alias(key, aliases)
             obs["vehicle"] = parsed.vehicle
