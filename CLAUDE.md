@@ -354,6 +354,33 @@ only the discarding is removed.
 Deliberate exception: `daily-pipeline.yml`'s digest email stays on `success()`,
 to avoid emailing a digest for a failed run.
 
+### Fund crowding tool (`funds/`), added 2026-10-22
+
+Answers "who else is in this fund?" for a future AI IC member. Spec:
+`docs/superpowers/specs/2026-10-22-fund-crowding-design.md`.
+
+- `python -m scripts.build_fund_commitments` sends new commitment/hire actions
+  from `summaries.investment_actions` to Haiku, which splits them into one item
+  per fund. Results are cached by action hash in `fund_action_extracts`, so a
+  run only pays for new actions. It then rebuilds `funds` and
+  `fund_commitments` wholesale. Use `--rebuild-only` after editing a mappings
+  file; it makes no model calls. It never reads `extracted_text`.
+- **A false match is worse than a miss.** Identity (`funds/identity.py`) is
+  manager + series + number, exact after normalisation:
+  - different numbers are different funds, and a vintage year counts as a number;
+  - parallel vehicles roll up to the main fund;
+  - with no manager there is no key;
+  - unnumbered funds match only within 365 days of the asking plan's own date.
+- Fuzzy merges are human-reviewed only. `python -m scripts.propose_fund_mappings`
+  edits `data/fund_mappings.json` (and `manager_mappings.json`), and James
+  reviews the git diff. The nightly run never applies a fuzzy merge.
+- Only `approved` rows are holders. `fund_commitments.fund_id` is null for a
+  manager-only row, where no fund was named.
+- The MCP server is `funds/mcp_server.py` (stdio, reads Neon). Install it with
+  `pip install -r requirements-mcp.txt` and register it with
+  `claude mcp add fund-crowding -- <repo>\.venv\Scripts\python.exe <repo>\funds\mcp_server.py`.
+  `mcp` stays out of `requirements.txt` (Render).
+
 ## Conventions worth knowing
 
 - **Don't run `git add .`** — dozens of untracked scratch files at the repo root (`_cafr_*.json`, `*.log`, `data/known_plans.json.bak*`, screenshots, an empty stray `pension.db` at the repo root) are intentionally left out. Stage by name or path.

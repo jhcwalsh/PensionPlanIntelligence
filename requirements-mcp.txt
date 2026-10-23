@@ -1,0 +1,7 @@
+# The fund-crowding MCP server (funds/mcp_server.py), run locally by an agent.
+# pip install -r requirements-mcp.txt
+# Kept out of requirements.txt: Render builds the public web service from it.
+
+-r requirements.txt
+
+mcp==1.30.0
