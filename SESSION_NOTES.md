@@ -19,6 +19,7 @@
 - T2: `fund_action_extracts`, `funds`, `fund_commitments` models in `database.py`.
 - T3: `funds/extract.py` Haiku per-fund split; summariser now asks for `fund_name` on each action.
 - T4: `funds/build.py` + `scripts/build_fund_commitments.py` (extract new actions, rebuild tables); `data/fund_mappings.json`.
+- T5: `funds/query.py` `who_else_is_in` and `funds_held_alongside`, with coverage block.
 
 **Next**
 - Finish the build plan's tasks 2-9.
