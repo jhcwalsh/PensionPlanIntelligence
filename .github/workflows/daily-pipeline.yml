@@ -103,6 +103,16 @@ jobs:
         if: ${{ !cancelled() }}
         run: python -m scripts.build_manager_roster
 
+      # Haiku splits new board commitments into per-fund rows (cached by
+      # action hash, so only new actions cost anything), then funds /
+      # fund_commitments are rebuilt. Exact-key merges only; fuzzy merges go
+      # through scripts/propose_fund_mappings.py and a reviewed git diff.
+      - name: Build fund commitments
+        if: ${{ !cancelled() }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python -m scripts.build_fund_commitments
+
       - name: Build twin snapshots
         if: ${{ !cancelled() }}
         run: python twin_builder.py

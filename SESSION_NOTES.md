@@ -12,7 +12,8 @@
 - The report lists 123 proposal lines; keys proposed twice kept the later, broader target, hence 112 aliases.
 
 **Next**
-- Merge `fund-crowding-nightly` and push when James is ready.
+- Nightly step now on master (revert of the hold commit e32256a, at James's say-so) and pushed;
+  first nightly run is the check. Optional: a Streamlit "most crowded funds" view.
 
 ## 2026-10-22 — Fund crowding tool built ("who else is in this fund?")
 
