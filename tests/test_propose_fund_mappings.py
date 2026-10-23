@@ -47,3 +47,25 @@ def test_same_name_pairs_across_managers():
     assert pfm.same_name_pairs(names, {"aliases": {}, "separate": []}) == [
         ("hamilton lane|tpg partners|10", "tpg partners||10"),
         ("tpg capital bd|partners|10", "tpg partners||10")]
+
+
+def test_report_lists_proposals_by_name(tmp_path, monkeypatch):
+    path = tmp_path / "fund_mappings.json"
+    path.write_text(json.dumps({"aliases": {}, "separate": []}))
+    report = tmp_path / "report.md"
+    monkeypatch.setattr(build, "FUND_MAPPINGS_PATH", path)
+    monkeypatch.setattr(pfm, "_ask_same", lambda client, a, b: True)
+    monkeypatch.setattr(pfm, "_client", lambda: object())
+    s = database.get_session()
+    s.add_all([Fund(fund_key="a|x y|1", canonical_name="A X Y Fund I", manager_canonical="A"),
+               Fund(fund_key="a|x|1", canonical_name="A X Fund I", manager_canonical="A")])
+    s.commit()
+    s.close()
+    assert pfm.main(["--report", str(report), "--skip-managers"]) == 0
+    assert "A X Y Fund I -> A X Fund I" in report.read_text()
+    assert json.loads(path.read_text())["aliases"] == {"a|x y|1": "a|x|1"}
+
+
+def test_pair_prompt_names_separate_pools():
+    for word in ("co-invest", "annex", "sidecar", "growth"):
+        assert word in pfm._PAIR_PROMPT.lower()

@@ -27,12 +27,22 @@ from collections import defaultdict
 
 from database import Fund, FundActionExtract, get_session
 from funds import build
-from summarizer import MODEL_HAIKU, message_text
+from summarizer import MODEL_SONNET, message_text
 
 _PAIR_PROMPT = """\
 Two U.S. pension board documents name these private-markets funds. Are they
-the same fund (the same pool of capital; parallel vehicles count as the
-same)? Different fund numbers, strategies or sleeves mean different funds.
+the same fund, i.e. the same pool of capital?
+
+Count as the SAME: spelling and legal-suffix differences, abbreviations
+(CD&R = Clayton, Dubilier & Rice), and parallel or feeder vehicles of one
+fund (onshore/offshore, Cayman, TE, "A"/"B" or "Beta" vehicles, "Domestic").
+
+Count as DIFFERENT: a co-invest or co-investment fund, an annex fund, a
+sidecar, an overage or top-up fund, a continuation fund, and any distinct
+sleeve or strategy such as growth / venture growth equity (VGE), income
+and growth, select, opportunities, credit or healthcare versions of a
+flagship. Different fund numbers are always different funds. If unsure,
+answer false.
 
 Fund A: {a}
 Fund B: {b}
@@ -88,7 +98,7 @@ def same_name_pairs(names: dict[str, str], mappings: dict) -> list[tuple[str, st
 
 def _ask_same(client, a: str, b: str) -> bool:
     msg = client.messages.create(
-        model=MODEL_HAIKU, max_tokens=50, temperature=0,
+        model=MODEL_SONNET, max_tokens=100, thinking={"type": "disabled"},
         messages=[{"role": "user", "content": _PAIR_PROMPT.format(a=a, b=b)}],
     )
     text = message_text(msg).strip().strip("`").removeprefix("json").strip()
@@ -106,11 +116,21 @@ def _new_manager_strings(session, known: dict) -> list[str]:
     return sorted(names)
 
 
+def _client():
+    if os.environ.get("LLM_MODE") == "mock":
+        return None
+    from summarizer import _get_client
+    return _get_client()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="scripts.propose_fund_mappings")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--skip-managers", action="store_true",
+                        help="Don't classify new manager strings this run")
+    parser.add_argument("--report", default=None,
+                        help="Also write the proposals by fund name to this markdown file")
     args = parser.parse_args(argv)
-    mock = os.environ.get("LLM_MODE") == "mock"
 
     session = get_session()
     try:
@@ -127,12 +147,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.dry_run:
         return 0
 
-    client = None
-    if not mock:
-        from summarizer import _get_client
-        client = _get_client()
+    client = _client()
 
-    if new_managers and client is not None:
+    if new_managers and client is not None and not args.skip_managers:
         for i in range(0, len(new_managers), 60):
             batch = new_managers[i:i + 60]
             result = nm._classify_batch(client, batch)
@@ -140,14 +157,18 @@ def main(argv: list[str] | None = None) -> int:
             nm._save(known)
 
     aliased = 0
+    report = ["# Proposed fund aliases (left -> right)", ""]
     for longer, shorter in pairs:
-        same = (client is not None
-                and _ask_same(client, names.get(longer) or longer, names.get(shorter) or shorter))
-        if same:
+        a, b = names.get(longer) or longer, names.get(shorter) or shorter
+        if client is not None and _ask_same(client, a, b):
             mappings["aliases"][longer] = shorter
+            report.append(f"- {a} -> {b}  (`{longer}` -> `{shorter}`)")
             aliased += 1
         else:
             mappings["separate"].append([longer, shorter])
+    if args.report:
+        with open(args.report, "w", encoding="utf-8") as fh:
+            fh.write("\n".join(report) + "\n")
     build.FUND_MAPPINGS_PATH.write_text(
         json.dumps(mappings, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
         encoding="utf-8")
