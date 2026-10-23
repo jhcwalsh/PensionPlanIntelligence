@@ -1,5 +1,22 @@
 # Session notes
 
+## 2026-10-22 — Design: fund crowding tool ("who else is in this fund?")
+
+**Done**
+- Wrote `docs/superpowers/specs/2026-10-22-fund-crowding-design.md`, a tool for a future AI IC member
+  that lists which other plans committed to a given fund. Design only, no code yet.
+- Recon (read-only): 3,091 commitment actions across 98 plans in `summaries.investment_actions`.
+  The fund name survives only in free text. A crude regex already finds 151 funds held by 2+ plans.
+
+**Why**
+- Plan: Haiku extracts a `fund_commitments` table from existing action text (~$1, no PDF re-reads).
+  Strict fund identity rules plus a git-reviewed mappings file, and a thin MCP server over two functions.
+- James: a false match is worse than a miss. Unnumbered funds merge only within 12 months.
+  Nightly merges on an exact key only. Claude checks 50 matches first, then James skims before nightly wiring.
+
+**Next**
+- James approves the design, then write the implementation plan.
+
 ## 2026-10-17 — CAFR actuarial gaps filled; perf-row losses diagnosed; zero-coverage probe
 
 **Done**
