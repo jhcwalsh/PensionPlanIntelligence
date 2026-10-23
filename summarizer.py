@@ -181,6 +181,7 @@ Analyze it and return a JSON object with exactly these fields:
       "action": "hire|fire|rebalance|allocation_change|commitment|other",
       "description": "e.g. Hired BlackRock for $500M global equity mandate",
       "manager": "manager name if applicable",
+      "fund_name": "the specific fund or vehicle if one is named, e.g. GTCR Fund XV, else null",
       "asset_class": "e.g. Global Equity, Private Equity, Real Estate",
       "amount_millions": 500
     }}
