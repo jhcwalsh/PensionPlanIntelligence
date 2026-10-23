@@ -14,8 +14,11 @@
 - James: a false match is worse than a miss. Unnumbered funds merge only within 12 months.
   Nightly merges on an exact key only. Claude checks 50 matches first, then James skims before nightly wiring.
 
+**Build log** (plan: `docs/superpowers/plans/2026-10-22-fund-crowding.md`)
+- T1: `funds/identity.py` fund-name parsing and identity keys.
+
 **Next**
-- James approves the design, then write the implementation plan.
+- Finish the build plan's tasks 2-9.
 
 ## 2026-10-17 — CAFR actuarial gaps filled; perf-row losses diagnosed; zero-coverage probe
 
