@@ -23,7 +23,7 @@
 - T6: `funds/mcp_server.py` (stdio MCP, two tools), `requirements-mcp.txt` (mcp 1.30.0), CLAUDE.md section.
 - T7: `scripts/propose_fund_mappings.py`: fuzzy merges and new managers proposed into the JSON files only, for review.
 - T9: nightly "Build fund commitments" step kept on branch `fund-crowding-nightly` (not on master) until James OKs the review sheet.
-- Review fixes: series-bearing raw managers no longer wipe the series (Carlyle Realty VIII ≠ Carlyle Partners VIII); bare "Fund III" is manager-only; no action-total fallback on amounts.
+- Review fixes: series-bearing raw managers no longer wipe the series (Carlyle Realty VIII ≠ Carlyle Partners VIII); bare "Fund III" is manager-only; no action-total fallback on amounts. Partial names return candidates; the 12-month window is checked per mention.
 
 **Next**
 - Finish the build plan's tasks 2-9.

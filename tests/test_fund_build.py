@@ -47,7 +47,9 @@ def test_rebuild_dedupes_across_documents(s):
     assert len(rows) == 1
     r = rows[0]
     assert (r.status, r.amount_millions, r.first_seen, r.last_seen) == ("approved", 75, "2026-03-01", "2026-03-20")
-    assert sorted(e["document_id"] for e in json.loads(r.evidence)) == [1, 2]
+    ev = json.loads(r.evidence)
+    assert sorted(e["document_id"] for e in ev) == [1, 2]
+    assert sorted(e["status"] for e in ev) == ["approved", "proposed"]
 
 
 def test_two_plans_same_fund_two_spellings(s):

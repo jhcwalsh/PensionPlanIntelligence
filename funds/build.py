@@ -249,12 +249,15 @@ def rebuild(session) -> dict:
         status = "approved" if approved else obs[-1]["status"]
         amounts = [o["amount"] for o in (approved or obs) if o["amount"] is not None]
         dates = [o["meeting_date"] for o in obs if o["meeting_date"]]
-        evidence, seen = [], set()
+        by_doc: dict[int, dict] = {}
         for o in obs:
-            if o["document_id"] in seen:
-                continue
-            seen.add(o["document_id"])
-            evidence.append({k: o[k] for k in ("document_id", "meeting_date", "doc_type", "url", "quote")})
+            e = by_doc.get(o["document_id"])
+            if e is None:
+                by_doc[o["document_id"]] = {k: o[k] for k in
+                                            ("document_id", "meeting_date", "doc_type", "url", "quote", "status")}
+            elif o["status"] == "approved":
+                e["status"] = "approved"
+        evidence = list(by_doc.values())
 
         if kind == "fund":
             fund = funds_by_key[key]

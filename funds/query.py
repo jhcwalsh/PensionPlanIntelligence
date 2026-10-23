@@ -69,7 +69,12 @@ def resolve_fund(session, query: str) -> tuple[Fund | None, list[Fund]]:
             ftoks.add(str(f.number))
         if set(qtoks) <= ftoks:
             cands.append(f)
-    if len(cands) == 1 and (qnum is not None or cands[0].number is None):
+    # One candidate is only an answer when the query names its whole series:
+    # "Ares Pathfinder" must not resolve to Ares Centre Street Pathfinder Core
+    # Plus, nor "Blackstone X" to Blackstone Real Estate Partners X, just
+    # because those are the only matches we happen to hold.
+    if (len(cands) == 1 and (qnum is not None or cands[0].number is None)
+            and set(_search_tokens((cands[0].series or "").replace("#", " "))) <= set(qtoks)):
         return cands[0], []
     return None, sorted(cands, key=lambda f: (f.canonical_name or ""))[:10]
 
@@ -114,14 +119,20 @@ def _split(session, fund: Fund, exclude_plan, today, plans) -> tuple[list[dict],
             continue
         entry = _entry(r, plans.get(r.plan_id))
         if fund.number is None:
-            first, last = _d(r.first_seen), _d(r.last_seen)
-            if first is None or last is None:
+            # Each mention must fall in the window on its own; a plan with
+            # mentions either side of the anchor does not count via its span.
+            dated = [e for e in entry["evidence"] if e.get("meeting_date")]
+            if not dated:
                 pending.append({**entry, "reason": "undated"})
                 continue
-            gap = (first - anchor).days if anchor < first else (anchor - last).days if anchor > last else 0
-            if gap > UNNUMBERED_WINDOW_DAYS:
+            in_window = [e for e in dated
+                         if abs((_d(e["meeting_date"]) - anchor).days) <= UNNUMBERED_WINDOW_DAYS]
+            if not in_window:
                 continue
-        (holders if r.status == "approved" else pending).append(entry)
+            approved = any(e.get("status", r.status) == "approved" for e in in_window)
+            entry["status"] = "approved" if approved else (
+                r.status if r.status != "approved" else "unknown")
+        (holders if entry["status"] == "approved" else pending).append(entry)
     holders.sort(key=lambda h: h["last_seen"] or "", reverse=True)
     pending.sort(key=lambda h: h["last_seen"] or "", reverse=True)
     return holders, pending

@@ -1,4 +1,5 @@
 """who_else_is_in / funds_held_alongside (funds/query.py)."""
+import json
 from datetime import date
 
 import pytest
@@ -29,12 +30,16 @@ def _fund(s, name, manager, series, number, key=None):
 
 
 def _hold(s, plan, fund, status="approved", amount=100.0, first="2026-03-01", last=None,
-          confidence="exact"):
+          confidence="exact", evidence=None):
+    last = last or first
+    if evidence is None:
+        evidence = [{"document_id": i, "meeting_date": d, "status": status}
+                    for i, d in enumerate(sorted({first, last} - {None}) or [None])]
     s.add(FundCommitment(plan_id=plan, fund_id=fund.id if fund else None,
                          manager_canonical=fund.manager_canonical if fund else None,
                          fund_name_raw=fund.canonical_name if fund else None,
                          status=status, amount_millions=amount, first_seen=first,
-                         last_seen=last or first, evidence="[]", match_confidence=confidence))
+                         last_seen=last, evidence=json.dumps(evidence), match_confidence=confidence))
     s.commit()
 
 
@@ -147,3 +152,19 @@ def test_coverage_block_present_and_counts_plans(s):
     assert cov["plans_searched"] == 2
     assert (cov["earliest_meeting"], cov["latest_meeting"]) == ("2025-02-01", "2026-09-30")
     assert "not evidence" in cov["caveat"]
+
+
+def test_partial_name_returns_candidates_not_a_guess(s):
+    _fund(s, "Ares Centre Street Pathfinder Core Plus", "Ares", "centre street pathfinder core plus", None)
+    _fund(s, "Blackstone Real Estate Partners X", "Blackstone", "real estate partners", 10)
+    for q in ("Ares Pathfinder", "Blackstone X"):
+        fund, cands = resolve_fund(s, q)
+        assert fund is None and len(cands) == 1, q
+
+
+def test_unnumbered_window_checks_each_mention_not_the_span(s):
+    f = _fund(s, "Wellington Emerging Markets Fund", "Wellington", "emerging markets", None)
+    _hold(s, "a", f, first="2024-07-01")
+    _hold(s, "b", f, first="2023-01-15", last="2026-01-15")
+    r = who_else_is_in("Wellington Emerging Markets Fund", exclude_plan="a", session=s, today=TODAY)
+    assert r["holders"] == []
