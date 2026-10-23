@@ -22,7 +22,7 @@
 - T5: `funds/query.py` `who_else_is_in` and `funds_held_alongside`, with coverage block.
 - T6: `funds/mcp_server.py` (stdio MCP, two tools), `requirements-mcp.txt` (mcp 1.30.0), CLAUDE.md section.
 - T7: `scripts/propose_fund_mappings.py`: fuzzy merges and new managers proposed into the JSON files only, for review.
-- T9: nightly "Build fund commitments" step in `daily-pipeline.yml`, committed but NOT pushed (a push puts it live).
+- T9: nightly "Build fund commitments" step kept on branch `fund-crowding-nightly` (not on master) until James OKs the review sheet.
 
 **Next**
 - Finish the build plan's tasks 2-9.
