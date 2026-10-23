@@ -18,6 +18,7 @@
 - T1: `funds/identity.py` fund-name parsing and identity keys.
 - T2: `fund_action_extracts`, `funds`, `fund_commitments` models in `database.py`.
 - T3: `funds/extract.py` Haiku per-fund split; summariser now asks for `fund_name` on each action.
+- T4: `funds/build.py` + `scripts/build_fund_commitments.py` (extract new actions, rebuild tables); `data/fund_mappings.json`.
 
 **Next**
 - Finish the build plan's tasks 2-9.
