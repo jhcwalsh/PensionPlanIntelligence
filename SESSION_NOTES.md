@@ -1,5 +1,19 @@
 # Session notes
 
+## 2026-10-23 — Fund aliases applied (Summit dropped), tables rebuilt
+
+**Done**
+- Committed `data/fund_mappings.json` (112 aliases, 42 separate pairs) and `data/manager_mappings.json` (241 new spellings).
+- Summit Partners Growth Equity XI -> Summit Partners XI dropped at James's call and moved to `separate`, so it isn't proposed again.
+- Rebuilt on Neon (`--rebuild-only`, no model calls): funds 1,154 -> 1,043, commitments 1,350 -> 1,271,
+  manager-only 461 -> 453, dropped 200 -> 214 (new "not a manager" spellings such as "Various" now drop).
+
+**Why**
+- The report lists 123 proposal lines; keys proposed twice kept the later, broader target, hence 112 aliases.
+
+**Next**
+- Merge `fund-crowding-nightly` and push when James is ready.
+
 ## 2026-10-22 — Fund crowding tool built ("who else is in this fund?")
 
 **Done**

@@ -1,4 +1,286 @@
 {
-  "aliases": {},
-  "separate": []
+  "aliases": {
+    "a16z capital management llc andreessen horowitz|innovation opportunities|2": "innovation opportunities ii||2",
+    "abry partners|advanced securities iv asf|4": "abry partners|advanced securities|4",
+    "aether|real assets|4": "aether investment partners|real assets|4",
+    "aew capital|partners real estate|9": "aew capital|real estate|9",
+    "angelo gordon|ag realty value|10": "angelo gordon ag realty|ag realty value|10",
+    "ares|asf # infrastructure b|9": "asf|# infrastructure b|9",
+    "artemis investment|real estate partners healthcare|3": "artemis real estate partners|healthcare|3",
+    "artemis investment|real estate partners income and growth|5": "artemis real estate partners|income and growth|5",
+    "bain capital|north america|14": "bain capital||14",
+    "banner ridge|# te|3": "banner ridge partners|# te|3",
+    "basalt|infrastructure partners|5": "basalt infrastructure partners||5",
+    "basis investment|big real estate|3": "basis investment|real estate|3",
+    "bell partners growth and income fund kayne anderson real estate partners vii raith real estate fund iv|kayne anderson real estate partners|7": "kayne anderson real estate|partners|7",
+    "bell partners growth and income fund kayne anderson real estate partners vii raith real estate fund iv|raith real estate|4": "raith capital partners|real estate|4",
+    "berkshire|multifamily credit|4": "berkshire multifamily credit||4",
+    "bernhard capital partners|bcp|2": "bernhard capital partners||2",
+    "big|real estate|3": "basis investment|real estate|3",
+    "blackstone|real estate partners europe|7": "blackstone real estate partners|europe|7",
+    "blackstone|senior direct lending – series|2": "blackstone|senior direct lending series|2",
+    "blackstone|strategic partners|10": "strategic partners blackstone||10",
+    "blue owl capital|real estate|7": "blue owl real estate capital||7",
+    "bpea baring private equity asia|private equity|9": "bpea private equity gp ix sà rl||9",
+    "brookfield asset|strategic real estate partners|5": "brookfield asset||5",
+    "capvest partners|equity partners|4": "capvest partners||4",
+    "capvest partners|equity partners|6": "capvest partners||6",
+    "clayton dubilier and rice|cd and r|11": "clayton dubilier and rice||11",
+    "cross ocean|european special situations|3": "cross ocean||3",
+    "energy capital partners|ecp|5": "energy capital partners||5",
+    "energy capital partners|ecp|6": "energy capital partners||6",
+    "franklin park associates|co-investment|7": "franklin park associates||7",
+    "franklin park associates|venture capital|16": "franklin park associates||16",
+    "gei capital|green equity investors|10": "leonard green and partners||10",
+    "general catalyst|gc creation|3": "general catalyst|creation|3",
+    "genstar capital|partners|9": "genstar capital||9",
+    "goldman sachs and|west street strategic solutions # p|2": "goldman sachs and|west street strategic solutions|2",
+    "goldman sachs and|west street strategic solutions|2": "west street strategic solutions ii||2",
+    "great hill partners|# private equity large market buyout|9": "great hill partners||9",
+    "great hill partners|equity partners|9": "great hill partners||9",
+    "green equity|investors|10": "leonard green and partners||10",
+    "gtcr|partners|15": "gtcr||15",
+    "hamilton lane|jfl equity investors|7": "jfl|equity investors|7",
+    "hamilton lane|stg allegro|2": "stg allegro||2",
+    "hamilton lane|tpg partners|10": "tpg partners||10",
+    "harbourvest partners|dover street|11": "harbourvest partners|dover|11",
+    "heitman|value partners # hvp-iv|4": "heitman|value partners|4",
+    "heitman|value partners|4": "heitman real estate|value partners|4",
+    "hig|europe capital partners|4": "hig capital|europe capital partners|4",
+    "i squared capital|# ust|4": "i squared capital||4",
+    "i squared capital|global infrastructure # ust|4": "i squared capital||4",
+    "i squared capital|global infrastructure|4": "i squared capital||4",
+    "i squared capital|i squared global infrastructure|4": "i squared capital||4",
+    "i squared capital|infrastructure|4": "i squared capital||4",
+    "i squared capital|isq global infrastructure # ust|2": "i squared capital|isq global infrastructure|2",
+    "icg intermediate capital|north american credit partners # – preferred equity|3": "icg intermediate capital|# – preferred equity|3",
+    "insight partners|# growth equity|12": "insight partners||12",
+    "integrum capital partners||2": "integrum capital partners ii||2",
+    "integrum capital|partners|2": "integrum capital partners ii||2",
+    "jf lehman and|jfl equity investors|7": "jfl|equity investors|7",
+    "kayne anderson capital|real estate partners|7": "kayne anderson real estate|partners|7",
+    "kennedy lewis investment|capital partners|4": "kennedy lewis investment||4",
+    "kennedy lewis investment|domestic|4": "kennedy lewis investment||4",
+    "kennedy lewis investment|master|4": "kennedy lewis investment||4",
+    "kkr|real estate partners americas|4": "kkr|real estate partners|4",
+    "kkr|real estate partners america|4": "kkr|real estate partners|4",
+    "lba realty|logistics value|10": "lba realty|value|10",
+    "lba|logistics value|10": "lba realty|value|10",
+    "leonard green and partners|green equity investors|10": "leonard green and partners||10",
+    "lexington partners|capital partners|11": "lexington partners||11",
+    "lexington partners|co-investment partners|6": "lexington partners||6",
+    "lexington partners|lcp|10": "lexington partners||10",
+    "ls power|equity partners|6": "ls power||6",
+    "monarch alternative capital|capital partners|7": "monarch alternative capital||7",
+    "net lease real estate||2": "net lease real estate fund ii||2",
+    "new enterprise associates|nea|19": "new enterprise associates||19",
+    "newport partners|capital|4": "newport capital partners||4",
+    "nordic capital|# beta|12": "nordic capital||12",
+    "oak hc ft|hc-ft partners|6": "oak hc-ft|partners|6",
+    "orbimed|royalty and credit opportunities|3": "orbimed|royalty credit opportunities|3",
+    "paladin|cybersecurity|1": "paladin capital|cybersecurity|1",
+    "peak rock fund iii||3": "peak rock capital||3",
+    "pemberton capital|mid-market debt|5": "pemberton asset|mid-market debt|5",
+    "pemberton capital|strategic credit|4": "pemberton capital||4",
+    "peppertree capital|# qp|10": "peppertree capital||10",
+    "pgim|prisa|3": "pgim||3",
+    "psg equity|europe|3": "psg equity||3",
+    "realterm|logistics|3": "realterm logistics fund iii||3",
+    "realterm|logistics|4": "realterm||4",
+    "reverence capital|partners pe opportunities|4": "reverence capital partners|pe opportunities|4",
+    "roark capital|partners # t|7": "roark capital|partners|7",
+    "siguler guff|small buyout no|6": "siguler guff|small buyout|6",
+    "starwood|distressed opportunity|12": "starwood capital|distressed opportunity|12",
+    "stellex capital|partners|3": "stellex capital||3",
+    "stepstone|crow holdings realty partners|11": "crow holdings capital|realty partners|11",
+    "stone point capital|trident|10": "trident capital||10",
+    "stonepeak|infrastructure|5": "stonepeak partners|infrastructure|5",
+    "stonepeak|opportunities|2": "stonepeak infrastructure partners|opportunities|2",
+    "symphony technology|stg allegro|2": "stg allegro||2",
+    "ta associates|management|15": "ta associates||15",
+    "ta realty|value-add|14": "ta realty||14",
+    "technology impact fund|growth|3": "technology impact growth fund||3",
+    "technology impact partners|growth|3": "technology impact growth fund||3",
+    "technology impact partners||3": "technology impact fund||3",
+    "the carlyle|realty partners|10": "the carlyle|realty|10",
+    "the townsend|chicago pacific founders healthcare real estate|4": "chicago pacific founders|healthcare real estate|4",
+    "the townsend|lyme forest|6": "lyme timber||6",
+    "thoma bravo|partners|16": "thoma bravo||16",
+    "thomas h lee partners|thl equity|10": "thomas h lee partners|equity|10",
+    "tpg capital bd|partners|10": "tpg partners||10",
+    "tpg partners|peppertree|11": "peppertree capital||11",
+    "tpg partners|twin brook direct lending|6": "tpg partners|direct lending|6",
+    "vista equity partners|foundation|4": "vista foundation||4",
+    "warburg pincus|private equity|12": "warburg pincus||12"
+  },
+  "separate": [
+    [
+      "1315 capital|# family access|4",
+      "1315 capital||4"
+    ],
+    [
+      "apax partners|digital growth|3",
+      "apax partners|digital|3"
+    ],
+    [
+      "apollo global|# co-investment vehicle|10",
+      "apollo global||10"
+    ],
+    [
+      "ares|us real estate # co-invest cp|11",
+      "ares|us real estate|11"
+    ],
+    [
+      "artemis real estate partners|income and growth|5",
+      "artemis real estate partners||5"
+    ],
+    [
+      "bernhard capital partners|infrastructure|2",
+      "bernhard capital partners||2"
+    ],
+    [
+      "blackstone|senior direct lending – series # co-investment|2",
+      "blackstone|senior direct lending series|2"
+    ],
+    [
+      "blackstone|senior direct lending – series # co-investment|2",
+      "blackstone|senior direct lending – series|2"
+    ],
+    [
+      "centerbridge partners|special credit partners|5",
+      "centerbridge partners||5"
+    ],
+    [
+      "charterhouse capital partners|# co-invest sma|12",
+      "charterhouse capital partners||12"
+    ],
+    [
+      "flagship pioneering|origination|7",
+      "flagship pioneering||7"
+    ],
+    [
+      "francisco partners|fp # pa co-invest|8",
+      "francisco partners||8"
+    ],
+    [
+      "francisco partners|fp # – nyscrf co-investment|8",
+      "francisco partners||8"
+    ],
+    [
+      "global infrastructure partners|mid-market|5",
+      "global infrastructure partners||5"
+    ],
+    [
+      "harbourvest partners|dover street|11",
+      "harbourvest partners||11"
+    ],
+    [
+      "harbourvest partners|dover|11",
+      "harbourvest partners||11"
+    ],
+    [
+      "icg intermediate capital|# – preferred equity co-invest|3",
+      "icg intermediate capital|# – preferred equity|3"
+    ],
+    [
+      "insight partners|# buyout annex|12",
+      "insight partners||12"
+    ],
+    [
+      "jsl health capital|# special investment vehicle|2",
+      "jsl health capital||2"
+    ],
+    [
+      "kayne anderson capital|real estate partners|7",
+      "kayne anderson capital||7"
+    ],
+    [
+      "new enterprise associates|nea # venture growth equity|18",
+      "new enterprise associates||18"
+    ],
+    [
+      "new enterprise associates|nea # venture growth equity|19",
+      "new enterprise associates|nea|19"
+    ],
+    [
+      "new enterprise associates|nea # venture growth equity|19",
+      "new enterprise associates||19"
+    ],
+    [
+      "new enterprise associates|nea # vge|19",
+      "new enterprise associates|nea|19"
+    ],
+    [
+      "new enterprise associates|nea # vge|19",
+      "new enterprise associates||19"
+    ],
+    [
+      "oceansound partners|# co-invest sidecar n|3",
+      "oceansound partners||3"
+    ],
+    [
+      "onex|partners # leaf cv|5",
+      "onex|partners|5"
+    ],
+    [
+      "peak rock capital|credit|2",
+      "peak rock capital||2"
+    ],
+    [
+      "quantum energy partners|# co-investment|7",
+      "quantum energy partners||7"
+    ],
+    [
+      "sculptor real estate|# c co-investments|5",
+      "sculptor real estate||5"
+    ],
+    [
+      "sdc capital partners|digital infrastructure opportunity|5",
+      "sdc capital partners|digital infrastructure|5"
+    ],
+    [
+      "siguler guff|small buyout no|6",
+      "siguler guff||6"
+    ],
+    [
+      "siguler guff|small buyout|6",
+      "siguler guff||6"
+    ],
+    [
+      "technology impact fund|growth|3",
+      "technology impact fund||3"
+    ],
+    [
+      "technology impact partners|growth|3",
+      "technology impact partners||3"
+    ],
+    [
+      "the carlyle|asia partners|6",
+      "the carlyle|partners|6"
+    ],
+    [
+      "the carlyle|european partners|6",
+      "the carlyle|partners|6"
+    ],
+    [
+      "thrive capital|partners # growth|10",
+      "thrive capital|partners|10"
+    ],
+    [
+      "thrive capital|partners # opportunity|10",
+      "thrive capital|partners|10"
+    ],
+    [
+      "turning rock|# co-investment|4",
+      "turning rock||4"
+    ],
+    [
+      "west street strategic solutions ii|# co-investment c|2",
+      "west street strategic solutions ii||2"
+    ],
+    [
+      "summit partners|growth equity|11",
+      "summit partners||11"
+    ]
+  ]
 }
