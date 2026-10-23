@@ -35,3 +35,15 @@ def test_mock_mode_writes_separate_only(tmp_path, monkeypatch):
     data = json.loads(path.read_text())
     assert data["aliases"] == {}
     assert data["separate"] == [["a|x y|1", "a|x|1"]]
+
+
+def test_same_name_pairs_across_managers():
+    names = {"tpg partners||10": "TPG Partners X, L.P.",
+             "hamilton lane|tpg partners|10": "TPG Partners X, L.P.",
+             "tpg capital bd|partners|10": "TPG Partners X",
+             "tpg partners||9": "TPG Partners IX",
+             "acme||3": "Fund III",
+             "other||3": "Fund III"}
+    assert pfm.same_name_pairs(names, {"aliases": {}, "separate": []}) == [
+        ("hamilton lane|tpg partners|10", "tpg partners||10"),
+        ("tpg capital bd|partners|10", "tpg partners||10")]

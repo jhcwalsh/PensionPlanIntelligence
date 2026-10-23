@@ -24,6 +24,7 @@
 - T7: `scripts/propose_fund_mappings.py`: fuzzy merges and new managers proposed into the JSON files only, for review.
 - T9: nightly "Build fund commitments" step kept on branch `fund-crowding-nightly` (not on master) until James OKs the review sheet.
 - Review fixes: series-bearing raw managers no longer wipe the series (Carlyle Realty VIII ≠ Carlyle Partners VIII); bare "Fund III" is manager-only; no action-total fallback on amounts. Partial names return candidates; the 12-month window is checked per mention. Dedup summaries only count for the original plan; a failing batch is halved and retried.
+- Live check: 3,664 actions extracted for $1.40; 1,154 funds, 1,350 commitments, 76 plans. Precision sample of 50 funds: 0 false merges (sheet in `docs/superpowers/notes/2026-10-22-fund-crowding-review.md`). An exact-name query now beats co-invest vehicles; the proposal script also flags identical fund names filed under different managers.
 
 **Next**
 - Finish the build plan's tasks 2-9.

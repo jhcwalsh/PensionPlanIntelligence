@@ -168,3 +168,10 @@ def test_unnumbered_window_checks_each_mention_not_the_span(s):
     _hold(s, "b", f, first="2023-01-15", last="2026-01-15")
     r = who_else_is_in("Wellington Emerging Markets Fund", exclude_plan="a", session=s, today=TODAY)
     assert r["holders"] == []
+
+
+def test_exact_name_beats_co_invest_vehicles(s):
+    main = _fund(s, "Francisco Partners Fund VIII", "Francisco Partners", "", 8)
+    _fund(s, "FP VIII PA Co-Invest, L.P.", "Francisco Partners", "fp # pa co-invest", 8)
+    fund, _ = resolve_fund(s, "Francisco Partners VIII")
+    assert fund is not None and fund.id == main.id

@@ -46,6 +46,13 @@ def _query_number(tokens: list[str]) -> int | None:
     return nums[-1] if nums else None
 
 
+def _fund_tokens(f: Fund) -> set[str]:
+    toks = set(_search_tokens(f"{f.manager_canonical or ''} {f.canonical_name or ''}"))
+    if f.number is not None:
+        toks.add(str(f.number))
+    return toks
+
+
 def resolve_fund(session, query: str) -> tuple[Fund | None, list[Fund]]:
     funds = session.query(Fund).all()
     q = (query or "").strip()
@@ -64,11 +71,13 @@ def resolve_fund(session, query: str) -> tuple[Fund | None, list[Fund]]:
     for f in funds:
         if qnum is not None and f.number != qnum:
             continue
-        ftoks = set(_search_tokens(f"{f.manager_canonical or ''} {f.canonical_name or ''}"))
-        if f.number is not None:
-            ftoks.add(str(f.number))
-        if set(qtoks) <= ftoks:
+        if set(qtoks) <= _fund_tokens(f):
             cands.append(f)
+    # A candidate whose name is exactly the query wins over co-invest and
+    # sidecar vehicles that merely contain it ("FP VIII PA Co-Invest").
+    exact_tokens = [c for c in cands if _fund_tokens(c) == set(qtoks)]
+    if len(exact_tokens) == 1:
+        return exact_tokens[0], []
     # One candidate is only an answer when the query names its whole series:
     # "Ares Pathfinder" must not resolve to Ares Centre Street Pathfinder Core
     # Plus, nor "Blackstone X" to Blackstone Real Estate Partners X, just

@@ -60,6 +60,32 @@ def candidate_pairs(keys: list[str], mappings: dict) -> list[tuple[str, str]]:
     return sorted(pairs)
 
 
+def same_name_pairs(names: dict[str, str], mappings: dict) -> list[tuple[str, str]]:
+    """Keys whose fund names are identical (same words, same number) but which
+    were filed under different managers — "TPG Partners X" attributed to TPG,
+    to TPG Capital BD and to Hamilton Lane. Each points at the key that strips
+    the most manager words from the name. Names with fewer than two words
+    besides the number ("Fund III") identify nothing and are skipped."""
+    from funds.query import _search_tokens
+
+    aliases = mappings.get("aliases", {})
+    separate = {frozenset(p) for p in mappings.get("separate", [])}
+    groups = defaultdict(list)
+    for key, name in names.items():
+        number = key.split("|")[2]
+        toks = _search_tokens(name or "")
+        if number and key not in aliases and len([t for t in toks if not t.isdigit()]) >= 2:
+            groups[(frozenset(toks), number)].append(key)
+    pairs = []
+    for keys in groups.values():
+        if len({k.split("|")[0] for k in keys}) < 2:
+            continue
+        target = min(keys, key=lambda k: (len(k.split("|")[1].split()), k))
+        pairs += [(k, target) for k in keys
+                  if k != target and frozenset((k, target)) not in separate]
+    return sorted(pairs)
+
+
 def _ask_same(client, a: str, b: str) -> bool:
     msg = client.messages.create(
         model=MODEL_HAIKU, max_tokens=50, temperature=0,
@@ -96,7 +122,7 @@ def main(argv: list[str] | None = None) -> int:
         session.close()
 
     mappings = build.load_fund_mappings()
-    pairs = candidate_pairs(list(names), mappings)
+    pairs = sorted(set(candidate_pairs(list(names), mappings)) | set(same_name_pairs(names, mappings)))
     print(f"New manager strings: {len(new_managers):,}   candidate fund pairs: {len(pairs):,}")
     if args.dry_run:
         return 0
