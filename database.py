@@ -593,6 +593,67 @@ class PlanManagerRoster(Base):
     )
 
 
+class FundActionExtract(Base):
+    """Cache of Haiku's per-fund split of one investment action.
+
+    Keyed by a hash of the action's JSON, so the same action appearing in an
+    agenda, a board pack and a dedup summary is paid for once. Never reads
+    ``documents.extracted_text``. See funds/extract.py.
+    """
+    __tablename__ = "fund_action_extracts"
+
+    action_hash = Column(String(40), primary_key=True)
+    items_json = Column(Text, nullable=False)        # JSON list of per-fund items
+    model = Column(String)
+    created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+
+
+class Fund(Base):
+    """One canonical fund (manager + series + number). Rebuilt wholesale by
+    funds/build.py, so ids are not stable across rebuilds — refer to funds
+    by ``fund_key`` or ``canonical_name``."""
+    __tablename__ = "funds"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    fund_key = Column(String, nullable=False, unique=True)
+    canonical_name = Column(String)
+    manager_canonical = Column(String)
+    series = Column(String)
+    number = Column(Integer)                         # fund number or vintage year
+    asset_class = Column(String)
+
+
+class FundCommitment(Base):
+    """A plan's commitment to a fund, deduplicated across documents.
+
+    ``fund_id`` is null for a manager-only row: a commitment to a manager
+    where no specific fund was named. Those are never merged into a fund.
+    """
+    __tablename__ = "fund_commitments"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    plan_id = Column(String, ForeignKey("plans.id"), nullable=False)
+    fund_id = Column(Integer, ForeignKey("funds.id"))
+    manager_canonical = Column(String)
+    fund_name_raw = Column(String)
+    vehicle = Column(String)
+    asset_class = Column(String)
+    amount_millions = Column(Float)
+    status = Column(String, nullable=False)          # approved|proposed|pipeline|declined|unknown
+    first_seen = Column(String(10))                  # YYYY-MM-DD
+    last_seen = Column(String(10))
+    evidence = Column(Text)                          # JSON: [{document_id, meeting_date, doc_type, url, quote}]
+    match_confidence = Column(String)                # exact|alias|unnumbered|manager_only
+    derived_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("plan_id", "fund_id", name="uq_fund_commitment_plan_fund"),
+        Index("ix_fund_commitments_plan", "plan_id"),
+        Index("ix_fund_commitments_fund", "fund_id"),
+        Index("ix_fund_commitments_manager", "manager_canonical"),
+    )
+
+
 class Publication(Base):
     """One row per scheduled Insights publication, regardless of status.
 

@@ -16,6 +16,7 @@
 
 **Build log** (plan: `docs/superpowers/plans/2026-10-22-fund-crowding.md`)
 - T1: `funds/identity.py` fund-name parsing and identity keys.
+- T2: `fund_action_extracts`, `funds`, `fund_commitments` models in `database.py`.
 
 **Next**
 - Finish the build plan's tasks 2-9.
