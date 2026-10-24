@@ -21,7 +21,7 @@ SRC = (pathlib.Path(__file__).resolve().parents[1] / "app.py").read_text(encodin
 def _reset_app_caches(tmp_db):
     import app as app_module
     caches = (app_module.get_db_session, app_module._crowding_overview,
-              app_module._crowding_leaderboard, app_module._crowding_detail)
+              app_module._crowding_detail)
     for c in caches:
         c.clear()
     yield
@@ -93,3 +93,25 @@ def test_fmt_day():
     import app as app_module
     assert app_module._fmt_day(None) == "—"
     assert app_module._fmt_day("2026-10-03") == "3 Oct 2026"
+
+
+def _crowding_script():
+    import app
+    app.page_crowding()
+
+
+def test_page_renders_and_the_search_box_opens_a_fund():
+    from streamlit.testing.v1 import AppTest
+    _seed()
+    s = get_session()
+    s.add(Fund(fund_key="apex||1", canonical_name="Apex Fund I", manager_canonical="Apex",
+               series="", number=1, asset_class="real_estate"))
+    s.commit()
+    s.close()
+    at = AppTest.from_function(_crowding_script, default_timeout=60).run()
+    assert not at.exception
+    text = " ".join(m.value for m in at.markdown)
+    assert "GTCR Fund XV" in text and "Alpha Retirement" in text
+    at.selectbox(key="crowd_search").set_value("apex||1").run()
+    assert not at.exception
+    assert "Apex Fund I" in " ".join(m.value for m in at.markdown)

@@ -54,8 +54,13 @@ def _fund_tokens(f: Fund) -> set[str]:
 
 
 def resolve_fund(session, query: str) -> tuple[Fund | None, list[Fund]]:
-    funds = session.query(Fund).all()
     q = (query or "").strip()
+    # The Crowding page passes the key itself: fetch one row, not every fund.
+    if "|" in q:
+        hit = session.query(Fund).filter(Fund.fund_key == q).all()
+        if len(hit) == 1:
+            return hit[0], []
+    funds = session.query(Fund).all()
     exact = [f for f in funds if f.fund_key == q
              or (f.canonical_name or "").strip().lower() == q.lower()]
     if len(exact) == 1:
@@ -152,8 +157,8 @@ def _split_rows(rows, fund: Fund, exclude_plan, today, plans) -> tuple[list[dict
 
 
 def _most_crowded(session, today: date, asset_class: str | None = None,
-                  min_holders: int = 2, limit: int = 50) -> list[dict]:
-    funds = {f.id: f for f in session.query(Fund).all()
+                  min_holders: int = 2, limit: int = 50, all_funds=None) -> list[dict]:
+    funds = {f.id: f for f in (all_funds if all_funds is not None else session.query(Fund).all())
              if asset_class is None or f.asset_class == asset_class}
     by_fund: dict[int, list] = defaultdict(list)
     for r in (session.query(FundCommitment)
@@ -198,63 +203,47 @@ def _with_session(fn):
     return wrapper
 
 
-@_with_session
-def who_else_is_in(fund: str, exclude_plan: str | None = None, session=None,
-                   today: date | None = None) -> dict:
-    """Other plans committed to ``fund``, with evidence and coverage."""
-    today = today or date.today()
-    f, candidates = resolve_fund(session, fund)
-    result = {"query": fund, "fund": None,
-              "candidates": [{"name": c.canonical_name, "manager": c.manager_canonical,
-                              "number": c.number} for c in candidates],
-              "holders": [], "pending": [], "same_family_other_vintages": [],
-              "manager_only_mentions": [], "coverage": coverage(session)}
-    if f is None:
-        return result
+def _candidates(candidates: list[Fund]) -> list[dict]:
+    return [{"name": c.canonical_name, "manager": c.manager_canonical, "number": c.number}
+            for c in candidates]
 
-    plans = _plans(session)
-    result["fund"] = _fund_dict(f)
-    result["holders"], result["pending"] = _split(session, f, exclude_plan, today, plans)
+
+def _who_else(session, f: Fund, exclude_plan, today, plans) -> dict:
+    holders, pending = _split(session, f, exclude_plan, today, plans)
+    out = {"fund": _fund_dict(f), "holders": holders, "pending": pending,
+           "same_family_other_vintages": [], "manager_only_mentions": []}
 
     if f.number is not None:
         family = (session.query(Fund)
                   .filter(Fund.manager_canonical == f.manager_canonical, Fund.series == f.series,
                           Fund.number.isnot(None), Fund.number != f.number)
                   .order_by(Fund.number.desc()).all())
+        # One query for every vintage's rows, not one per vintage.
+        rows_by_fund: dict[int, list] = defaultdict(list)
+        if family:
+            for r in (session.query(FundCommitment)
+                      .filter(FundCommitment.fund_id.in_([v.id for v in family]))):
+                rows_by_fund[r.fund_id].append(r)
         for v in family:
-            holders, _ = _split(session, v, exclude_plan, today, plans)
-            if holders:
-                result["same_family_other_vintages"].append({"fund": _fund_dict(v), "holders": holders})
+            v_holders, _ = _split_rows(rows_by_fund[v.id], v, exclude_plan, today, plans)
+            if v_holders:
+                out["same_family_other_vintages"].append({"fund": _fund_dict(v), "holders": v_holders})
 
     mgr_rows = (session.query(FundCommitment)
                 .filter(FundCommitment.fund_id.is_(None),
                         FundCommitment.manager_canonical == f.manager_canonical,
                         FundCommitment.status.notin_(("pipeline", "declined")))
                 .all())
-    result["manager_only_mentions"] = [_entry(r, plans.get(r.plan_id)) for r in mgr_rows
-                                       if r.plan_id != exclude_plan]
-    return result
+    out["manager_only_mentions"] = [_entry(r, plans.get(r.plan_id)) for r in mgr_rows
+                                    if r.plan_id != exclude_plan]
+    return out
 
 
-@_with_session
-def funds_held_alongside(fund: str, exclude_plan: str | None = None, session=None,
-                         today: date | None = None, limit: int = 25) -> dict:
-    """Funds that the holders of ``fund`` also committed to, held by 2+ of them."""
-    today = today or date.today()
-    f, candidates = resolve_fund(session, fund)
-    result = {"query": fund, "fund": None,
-              "candidates": [{"name": c.canonical_name, "manager": c.manager_canonical,
-                              "number": c.number} for c in candidates],
-              "holders_considered": 0, "alongside": [], "coverage": coverage(session)}
-    if f is None:
-        return result
-
-    plans = _plans(session)
-    holders, _ = _split(session, f, exclude_plan, today, plans)
+def _alongside(session, f: Fund, holders: list[dict], plans, limit: int) -> dict:
     holder_ids = {h["plan_id"] for h in holders}
-    result["fund"], result["holders_considered"] = _fund_dict(f), len(holder_ids)
+    out = {"fund": _fund_dict(f), "holders_considered": len(holder_ids), "alongside": []}
     if not holder_ids:
-        return result
+        return out
 
     by_fund: dict[int, set[str]] = defaultdict(set)
     for fund_id, plan_id in (session.query(FundCommitment.fund_id, FundCommitment.plan_id)
@@ -271,8 +260,57 @@ def funds_held_alongside(fund: str, exclude_plan: str | None = None, session=Non
              "count": len(ps), "share_of_holders": round(len(ps) / len(holder_ids), 3)}
             for fid, ps in keep.items()]
     rows.sort(key=lambda r: (-r["count"], r["fund"]["name"] or ""))
-    result["alongside"] = rows[:limit]
+    out["alongside"] = rows[:limit]
+    return out
+
+
+@_with_session
+def who_else_is_in(fund: str, exclude_plan: str | None = None, session=None,
+                   today: date | None = None) -> dict:
+    """Other plans committed to ``fund``, with evidence and coverage."""
+    today = today or date.today()
+    f, candidates = resolve_fund(session, fund)
+    result = {"query": fund, "fund": None, "candidates": _candidates(candidates),
+              "holders": [], "pending": [], "same_family_other_vintages": [],
+              "manager_only_mentions": [], "coverage": coverage(session)}
+    if f is not None:
+        result.update(_who_else(session, f, exclude_plan, today, _plans(session)))
     return result
+
+
+@_with_session
+def funds_held_alongside(fund: str, exclude_plan: str | None = None, session=None,
+                         today: date | None = None, limit: int = 25) -> dict:
+    """Funds that the holders of ``fund`` also committed to, held by 2+ of them."""
+    today = today or date.today()
+    f, candidates = resolve_fund(session, fund)
+    result = {"query": fund, "fund": None, "candidates": _candidates(candidates),
+              "holders_considered": 0, "alongside": [], "coverage": coverage(session)}
+    if f is not None:
+        plans = _plans(session)
+        holders, _ = _split(session, f, exclude_plan, today, plans)
+        result.update(_alongside(session, f, holders, plans, limit))
+    return result
+
+
+@_with_session
+def fund_detail(fund: str, exclude_plan: str | None = None, session=None,
+                today: date | None = None, alongside_limit: int = 25) -> dict:
+    """``who_else_is_in`` and ``funds_held_alongside`` in one pass, for the
+    Crowding page: the fund, plans, coverage and holders are read once."""
+    today = today or date.today()
+    f, candidates = resolve_fund(session, fund)
+    cov = coverage(session)
+    who = {"query": fund, "fund": None, "candidates": _candidates(candidates),
+           "holders": [], "pending": [], "same_family_other_vintages": [],
+           "manager_only_mentions": [], "coverage": cov}
+    along = {"query": fund, "fund": None, "candidates": _candidates(candidates),
+             "holders_considered": 0, "alongside": [], "coverage": cov}
+    if f is not None:
+        plans = _plans(session)
+        who.update(_who_else(session, f, exclude_plan, today, plans))
+        along.update(_alongside(session, f, who["holders"], plans, alongside_limit))
+    return {"who": who, "alongside": along}
 
 
 @_with_session
@@ -285,9 +323,12 @@ def most_crowded(asset_class: str | None = None, min_holders: int = 2, limit: in
 
 @_with_session
 def overview(session=None, today: date | None = None) -> dict:
-    """Headline counts for the Crowding page, plus every fund as {key: name}."""
-    names = sorted(((k, n) for k, n in session.query(Fund.fund_key, Fund.canonical_name) if n),
+    """Headline counts for the Crowding page, every fund as {key: name}, and
+    the full ranked crowded list, so the page filters it by asset class
+    without going back to the database."""
+    funds = session.query(Fund).all()
+    names = sorted(((f.fund_key, f.canonical_name) for f in funds if f.canonical_name),
                    key=lambda kv: (kv[1].lower(), kv[0]))
-    return {"funds": session.query(func.count(Fund.id)).scalar() or 0,
-            "crowded": len(_most_crowded(session, today or date.today(), limit=10**9)),
+    crowded = _most_crowded(session, today or date.today(), limit=10**9, all_funds=funds)
+    return {"funds": len(funds), "crowded": len(crowded), "crowded_funds": crowded,
             "fund_index": dict(names), "coverage": coverage(session)}

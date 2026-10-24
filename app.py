@@ -1607,18 +1607,17 @@ def _crowding_overview() -> dict:
     return fund_query.overview(session=get_db_session())
 
 
-@st.cache_data(ttl=900, show_spinner=False)
 def _crowding_leaderboard(asset_class: str | None) -> list[dict]:
-    from funds import query as fund_query
-    return fund_query.most_crowded(asset_class=asset_class, limit=200, session=get_db_session())
+    # Filtered from the overview's full list: switching class costs no query.
+    rows = _crowding_overview()["crowded_funds"]
+    return [r for r in rows if asset_class is None or r["fund"]["asset_class"] == asset_class][:200]
 
 
 @st.cache_data(ttl=900, show_spinner=False)
 def _crowding_detail(fund: str) -> tuple[dict, dict]:
     from funds import query as fund_query
-    session = get_db_session()
-    return (fund_query.who_else_is_in(fund, session=session),
-            fund_query.funds_held_alongside(fund, session=session, limit=8))
+    d = fund_query.fund_detail(fund, session=get_db_session(), alongside_limit=8)
+    return d["who"], d["alongside"]
 
 
 def _best_evidence(entry: dict) -> dict:
@@ -1767,6 +1766,14 @@ def page_crowding():
         f'<div><div class="eyebrow">Latest board date</div><div class="cr-num">{_fmt_day(cov["latest_meeting"])}</div></div>'
         '</div>', unsafe_allow_html=True)
 
+    _crowding_body(ov)
+    st.caption(cov["caveat"] + f" Data as of {(cov['as_of'] or '')[:10]}.")
+
+
+@st.fragment
+def _crowding_body(ov: dict) -> None:
+    """The table, search and detail. A fragment, so picking a row, a class or
+    a fund reruns only this, not every tab in the app."""
     left, right = st.columns([11, 13], gap="large")
     with left:
         st.markdown('<div class="eyebrow">Most crowded</div>', unsafe_allow_html=True)
@@ -1803,8 +1810,6 @@ def page_crowding():
         fund = st.session_state.get("crowd_fund") or (board[0]["fund"]["key"] if board else None)
         if fund:
             _render_crowding_detail(fund)
-
-    st.caption(cov["caveat"] + f" Data as of {(cov['as_of'] or '')[:10]}.")
 
 
 # ---------------------------------------------------------------------------

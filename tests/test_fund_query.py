@@ -6,7 +6,8 @@ import pytest
 
 import database
 from database import Fund, FundCommitment, Plan
-from funds.query import funds_held_alongside, most_crowded, overview, resolve_fund, who_else_is_in
+from funds.query import (fund_detail, funds_held_alongside, most_crowded, overview, resolve_fund,
+                         who_else_is_in)
 
 TODAY = date(2026, 10, 22)
 
@@ -227,3 +228,60 @@ def test_overview_counts_and_indexes_funds(s):
     assert ov["funds"] == 2 and ov["crowded"] == 1
     assert list(ov["fund_index"].values()) == ["Apex Fund I", "GTCR Fund XV"]
     assert ov["coverage"]["plans_searched"] == 2
+
+
+def test_overview_carries_the_ranked_crowded_funds(s):
+    f = _fund(s, "GTCR Fund XV", "GTCR", "", 15)
+    g = _fund(s, "TPG Partners X", "TPG", "partners", 10)
+    for p in ("a", "b", "d"):
+        _hold(s, p, f)
+    for p in ("a", "b"):
+        _hold(s, p, g)
+    ov = overview(session=s, today=TODAY)
+    assert ov["crowded_funds"] == most_crowded(limit=10**9, session=s, today=TODAY)
+    assert [r["fund"]["name"] for r in ov["crowded_funds"]] == ["GTCR Fund XV", "TPG Partners X"]
+
+
+def _family(s, vintages):
+    funds = [_fund(s, f"KKR North America Fund {n}", "KKR", "north america", n) for n in vintages]
+    for f in funds:
+        _hold(s, "a", f)
+        _hold(s, "b", f)
+    x = _fund(s, "X Fund I", "X", "", 1)
+    _hold(s, "a", x)
+    _hold(s, "b", x)
+    _hold(s, "c", None)  # unrelated manager-only row
+    mgr = FundCommitment(plan_id="d", fund_id=None, manager_canonical="KKR", status="approved",
+                         evidence="[]", match_confidence="manager_only")
+    s.add(mgr)
+    s.commit()
+    return funds[-1]
+
+
+def test_fund_detail_matches_the_separate_calls(s):
+    f = _family(s, [12, 13, 14])
+    d = fund_detail(f.fund_key, session=s, today=TODAY, alongside_limit=8)
+    assert d["who"] == who_else_is_in(f.fund_key, session=s, today=TODAY)
+    assert d["alongside"] == funds_held_alongside(f.fund_key, session=s, today=TODAY, limit=8)
+    assert [v["fund"]["number"] for v in d["who"]["same_family_other_vintages"]] == [13, 12]
+    assert len(d["who"]["manager_only_mentions"]) == 1
+
+
+def test_fund_detail_query_count_does_not_grow_with_vintages(s):
+    from sqlalchemy import event
+    f = _family(s, [1, 2])
+
+    def queries():
+        n = [0]
+        listener = lambda *a, **k: n.__setitem__(0, n[0] + 1)
+        event.listen(database.engine, "before_cursor_execute", listener)
+        try:
+            fund_detail(f.fund_key, session=s, today=TODAY)
+        finally:
+            event.remove(database.engine, "before_cursor_execute", listener)
+        return n[0]
+
+    few = queries()
+    for n in (3, 4, 5, 6):
+        _hold(s, "a", _fund(s, f"KKR North America Fund {n}", "KKR", "north america", n))
+    assert queries() == few

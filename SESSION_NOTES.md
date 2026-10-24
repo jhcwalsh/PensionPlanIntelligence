@@ -20,6 +20,13 @@
 - LACERS "Notification of commitment ... (referenced from Sept 8 minutes)" rows dropped to proposed.
   Probably a miss, not a false holder.
 
+**Crowding speed**
+- Table, search and detail are now an `@st.fragment`. Every tab renders on every rerun, so each click used
+  to re-run all ~15 pages. `overview()` carries the full ranked list (class filter makes no query) and the
+  new `fund_detail()` makes one pass: cold first load ~1.7s → ~0.65s, a new fund 0.46s → 0.33s.
+- The full app never reached idle in a local browser in 15 minutes, before and after the change, so the
+  per-click gain in the full app was not measured. It's the same unexplained local stall as on 23 Oct.
+
 ## 2026-10-23 (later) — Fund Crowding tab in the app (admin only)
 
 **Done**
