@@ -44,14 +44,14 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM Sync with remote so the pipeline runs against the latest DB.
-echo [%TIME%] git pull --rebase >> "%LOG%"
-git pull --rebase origin master >> "%LOG%" 2>&1
+REM Pick up the latest code. The data is in Postgres, so this is a nicety, not
+REM a prerequisite: a dirty tree or unpushed local commits must not stop the
+REM catalogue (a dirty tree made a rebasing pull refuse and skip the 17 Oct run).
+REM --ff-only never rewrites local commits; on failure, run on the code we have.
+echo [%TIME%] git pull --ff-only >> "%LOG%"
+git pull --ff-only origin master >> "%LOG%" 2>&1
 if errorlevel 1 (
-    echo [%TIME%] pull --rebase failed, aborting rebase >> "%LOG%"
-    git rebase --abort >> "%LOG%" 2>&1
-    python -m scripts.notify_failure %TASK% git_pull "%LOG%" %ERRORLEVEL%
-    exit /b 1
+    echo [%TIME%] WARNING: pull failed, carrying on with the local code >> "%LOG%"
 )
 
 echo [%TIME%] discover_video_sources.py >> "%LOG%"

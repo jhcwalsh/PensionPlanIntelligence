@@ -216,6 +216,18 @@ def test_the_local_recordings_job_does_not_push():
     assert "git push" not in bat
 
 
+def test_the_local_recordings_job_survives_a_failed_pull():
+    """On 2026-10-17 `git pull --rebase` refused a dirty working tree and the
+    job exited before polling a single source. The data is in Postgres, so the
+    pull only refreshes code: a failure must warn and carry on, and the job must
+    never rebase local commits that have not been pushed yet."""
+    bat = (ROOT / "scripts" / "run_recordings.bat").read_text(encoding="utf-8")
+    assert "--rebase" not in bat
+    assert "git pull --ff-only" in bat
+    pull_block = bat.split("git pull --ff-only", 1)[1].split("discover_video_sources", 1)[0]
+    assert "exit /b" not in pull_block
+
+
 # ---------------------------------------------------------------------------
 # Duplicate keys
 #

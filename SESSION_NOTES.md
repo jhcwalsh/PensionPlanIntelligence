@@ -35,11 +35,13 @@
   7 overdue (ERS Texas, SCERS, Wyoming...); performance reports from 1 plan; recordings for 45.
 - Recordings: the weekly catalogue hung on 10 Oct and failed on 17 Oct (`git pull` refuses a dirty tree);
   downloads have been off by design since July. Asked James about downloads and the `git pull` fix.
+- Later: `run_recordings.bat` now pulls `--ff-only` and carries on with local code if the pull fails (it
+  never rebases unpushed commits). Deleted the dead PensionPipeline-Daily/-IPS/-Monthly scheduled tasks
+  (their .bat files were gone; they failed every run). Pushed to origin.
 
 **Next**
-1. Push (James's call): the fund data is already live in Neon, but the code isn't on master yet.
-2. Recordings: soften the `git pull` in `run_recordings.bat` and add a source timeout; decide on downloads.
-3. An email alert from the coverage checks, and why the full app never settles locally.
+1. Recordings: add a per-source timeout (the 10 Oct run hung at source 71 of 95); decide on downloads.
+2. An email alert from the coverage checks, and why the full app never settles locally.
 
 ## 2026-10-23 (later) — Fund Crowding tab in the app (admin only)
 
