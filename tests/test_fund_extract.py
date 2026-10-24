@@ -54,3 +54,11 @@ def test_summarizer_prompt_asks_for_fund_name():
     from summarizer import build_extraction_prompt
     doc = SimpleNamespace(meeting_date=datetime(2026, 3, 20), doc_type="minutes")
     assert '"fund_name"' in build_extraction_prompt(doc, "Test Plan", "text")
+
+
+def test_action_hash_changes_with_the_prompt(monkeypatch):
+    import funds.extract as fx
+    a = {"action": "commitment", "description": "GTCR Fund XV"}
+    before = action_hash(a)
+    monkeypatch.setattr(fx, "_SYSTEM", fx._SYSTEM + "\nA new rule.")
+    assert action_hash(a) != before

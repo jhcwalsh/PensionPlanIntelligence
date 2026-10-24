@@ -16,6 +16,7 @@ file. Nothing here merges on similarity: a false match is worse than a miss.
 from __future__ import annotations
 
 import json
+import re
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -106,12 +107,23 @@ def collect_actions(session) -> list[tuple[ActionInput, dict]]:
 def extract_pending(session, client, limit: int | None = None) -> tuple[int, int]:
     done = {h for (h,) in session.query(FundActionExtract.action_hash)}
     pending: dict[str, ActionInput] = {}
+    current = set()
     for inp, _ in collect_actions(session):
+        current.add(inp.action_hash)
         if inp.action_hash not in done:
             pending.setdefault(inp.action_hash, inp)
+    # Rows no current action hashes to: made under an older prompt or model,
+    # or for a summary since replaced. Nothing can read them again.
+    stale = sorted(done - current)
+    for i in range(0, len(stale), 500):
+        (session.query(FundActionExtract)
+         .filter(FundActionExtract.action_hash.in_(stale[i:i + 500]))
+         .delete(synchronize_session=False))
+    session.commit()
     todo = list(pending.values())[:limit] if limit else list(pending.values())
 
     extracted = failed = 0
+    results: dict[str, list[dict]] = {}
     # A batch that fails (typically a response cut off by max_tokens on a
     # bundle-heavy batch) is halved and retried, so one dense batch cannot
     # fail the same way every night.
@@ -133,8 +145,67 @@ def extract_pending(session, client, limit: int | None = None) -> tuple[int, int
             session.add(FundActionExtract(action_hash=h, items_json=json.dumps(items),
                                           model="mock" if client is None else MODEL))
         session.commit()
+        results.update(result)
         extracted += len(result)
+    _retry_dropped_names(session, client, [i for i in todo if i.action_hash in results], results)
     return extracted, failed
+
+
+# "Commitment of up to $15M to ...", "Approve $20M ...": a proposal's wording.
+_PROPOSAL_WORDING = re.compile(
+    r"^\s*(commitment|investment|additional (investment|commitment)|new commitment|"
+    r"proposed|recommend\w*|approve|commit|invest)\b", re.I)
+_DECIDED = re.compile(r"\b(approved|committed|authori[sz]ed|closed|finali[sz]ed|adopted|funded|"
+                      r"completed|made)\b", re.I)
+
+
+def _status(item: dict, inp: ActionInput) -> str:
+    """Haiku's status, except that a bare proposal in an agenda or board pack
+    is never approved. Those documents put items to the board before the
+    vote; Haiku called about a quarter of them approved on 2026-10-24
+    despite the prompt, and a false holder is worse than a missed one."""
+    status = item.get("status") or "unknown"
+    desc = inp.action.get("description") or ""
+    if (status == "approved" and inp.doc_type in ("agenda", "board_pack")
+            and _PROPOSAL_WORDING.search(desc) and not _DECIDED.search(desc)):
+        return "proposed"
+    return status
+
+
+# A numbered fund named in the text: "Ecosystem Investment Partners IV",
+# "Fund 7". Used only to decide what to ask again, never to name a fund.
+_NAMED_FUND = re.compile(
+    r"\b(fund|partners|capital|equity|credit|opportunities|infrastructure|ventures|"
+    r"growth|real estate|secondaries)\b[^,;.]{0,40}?\b([ivx]{1,5}|[1-9]\d?)\b", re.I)
+RETRY_BATCH = 10
+
+
+def _retry_dropped_names(session, client, todo: list[ActionInput], results: dict) -> None:
+    """Ask again, in small batches, for actions whose text names a numbered
+    fund but whose extraction named none. In 40-action batches Haiku
+    sometimes returns a null fund name it gets right on a second look; the
+    2026-10-24 full re-extract lost 309 that way."""
+    lost = [inp for inp in todo
+            if results.get(inp.action_hash)
+            and all(not i.get("fund_name") for i in results[inp.action_hash])
+            and _NAMED_FUND.search(inp.action.get("description") or "")]
+    recovered = 0
+    for i in range(0, len(lost), RETRY_BATCH):
+        batch = lost[i:i + RETRY_BATCH]
+        try:
+            result = extract_batch(client, batch)
+        except Exception as exc:  # noqa: BLE001 - the first answer stands
+            session.rollback()
+            print(f"  name retry FAILED: {type(exc).__name__}: {exc}")
+            continue
+        for h, items in result.items():
+            if any(it.get("fund_name") for it in items):
+                row = session.get(FundActionExtract, h)
+                row.items_json = json.dumps(items)
+                recovered += 1
+        session.commit()
+    if lost:
+        print(f"  asked again for {len(lost)} dropped fund names, recovered {recovered}")
 
 
 def _canonical_manager(raw: str | None, mappings: dict) -> str | None:
@@ -206,7 +277,7 @@ def rebuild(session) -> dict:
             display = _canonical_manager(raw_mgr, manager_map)
             mnorm = norm_manager(display)
             ac = canonical_asset_class(item.get("asset_class") or act.get("asset_class"), asset_map)
-            obs = {**ctx, "status": item.get("status") or "unknown", "amount": amount,
+            obs = {**ctx, "status": _status(item, inp), "amount": amount,
                    "fund_name_raw": fund_name, "asset_class": None if ac == "unmapped" else ac,
                    "quote": (act.get("description") or "")[:QUOTE_CHARS],
                    "vehicle": None, "aliased": False}

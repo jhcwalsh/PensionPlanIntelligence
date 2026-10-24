@@ -33,17 +33,38 @@ For each action, output a list with one item per DISTINCT fund named:
                  one total covers several funds, do not copy the total onto
                  each fund.
   status         one of:
-                 approved  - the board voted to approve it, or a closing is recorded
-                 proposed  - on the agenda for approval, or a staff/consultant
-                             recommendation put to this board for a vote
-                 pipeline  - a consultant pipeline, due-diligence list, or fund
-                             "under consideration" with no vote sought yet
+                 approved  - the board approved it, the commitment was made or
+                             closed, or it is an existing holding
+                 proposed  - put to this board for a vote that has not happened yet
+                 pipeline  - a pipeline, due-diligence or "under consideration"
+                             list, or an intent or discussion, with no vote sought
                  declined  - rejected, withdrawn or tabled
                  unknown   - none of the above can be told
   asset_class    e.g. Private Equity, Private Credit, Real Estate, Infrastructure, or null
 
-Minutes usually record approvals; agendas and board packs usually carry
-proposals. An action that is not a commitment to any fund gets an empty list.
+How to decide status. Go by the wording of the description first; doc_type
+only breaks ties when the wording could go either way.
+- Past tense recording a decision or a done deal ("Approved", "Committed",
+  "Authorized", "Closed", "Finalized", "Adopted", "Funded") is approved, in
+  any doc_type. Agendas and board packs often report commitments already
+  made, such as monthly transaction reports.
+- An approval "subject to" legal review, due diligence or final terms is
+  still approved.
+- An imperative or a noun phrase with no verb of decision ("Approve $20M
+  commitment to ...", "Commit up to $50M to ...", "Commitment of up to $15M
+  to ...") is proposed in an agenda or board pack, because those documents
+  put items to the board before the vote. In minutes it is approved: there
+  it is the motion recorded.
+- A staff or consultant recommendation, or an item "considered" by the
+  board, is proposed, not pipeline: a recommendation is put to a vote. "Under review", "intent to", "discussed", "presented"
+  and "potential" with no vote sought is pipeline. None of these is
+  approved unless the same description also says it was approved or
+  committed.
+- Existing commitments listed in performance reports or financial
+  statements are approved.
+- When unsure between approved and anything else, do not say approved.
+
+An action that is not a commitment to any fund gets an empty list.
 
 Output ONLY a JSON object mapping each input index (as a string) to its list.
 No prose, no code fences."""
@@ -58,8 +79,11 @@ class ActionInput:
 
 
 def action_hash(action: dict) -> str:
+    """Cache key for one action's extraction. The model and the prompt are
+    part of it, so editing either re-extracts every action on the next run."""
     return hashlib.sha1(
-        json.dumps(action, sort_keys=True, ensure_ascii=False).encode("utf-8")
+        (MODEL + "\n" + _SYSTEM + "\n"
+         + json.dumps(action, sort_keys=True, ensure_ascii=False)).encode("utf-8")
     ).hexdigest()
 
 

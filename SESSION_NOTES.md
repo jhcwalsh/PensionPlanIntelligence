@@ -1,5 +1,25 @@
 # Session notes
 
+## 2026-10-24 — Fund status tightened and re-extracted; Crowding faster; Coverage tab
+
+**Done**
+- Fund status: the Haiku prompt now goes by wording first, so past-tense "Committed $325M to Lux IX" in a
+  CalPERS agenda is approved. A bare "Commitment of up to $X" in an agenda or board pack is never a
+  holder, and that is enforced in code (`build._status`) because Haiku broke the rule about 27% of the time.
+- The cache key includes the model and the prompt, and stale rows are pruned. Any prompt edit re-extracts
+  everything on the next run (~$1.40).
+- Full re-extract (3,832 actions) dropped fund names for 309 actions that Haiku names correctly on a
+  second look. `_retry_dropped_names` now asks again in batches of 10; it was run on the live cache too.
+- Result: funds 1,043 → 1,131, approved holder rows 927 → 1,050, funds with 2+ holders 97 → 104.
+  Prompt eval on 30 labelled real cases: 24 → 26 right; the 4 left are proposed-vs-pipeline only.
+- Review sheet quotes the approving document. The three "false approvals" in the 22 Oct review were right
+  all along: the sheet had quoted an earlier agenda row.
+
+**Broken / unsure**
+- About 90 old holder rows changed key, because names now parse differently; spot-checked, not reviewed one by one.
+- LACERS "Notification of commitment ... (referenced from Sept 8 minutes)" rows dropped to proposed.
+  Probably a miss, not a false holder.
+
 ## 2026-10-23 (later) — Fund Crowding tab in the app (admin only)
 
 **Done**

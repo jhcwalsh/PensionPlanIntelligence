@@ -18,6 +18,13 @@ from collections import defaultdict
 from database import Fund, FundCommitment, Plan, get_session
 
 
+def _quote(evidence: list[dict]) -> str:
+    """The quote from a document that approved the commitment. A holder's
+    earlier agenda row ("under review") is not what made it a holder."""
+    ranked = sorted(evidence, key=lambda e: e.get("status") == "approved", reverse=True)
+    return ranked[0].get("quote") or "" if ranked else ""
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="scripts.fund_review_sheet")
     parser.add_argument("--n", type=int, default=50)
@@ -42,8 +49,7 @@ def main(argv: list[str] | None = None) -> int:
             f = funds[fid]
             lines += [f"## {f.canonical_name}", f"`{f.fund_key}`", ""]
             for c in sorted(by_fund[fid], key=lambda c: c.plan_id):
-                ev = json.loads(c.evidence or "[]")
-                quote = ev[0]["quote"] if ev else ""
+                quote = _quote(json.loads(c.evidence or "[]"))
                 amt = f"${c.amount_millions:g}M" if c.amount_millions is not None else "n/a"
                 lines.append(f"- **{plans.get(c.plan_id, c.plan_id)}**: \"{c.fund_name_raw}\", "
                              f"{amt}, {c.last_seen or 'undated'}, {c.match_confidence}. {quote}")

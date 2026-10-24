@@ -209,3 +209,47 @@ def test_failing_batch_is_split_and_retried(s, monkeypatch):
     monkeypatch.setattr(build, "extract_batch", picky)
     _seed(s, "p", 1, [_commit(f"Fund Co Fund {n}", "Fund Co", n) for n in (1, 2, 3)])
     assert build.extract_pending(s, None) == (3, 0)
+
+
+def test_prompt_change_reextracts_and_prunes_the_stale_cache(s, monkeypatch):
+    import funds.extract as fx
+    _seed(s, "p", 1, [_commit("TPG Partners X", "TPG", 40)])
+    assert build.extract_pending(s, None) == (1, 0)
+    monkeypatch.setattr(fx, "_SYSTEM", fx._SYSTEM + "\nA new rule.")
+    assert build.extract_pending(s, None) == (1, 0)
+    assert s.query(FundActionExtract).count() == 1
+
+
+def test_a_dropped_fund_name_is_asked_again_in_a_small_batch(s, monkeypatch):
+    real = build.extract_batch
+    calls = []
+
+    def lazy_then_right(client, batch):
+        calls.append(len(batch))
+        out = real(client, batch)
+        if len(calls) == 1:  # the big first pass names nothing
+            return {h: [{**i, "fund_name": None} for i in items] for h, items in out.items()}
+        return out
+
+    monkeypatch.setattr(build, "extract_batch", lazy_then_right)
+    named = _commit("Committed $45 million to Ecosystem Investment Partners IV, LP", "EIP")
+    unnamed = _commit("Approved a real estate allocation with Almanac", "Almanac")
+    _seed(s, "p", 1, [named, unnamed])
+    assert build.extract_pending(s, None) == (2, 0)
+    assert calls == [2, 1]  # only the action whose text names a numbered fund is retried
+    items = {r.action_hash: json.loads(r.items_json) for r in s.query(FundActionExtract)}
+    assert items[action_hash(named)][0]["fund_name"].startswith("Committed $45 million")
+    assert items[action_hash(unnamed)][0]["fund_name"] is None
+
+
+@pytest.mark.parametrize("desc, doc_type, expected", [
+    ("Commitment of up to $120 million to Francisco Partners VIII", "board_pack", "proposed"),
+    ("Approve $25 Million Commitment to Audax Private Equity Fund VIII", "agenda", "proposed"),
+    ("Commitment of up to $120 million to Francisco Partners VIII", "minutes", "approved"),
+    ("Committed $50 million to Francisco Partners VIII", "board_pack", "approved"),
+    ("Commitment to Francisco Partners VIII, approved by the board", "agenda", "approved"),
+])
+def test_a_bare_proposal_in_an_agenda_or_pack_is_not_a_holder(s, desc, doc_type, expected):
+    _seed(s, "p", 1, [_commit(desc, "Francisco Partners")], doc_type=doc_type)
+    _build(s)
+    assert s.query(FundCommitment).one().status == expected
