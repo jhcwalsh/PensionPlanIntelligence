@@ -89,8 +89,8 @@ def resolve_fund(session, query: str) -> tuple[Fund | None, list[Fund]]:
 
 
 def _fund_dict(f: Fund) -> dict:
-    return {"name": f.canonical_name, "manager": f.manager_canonical, "series": f.series,
-            "number": f.number, "asset_class": f.asset_class}
+    return {"name": f.canonical_name, "key": f.fund_key, "manager": f.manager_canonical,
+            "series": f.series, "number": f.number, "asset_class": f.asset_class}
 
 
 def _d(s: str | None) -> date | None:
@@ -116,6 +116,10 @@ def _plans(session) -> dict[str, Plan]:
 def _split(session, fund: Fund, exclude_plan, today, plans) -> tuple[list[dict], list[dict]]:
     """Approved holders and pending rows for one fund, after the window rule."""
     rows = session.query(FundCommitment).filter(FundCommitment.fund_id == fund.id).all()
+    return _split_rows(rows, fund, exclude_plan, today, plans)
+
+
+def _split_rows(rows, fund: Fund, exclude_plan, today, plans) -> tuple[list[dict], list[dict]]:
     anchor = today
     if fund.number is None and exclude_plan:
         own = next((r for r in rows if r.plan_id == exclude_plan and r.last_seen), None)
@@ -145,6 +149,31 @@ def _split(session, fund: Fund, exclude_plan, today, plans) -> tuple[list[dict],
     holders.sort(key=lambda h: h["last_seen"] or "", reverse=True)
     pending.sort(key=lambda h: h["last_seen"] or "", reverse=True)
     return holders, pending
+
+
+def _most_crowded(session, today: date, asset_class: str | None = None,
+                  min_holders: int = 2, limit: int = 50) -> list[dict]:
+    funds = {f.id: f for f in session.query(Fund).all()
+             if asset_class is None or f.asset_class == asset_class}
+    by_fund: dict[int, list] = defaultdict(list)
+    for r in (session.query(FundCommitment)
+              .filter(FundCommitment.fund_id.isnot(None),
+                      FundCommitment.status.notin_(("pipeline", "declined")))):
+        if r.fund_id in funds:
+            by_fund[r.fund_id].append(r)
+    plans = _plans(session)
+    out = []
+    for fid, rows in by_fund.items():
+        holders, _ = _split_rows(rows, funds[fid], None, today, plans)
+        if len(holders) < min_holders:
+            continue
+        amounts = [h["amount_millions"] for h in holders if h["amount_millions"] is not None]
+        out.append({"fund": _fund_dict(funds[fid]), "holders": len(holders),
+                    "total_millions": sum(amounts) if amounts else None,
+                    "plans": sorted(h["plan_name"] or h["plan_id"] for h in holders),
+                    "latest": max((h["last_seen"] or "" for h in holders), default="") or None})
+    out.sort(key=lambda r: (-r["holders"], -(r["total_millions"] or 0), r["fund"]["name"] or ""))
+    return out[:limit]
 
 
 def coverage(session) -> dict:
@@ -244,3 +273,21 @@ def funds_held_alongside(fund: str, exclude_plan: str | None = None, session=Non
     rows.sort(key=lambda r: (-r["count"], r["fund"]["name"] or ""))
     result["alongside"] = rows[:limit]
     return result
+
+
+@_with_session
+def most_crowded(asset_class: str | None = None, min_holders: int = 2, limit: int = 50,
+                 session=None, today: date | None = None) -> list[dict]:
+    """Funds ranked by how many plans hold them (approved commitments, after
+    the unnumbered-fund window), with summed stated amounts."""
+    return _most_crowded(session, today or date.today(), asset_class, min_holders, limit)
+
+
+@_with_session
+def overview(session=None, today: date | None = None) -> dict:
+    """Headline counts for the Crowding page, plus every fund as {key: name}."""
+    names = sorted(((k, n) for k, n in session.query(Fund.fund_key, Fund.canonical_name) if n),
+                   key=lambda kv: (kv[1].lower(), kv[0]))
+    return {"funds": session.query(func.count(Fund.id)).scalar() or 0,
+            "crowded": len(_most_crowded(session, today or date.today(), limit=10**9)),
+            "fund_index": dict(names), "coverage": coverage(session)}

@@ -1,5 +1,26 @@
 # Session notes
 
+## 2026-10-23 (later) — Fund Crowding tab in the app (admin only)
+
+**Done**
+- New `Crowding` tab behind the admin password (`app.py: page_crowding`): headline strip, most-crowded
+  table with asset-class filter, fund search, and a fund view with a commitment timeline, each holder's
+  board quote linked to its source document, pending votes and "also held by these plans".
+- `funds/query.py`: `most_crowded()` and `overview()`; holder rules shared with `who_else_is_in`
+  (`_split_rows`), so the page, the MCP tool and the ranking can't disagree. Fund dicts now carry `key`.
+- Tests: `tests/test_crowding_page.py`, 4 new in `tests/test_fund_query.py`. Suite 1,186 passed.
+
+**Why**
+- Admin-only until the "approved" test is tightened (about 3 in 120 holder rows are really proposals).
+
+**Broken / unsure**
+- Checked in a real browser via a page-only harness, not the full app: locally the full app stalls on
+  the CAFR tab for 8+ minutes, and does so at HEAD without this change too. Unexplained; worth a look.
+- Example of the status issue: San Diego's "Approved $20 Million Commitment" to FP VIII is filed as proposed.
+
+**Next**
+- Push so it reaches Render (James's call). Then tighten the status prompt and re-extract (~$1.40).
+
 ## 2026-10-23 — Fund aliases applied (Summit dropped), tables rebuilt
 
 **Done**

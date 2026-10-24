@@ -6,7 +6,7 @@ import pytest
 
 import database
 from database import Fund, FundCommitment, Plan
-from funds.query import funds_held_alongside, resolve_fund, who_else_is_in
+from funds.query import funds_held_alongside, most_crowded, overview, resolve_fund, who_else_is_in
 
 TODAY = date(2026, 10, 22)
 
@@ -175,3 +175,55 @@ def test_exact_name_beats_co_invest_vehicles(s):
     _fund(s, "FP VIII PA Co-Invest, L.P.", "Francisco Partners", "fp # pa co-invest", 8)
     fund, _ = resolve_fund(s, "Francisco Partners VIII")
     assert fund is not None and fund.id == main.id
+
+
+def test_most_crowded_ranks_by_approved_holders(s):
+    f1 = _fund(s, "GTCR Fund XV", "GTCR", "", 15)
+    f2 = _fund(s, "KKR North America Fund XIV", "KKR", "north america", 14)
+    lone = _fund(s, "Lone Fund I", "Lone", "", 1)
+    for p in ("a", "b", "c"):
+        _hold(s, p, f2, amount=100.0)
+    _hold(s, "a", f1, amount=50.0)
+    _hold(s, "b", f1, amount=None)
+    _hold(s, "d", f1, status="proposed")
+    _hold(s, "d", f2, status="pipeline")
+    _hold(s, "a", lone)
+    rows = most_crowded(session=s, today=TODAY)
+    assert [(r["fund"]["name"], r["holders"]) for r in rows] == [
+        ("KKR North America Fund XIV", 3), ("GTCR Fund XV", 2)]
+    assert rows[0]["total_millions"] == 300.0
+    assert rows[1]["total_millions"] == 50.0
+    assert rows[1]["plans"] == ["A", "B"]
+    assert rows[1]["fund"]["key"] == f1.fund_key
+
+
+def test_most_crowded_applies_the_unnumbered_window(s):
+    f = _fund(s, "Wellington EM Fund", "Wellington", "emerging markets", None)
+    _hold(s, "a", f, first="2026-06-01")
+    _hold(s, "b", f, first="2024-01-15")
+    _hold(s, "c", f, first="2026-09-01")
+    rows = most_crowded(session=s, today=TODAY)
+    assert [(r["fund"]["name"], r["holders"]) for r in rows] == [("Wellington EM Fund", 2)]
+    assert rows[0]["holders"] == len(who_else_is_in(f.fund_key, session=s, today=TODAY)["holders"])
+
+
+def test_most_crowded_filters_by_asset_class(s):
+    pe = _fund(s, "GTCR Fund XV", "GTCR", "", 15)
+    infra = _fund(s, "ECP VI", "ECP", "", 6)
+    pe.asset_class, infra.asset_class = "private_equity", "real_assets_infrastructure"
+    for p in ("a", "b"):
+        _hold(s, p, pe)
+        _hold(s, p, infra)
+    rows = most_crowded(asset_class="private_equity", session=s, today=TODAY)
+    assert [r["fund"]["name"] for r in rows] == ["GTCR Fund XV"]
+
+
+def test_overview_counts_and_indexes_funds(s):
+    f = _fund(s, "GTCR Fund XV", "GTCR", "", 15)
+    _fund(s, "Apex Fund I", "Apex", "", 1)
+    _hold(s, "a", f)
+    _hold(s, "b", f)
+    ov = overview(session=s, today=TODAY)
+    assert ov["funds"] == 2 and ov["crowded"] == 1
+    assert list(ov["fund_index"].values()) == ["Apex Fund I", "GTCR Fund XV"]
+    assert ov["coverage"]["plans_searched"] == 2

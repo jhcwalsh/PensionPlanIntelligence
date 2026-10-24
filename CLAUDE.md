@@ -380,6 +380,8 @@ Answers "who else is in this fund?" for a future AI IC member. Spec:
   `pip install -r requirements-mcp.txt` and register it with
   `claude mcp add fund-crowding -- <repo>\.venv\Scripts\python.exe <repo>\funds\mcp_server.py`.
   `mcp` stays out of `requirements.txt` (Render).
+- The **Crowding** tab in `app.py` (`page_crowding`) is a window onto the same
+  functions, behind the admin password until the "approved" test is tightened.
 
 ## Conventions worth knowing
 

@@ -1526,6 +1526,288 @@ def page_managers():
 
 
 # ---------------------------------------------------------------------------
+# Fund crowding (admin only)
+# ---------------------------------------------------------------------------
+#
+# A window onto funds/query.py, the same functions the AI IC member's MCP tool
+# calls, so the page and the tool can never disagree about who holds what.
+# Behind the admin gate until the "approved" test is tightened: about 3 in 120
+# holder rows read like consideration rather than a vote.
+
+_CROWDING_CLASSES = {
+    "All": None,
+    "Private equity": "private_equity",
+    "Real estate": "real_estate",
+    "Infrastructure": "real_assets_infrastructure",
+    "Private credit": "private_credit",
+}
+_ASSET_CLASS_LABELS = {
+    "private_equity": "Private equity", "real_estate": "Real estate",
+    "real_assets_infrastructure": "Infrastructure", "private_credit": "Private credit",
+    "fixed_income_credit": "Credit", "fixed_income_core": "Core fixed income",
+    "public_equity_us": "US equity", "public_equity_non_us": "Non-US equity",
+    "public_equity_global": "Global equity", "hedge_funds_absolute_return": "Hedge funds",
+    "opportunistic_other": "Opportunistic",
+}
+
+_CROWDING_CSS = """
+<style>
+  .cr-strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px;
+              background: #e8e4dc; border: 1px solid #e8e4dc; margin: 0.5rem 0 1.75rem; }
+  .cr-strip > div { background: #fbfaf7; padding: 18px 22px; }
+  .cr-num { font-family: 'Fraunces', serif; font-size: 34px; line-height: 1.1;
+            letter-spacing: -0.02em; color: #1a1a1a; }
+  .cr-num.accent { color: #b8410e; }
+  .cr-fund { font-family: 'Fraunces', serif; font-size: 30px; font-weight: 400;
+             letter-spacing: -0.02em; line-height: 1.15; margin: 4px 0 14px; color: #1a1a1a; }
+  .cr-stats { display: flex; gap: 36px; margin-bottom: 18px; flex-wrap: wrap; }
+  .cr-stats .cr-num { font-size: 26px; }
+  .cr-holder { display: grid; grid-template-columns: 1fr auto; gap: 4px 16px;
+               padding: 14px 0; border-top: 1px solid #e8e4dc; }
+  .cr-holder:last-child { border-bottom: 1px solid #e8e4dc; }
+  .cr-plan { font-weight: 600; color: #1a1a1a; }
+  .cr-amt { font-family: 'Fraunces', serif; font-size: 20px; text-align: right; color: #1a1a1a; }
+  .cr-amt.na { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8a8780;
+               letter-spacing: 0.1em; text-transform: uppercase; padding-top: 6px; }
+  .cr-quote { grid-column: 1 / -1; font-family: 'Fraunces', serif; font-style: italic;
+              color: #4a4a4a; font-size: 15px; line-height: 1.5; }
+  .cr-meta { grid-column: 1 / -1; }
+  .cr-meta a { color: #b8410e; text-decoration: none; }
+  .cr-muted { color: #8a8780; }
+  .cr-bar { display: grid; grid-template-columns: minmax(0, 1fr) 120px 38px; gap: 12px;
+            align-items: center; padding: 7px 0; border-top: 1px solid #e8e4dc; font-size: 14px; }
+  .cr-track { background: #f4f2ec; height: 6px; border-radius: 999px; overflow: hidden; }
+  .cr-fill { background: #b8410e; height: 6px; border-radius: 999px; }
+  .cr-section { margin-top: 1.75rem; margin-bottom: 0.4rem; }
+  @media (max-width: 760px) { .cr-strip { grid-template-columns: repeat(2, 1fr); } }
+</style>
+"""
+
+
+def _ac_label(ac: str | None) -> str:
+    return _ASSET_CLASS_LABELS.get(ac or "", (ac or "Unclassified").replace("_", " ").capitalize())
+
+
+def _fmt_m(v: float | None) -> str:
+    if v is None:
+        return "—"
+    return f"${v / 1000:,.1f}bn" if v >= 1000 else f"${v:,.0f}m"
+
+
+def _fmt_day(iso: str | None) -> str:
+    if not iso:
+        return "—"
+    d = datetime.strptime(iso, "%Y-%m-%d")
+    return f"{d.day} {d:%b %Y}"
+
+
+@st.cache_data(ttl=900, show_spinner=False)
+def _crowding_overview() -> dict:
+    from funds import query as fund_query
+    return fund_query.overview(session=get_db_session())
+
+
+@st.cache_data(ttl=900, show_spinner=False)
+def _crowding_leaderboard(asset_class: str | None) -> list[dict]:
+    from funds import query as fund_query
+    return fund_query.most_crowded(asset_class=asset_class, limit=200, session=get_db_session())
+
+
+@st.cache_data(ttl=900, show_spinner=False)
+def _crowding_detail(fund: str) -> tuple[dict, dict]:
+    from funds import query as fund_query
+    session = get_db_session()
+    return (fund_query.who_else_is_in(fund, session=session),
+            fund_query.funds_held_alongside(fund, session=session, limit=8))
+
+
+def _best_evidence(entry: dict) -> dict:
+    ev = entry.get("evidence") or []
+    ranked = sorted(ev, key=lambda e: (e.get("status") == "approved", bool(e.get("quote")),
+                                       e.get("meeting_date") or ""), reverse=True)
+    return ranked[0] if ranked else {}
+
+
+def _holder_html(h: dict, muted: bool = False) -> str:
+    e = _best_evidence(h)
+    amt = (f'<div class="cr-amt">{_fmt_m(h["amount_millions"])}</div>'
+           if h.get("amount_millions") is not None else '<div class="cr-amt na">amount n/a</div>')
+    meta = [html.escape(h.get("last_seen") or "undated")]
+    if h.get("pct_of_plan_aum") is not None:
+        meta.append(f'{h["pct_of_plan_aum"]:.2f}% of plan')
+    if h.get("vehicle"):
+        meta.append(html.escape(h["vehicle"]))
+    if muted:
+        meta.append(html.escape(h.get("reason") or h.get("status") or "pending"))
+    if e.get("document_id"):
+        meta.append(f'<a href="?doc={int(e["document_id"])}" target="_blank">source document →</a>')
+    tags = ""
+    if h.get("match_confidence") and h["match_confidence"] != "exact":
+        tags = f' <span class="tag">{html.escape(h["match_confidence"])} match</span>'
+    quote = (f'<div class="cr-quote">“{html.escape(e["quote"])}”</div>' if e.get("quote") else "")
+    style = ' style="opacity:0.72"' if muted else ""
+    return (f'<div class="cr-holder"{style}><div class="cr-plan">'
+            f'{html.escape(h.get("plan_name") or h["plan_id"])}{tags}</div>{amt}{quote}'
+            f'<div class="cr-meta eyebrow">{" · ".join(meta)}</div></div>')
+
+
+def _crowding_timeline(holders: list[dict]):
+    import altair as alt
+    import pandas as pd
+    pts = [{"Plan": h.get("plan_name") or h["plan_id"],
+            "Date": h["last_seen"],
+            "Amount": h["amount_millions"] if h.get("amount_millions") is not None else 0,
+            "Label": _fmt_m(h.get("amount_millions")) if h.get("amount_millions") is not None
+            else "amount n/a"}
+           for h in holders if h.get("last_seen")]
+    if len(pts) < 2:
+        return None
+    df = pd.DataFrame(pts)
+    df["Date"] = pd.to_datetime(df["Date"])
+    order = df.sort_values("Date")["Plan"].tolist()
+    return (alt.Chart(df).mark_circle(color="#b8410e", opacity=0.85, stroke="#fbfaf7", strokeWidth=1)
+            .encode(x=alt.X("Date:T", title=None, scale=alt.Scale(padding=18),
+                            axis=alt.Axis(format="%b %Y", tickCount="month", labelOverlap="greedy",
+                                          grid=False, labelColor="#8a8780", domainColor="#e8e4dc",
+                                          tickColor="#e8e4dc")),
+                    y=alt.Y("Plan:N", sort=order, title=None,
+                            axis=alt.Axis(labelColor="#4a4a4a", labelLimit=260, domain=False, ticks=False)),
+                    size=alt.Size("Amount:Q", legend=None, scale=alt.Scale(range=[90, 900])),
+                    tooltip=["Plan", alt.Tooltip("Date:T", format="%d %b %Y"), alt.Tooltip("Label", title="Amount")])
+            .properties(height=max(120, 34 * len(order)))
+            .configure_view(strokeWidth=0)
+            .configure(background="#fbfaf7", font="Inter Tight"))
+
+
+def _crowding_pick(key: str) -> None:
+    """Callback shared by the table and the search box: whichever moved last wins."""
+    if key == "crowd_table":
+        rows = st.session_state["crowd_table"].selection.rows
+        board = st.session_state.get("_crowd_board") or []
+        if rows and rows[0] < len(board):
+            st.session_state["crowd_fund"] = board[rows[0]]["fund"]["key"]
+            st.session_state["crowd_search"] = None
+    elif st.session_state.get("crowd_search"):
+        st.session_state["crowd_fund"] = st.session_state["crowd_search"]
+
+
+def _render_crowding_detail(fund: str) -> None:
+    who, alongside = _crowding_detail(fund)
+    f = who["fund"]
+    if f is None:
+        st.info("That name matches more than one fund: "
+                + ", ".join(c["name"] for c in who["candidates"]) if who["candidates"]
+                else "No fund by that name in the commitments we hold.")
+        return
+    holders, pending = who["holders"], who["pending"]
+    amounts = [h["amount_millions"] for h in holders if h["amount_millions"] is not None]
+    eyebrow = " · ".join(x for x in (f["manager"], _ac_label(f["asset_class"]),
+                                     f"Fund {f['number']}" if f["number"] else None) if x)
+    st.markdown(
+        f'<div class="eyebrow">{html.escape(eyebrow)}</div>'
+        f'<div class="cr-fund">{html.escape(f["name"] or "")}</div>'
+        f'<div class="cr-stats">'
+        f'<div><div class="eyebrow">Plans committed</div><div class="cr-num accent">{len(holders)}</div></div>'
+        f'<div><div class="eyebrow">Stated total</div><div class="cr-num">{_fmt_m(sum(amounts)) if amounts else "—"}</div></div>'
+        f'<div><div class="eyebrow">Awaiting a vote</div><div class="cr-num">{len(pending)}</div></div>'
+        f'</div>', unsafe_allow_html=True)
+
+    chart = _crowding_timeline(holders)
+    if chart is not None:
+        st.markdown('<div class="eyebrow cr-section">When each board committed</div>', unsafe_allow_html=True)
+        st.altair_chart(chart, width="stretch")
+
+    st.markdown('<div class="eyebrow cr-section">Holders, in their boards\' words</div>'
+                + "".join(_holder_html(h) for h in holders)
+                + ('' if holders else '<p class="cr-muted">No approved commitments in the window.</p>'),
+                unsafe_allow_html=True)
+
+    if pending:
+        st.markdown('<div class="eyebrow cr-section">Proposed, no vote seen yet</div>'
+                    + "".join(_holder_html(p, muted=True) for p in pending), unsafe_allow_html=True)
+
+    if alongside["alongside"]:
+        n = alongside["holders_considered"]
+        bars = "".join(
+            f'<div class="cr-bar"><span>{html.escape(a["fund"]["name"] or "")}</span>'
+            f'<div class="cr-track"><div class="cr-fill" style="width:{a["share_of_holders"] * 100:.0f}%"></div></div>'
+            f'<span class="cr-muted">{a["count"]}/{n}</span></div>'
+            for a in alongside["alongside"])
+        st.markdown('<div class="eyebrow cr-section">Also held by these plans</div>' + bars,
+                    unsafe_allow_html=True)
+
+    others = who["same_family_other_vintages"]
+    if others:
+        st.markdown('<div class="eyebrow cr-section">Same family, other vintages</div>'
+                    + " ".join(f'<span class="tag">{html.escape(v["fund"]["name"] or "")} · '
+                               f'{len(v["holders"])} plans</span>' for v in others),
+                    unsafe_allow_html=True)
+    if who["manager_only_mentions"]:
+        st.caption(f"{len(who['manager_only_mentions'])} further commitments to "
+                   f"{f['manager']} name no fund, so they are not counted here.")
+
+
+def page_crowding():
+    st.markdown(_CROWDING_CSS, unsafe_allow_html=True)
+    st.title("Fund Crowding")
+    st.caption("Which pension plans are in the same private-markets funds, read from the board "
+               "commitments in the meeting documents we hold. Only approved commitments count; "
+               "an unnumbered fund counts only within 12 months.")
+
+    ov = _crowding_overview()
+    cov = ov["coverage"]
+    if not ov["funds"]:
+        st.info("No fund commitments built yet. Run `python -m scripts.build_fund_commitments`.")
+        return
+    st.markdown(
+        '<div class="cr-strip">'
+        f'<div><div class="eyebrow">Funds tracked</div><div class="cr-num">{ov["funds"]:,}</div></div>'
+        f'<div><div class="eyebrow">Held by 2+ plans</div><div class="cr-num accent">{ov["crowded"]:,}</div></div>'
+        f'<div><div class="eyebrow">Plans covered</div><div class="cr-num">{cov["plans_searched"]:,}</div></div>'
+        f'<div><div class="eyebrow">Latest board date</div><div class="cr-num">{_fmt_day(cov["latest_meeting"])}</div></div>'
+        '</div>', unsafe_allow_html=True)
+
+    left, right = st.columns([11, 13], gap="large")
+    with left:
+        st.markdown('<div class="eyebrow">Most crowded</div>', unsafe_allow_html=True)
+        label = st.segmented_control("Asset class", list(_CROWDING_CLASSES), default="All",
+                                     key="crowd_class", label_visibility="collapsed") or "All"
+        board = _crowding_leaderboard(_CROWDING_CLASSES[label])
+        st.session_state["_crowd_board"] = board
+        if not board:
+            st.caption("No fund in this class is held by two or more plans.")
+        else:
+            import pandas as pd
+            df = pd.DataFrame([{"Fund": r["fund"]["name"], "Plans": r["holders"],
+                                "Stated $m": r["total_millions"], "Latest": r["latest"]}
+                               for r in board])
+            st.dataframe(
+                df, key="crowd_table", hide_index=True, width="stretch", height=560,
+                on_select=lambda: _crowding_pick("crowd_table"), selection_mode="single-row",
+                column_config={
+                    "Plans": st.column_config.ProgressColumn(
+                        format="%d", min_value=0, max_value=max(r["holders"] for r in board),
+                        width="small"),
+                    "Stated $m": st.column_config.NumberColumn(format="$%,.0f", width="small"),
+                    "Latest": st.column_config.TextColumn(width="small"),
+                })
+            st.caption("Select a row to open it. Stated amounts are indicative: some "
+                       "boards don't state one, and a bundled approval gets none.")
+
+    with right:
+        index = ov["fund_index"]
+        st.selectbox("Find any fund", list(index), index=None, key="crowd_search",
+                     format_func=lambda k: index.get(k, k),
+                     placeholder=f"Search {len(index):,} funds by name…",
+                     on_change=_crowding_pick, args=("crowd_search",))
+        fund = st.session_state.get("crowd_fund") or (board[0]["fund"]["key"] if board else None)
+        if fund:
+            _render_crowding_detail(fund)
+
+    st.caption(cov["caveat"] + f" Data as of {(cov['as_of'] or '')[:10]}.")
+
+
+# ---------------------------------------------------------------------------
 # App entry
 # ---------------------------------------------------------------------------
 
@@ -4023,6 +4305,7 @@ def main():
         # removed: the confirm/unsub/prefs landing pages above still work
         # for anyone who signed up before). Unlock admin to see the form.
         tab_specs.append(("Subscribe", lambda: page_subscribe()))
+        tab_specs.append(("Crowding", lambda: page_crowding()))
         tab_specs.append(("Archive", lambda: page_archive()))
         tab_specs.append(("Drafts",  lambda: page_drafts()))
         tab_specs.append(("Admin",   lambda: page_admin()))
