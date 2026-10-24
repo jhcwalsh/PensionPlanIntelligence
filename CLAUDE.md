@@ -365,6 +365,10 @@ Answers "who else is in this fund?" for a future AI IC member. Spec:
   run only pays for new actions. It then rebuilds `funds` and
   `fund_commitments` wholesale. Use `--rebuild-only` after editing a mappings
   file; it makes no model calls. It never reads `extracted_text`.
+- **The cache key includes the Haiku model and the prompt** (`funds/extract.py`
+  `_SYSTEM`). Any edit to the prompt, even a typo fix, re-extracts every action
+  on the next run, the nightly one included (~3,800 actions, about $1.40), and
+  prunes the old rows. Score a prompt change on real cases before committing it.
 - **A false match is worse than a miss.** Identity (`funds/identity.py`) is
   manager + series + number, exact after normalisation:
   - different numbers are different funds, and a vintage year counts as a number;
@@ -375,13 +379,37 @@ Answers "who else is in this fund?" for a future AI IC member. Spec:
   edits `data/fund_mappings.json` (and `manager_mappings.json`), and James
   reviews the git diff. The nightly run never applies a fuzzy merge.
 - Only `approved` rows are holders. `fund_commitments.fund_id` is null for a
-  manager-only row, where no fund was named.
+  manager-only row, where no fund was named. Status goes by the wording first:
+  past-tense "Committed $X to ..." is approved even in an agenda (CalPERS and
+  SDCERS agendas carry transaction reports); a bare "Commitment of up to $X"
+  is approved only in minutes.
 - The MCP server is `funds/mcp_server.py` (stdio, reads Neon). Install it with
   `pip install -r requirements-mcp.txt` and register it with
   `claude mcp add fund-crowding -- <repo>\.venv\Scripts\python.exe <repo>\funds\mcp_server.py`.
   `mcp` stays out of `requirements.txt` (Render).
 - The **Crowding** tab in `app.py` (`page_crowding`) is a window onto the same
-  functions, behind the admin password until the "approved" test is tightened.
+  functions, behind the admin password. Its table, search and detail are an
+  `@st.fragment`: every tab in this app renders on every rerun (`st.tabs` is
+  eager), so without it each click re-ran all ~15 pages. `funds.query.overview`
+  carries the whole ranked list and `fund_detail` does who-else and
+  held-alongside in one pass, so the page makes two cached calls in all.
+- Any extraction that names no fund although its text names a numbered one is
+  asked again in batches of 10 (`build._retry_dropped_names`). In 40-action
+  batches Haiku drops names it gets right on a second look: 309 on the
+  2026-10-24 full re-extract.
+
+### Coverage tab (`coverage_health.py`), added 2026-10-24
+
+Admin-only. Board material per plan over time, and two kinds of gap:
+- **Temporary.** Pipeline-wide: a run of complete weeks below a quarter of the
+  median week (it flags the 13 Sep–11 Oct 2026 outage on its own). Per plan:
+  overdue against the plan's own observed cadence, using the same thresholds as
+  `queries.plan_reference_rows` (monthly 2 months, quarterly 4, sparse 6).
+- **Structural.** No board material in 12 months. The reason comes from the
+  WAF-blocked lists where one exists.
+Board material excludes CAFRs, IPS documents and actuarial valuations, as in
+`queries.aum_coverage`. It reads plan ids and dates only. The page alerts but
+sends nothing; an email alert would be a separate job.
 
 ## Conventions worth knowing
 

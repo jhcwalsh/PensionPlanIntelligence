@@ -1813,6 +1813,232 @@ def _crowding_body(ov: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Coverage (admin only)
+# ---------------------------------------------------------------------------
+
+# Status colours from the dataviz reference palette; never shown without an
+# icon and a word, since warning amber is below 3:1 on the paper surface.
+_COV_STATUS = {
+    "ok":         {"label": "OK",                 "icon": "●", "color": "#0ca30c"},
+    "overdue":    {"label": "Temporary gap",      "icon": "▲", "color": "#fab219"},
+    "structural": {"label": "Structural gap",     "icon": "■", "color": "#d03b3b"},
+}
+_COV_ALERTS = {**_COV_STATUS,
+               "stalled":  {"label": "Pipeline stalled", "icon": "■", "color": "#d03b3b"},
+               "resolved": {"label": "Past outage",      "icon": "○", "color": "#8a8780"}}
+_COV_HEAT = ["#f6e6dc", "#b8410e", "#5a1f06"]  # one hue, light to dark
+
+_COVERAGE_CSS = """
+<style>
+  .cv-alert { display: grid; grid-template-columns: 22px 1fr; gap: 2px 10px; padding: 10px 0;
+              border-top: 1px solid #e8e4dc; font-size: 14.5px; color: #1a1a1a; }
+  .cv-alert:last-child { border-bottom: 1px solid #e8e4dc; }
+  .cv-alert .ic { font-size: 13px; line-height: 1.6; }
+  .cv-alert .sub { grid-column: 2; color: #6b6862; font-size: 13px; }
+  .cv-chip { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 10.5px;
+             letter-spacing: 0.08em; text-transform: uppercase; padding: 1px 7px;
+             border: 1px solid #e8e4dc; border-radius: 3px; color: #4a4a4a; margin-right: 6px; }
+</style>
+"""
+
+
+@st.cache_data(ttl=900, show_spinner=False)
+def _coverage_report() -> dict:
+    import coverage_health
+    return coverage_health.report(get_db_session())
+
+
+def _cov_plan_label(r: dict) -> str:
+    aum = f" · ${r['aum']:,.0f}bn" if r.get("aum") else ""
+    return f"{r['name']}{aum}"
+
+
+def _cov_alert(status: str, text: str, sub: str = "") -> str:
+    s = _COV_ALERTS[status]
+    return (f'<div class="cv-alert"><span class="ic" style="color:{s["color"]}">{s["icon"]}</span>'
+            f'<span><span class="cv-chip">{s["label"]}</span>{html.escape(text)}</span>'
+            + (f'<span class="sub">{html.escape(sub)}</span>' if sub else "") + '</div>')
+
+
+def _cov_weekly_chart(weekly: list[dict], gaps: list[dict]):
+    import altair as alt
+    import pandas as pd
+    df = pd.DataFrame([{"Week": w["week"].isoformat(), "Documents": w["downloads"],
+                        "Plans": w["plans"], "Summaries": w["summaries"],
+                        "Kind": "This week, so far" if w["partial"] else "Complete week"}
+                       for w in weekly])
+    df["Week"] = pd.to_datetime(df["Week"])
+    axis = dict(labelColor="#8a8780", domainColor="#e8e4dc", tickColor="#e8e4dc", grid=False)
+    bars = alt.Chart(df).mark_bar(width={"band": 0.7}, cornerRadiusTopLeft=3,
+                                  cornerRadiusTopRight=3).encode(
+        x=alt.X("Week:T", title=None, axis=alt.Axis(format="%-d %b", **axis)),
+        y=alt.Y("Plans:Q", title="Plans with new board material",
+                axis=alt.Axis(gridColor="#f0ede6", **{k: v for k, v in axis.items() if k != "grid"})),
+        color=alt.Color("Kind:N", legend=alt.Legend(orient="top", title=None),
+                        scale=alt.Scale(domain=["Complete week", "This week, so far"],
+                                        range=["#b8410e", "#e3b49a"])),
+        tooltip=[alt.Tooltip("Week:T", format="Week of %-d %b %Y"), "Documents", "Plans",
+                 "Summaries"])
+    layers = [bars]
+    if gaps:
+        g = pd.DataFrame([{"start": x["start"].isoformat(), "end": x["end"].isoformat(),
+                           "Gap": f"{x['weeks']} weeks, {x['downloads']} documents "
+                                  f"(typical {x['typical']} a week)"} for x in gaps])
+        g["start"], g["end"] = pd.to_datetime(g["start"]), pd.to_datetime(g["end"])
+        layers.insert(0, alt.Chart(g).mark_rect(color="#d03b3b", opacity=0.10).encode(
+            x="start:T", x2="end:T", tooltip=["Gap"]))
+    return (alt.layer(*layers).properties(height=220)
+            .configure_view(strokeWidth=0).configure(background="#fbfaf7", font="Inter Tight"))
+
+
+def _cov_heatmap(rows: list[dict], grid: dict):
+    import altair as alt
+    import pandas as pd
+    label = {r["plan_id"]: f"{_COV_STATUS[r['status']]['icon']} {_cov_plan_label(r)}" for r in rows}
+    order = [label[r["plan_id"]] for r in rows]
+    cells = [{"Plan": label[r["plan_id"]], "Month": m,
+              "Documents": grid["rows"].get(r["plan_id"], {}).get(m, 0),
+              "Status": _COV_STATUS[r["status"]]["label"]}
+             for r in rows for m in grid["months"]]
+    df = pd.DataFrame(cells)
+    base = alt.Chart(df).encode(
+        x=alt.X("Month:O", title=None, axis=alt.Axis(labelAngle=-50, labelColor="#8a8780",
+                                                      domain=False, ticks=False)),
+        y=alt.Y("Plan:N", sort=order, title=None,
+                axis=alt.Axis(labelColor="#4a4a4a", labelLimit=300, labelOverlap=False,
+                              domain=False, ticks=False)),
+        tooltip=["Plan", "Month", "Documents", "Status"])
+    empty = base.mark_rect(color="#f4f2ec", stroke="#fbfaf7", strokeWidth=2)
+    filled = base.transform_filter("datum.Documents > 0").mark_rect(
+        stroke="#fbfaf7", strokeWidth=2).encode(
+        color=alt.Color("Documents:Q", legend=alt.Legend(orient="top", title="Board documents"),
+                        scale=alt.Scale(type="sqrt", range=_COV_HEAT)))
+    return ((empty + filled).properties(height=alt.Step(18))
+            .configure_view(strokeWidth=0).configure(background="#fbfaf7", font="Inter Tight"))
+
+
+def _cov_balance_chart(rows: list[dict]):
+    import altair as alt
+    import pandas as pd
+    df = pd.DataFrame([{"Plan": r["name"], "AUM $bn": r["aum"], "Documents, 12 months": r["docs_12m"],
+                        "Status": _COV_STATUS[r["status"]]["label"]}
+                       for r in rows if r.get("aum")])
+    statuses = [v["label"] for v in _COV_STATUS.values()]
+    return (alt.Chart(df).mark_point(filled=True, size=95, opacity=0.85, stroke="#fbfaf7",
+                                     strokeWidth=1.5)
+            .encode(x=alt.X("AUM $bn:Q", scale=alt.Scale(type="log"),
+                            axis=alt.Axis(labelColor="#8a8780", gridColor="#f0ede6")),
+                    y=alt.Y("Documents, 12 months:Q", scale=alt.Scale(type="symlog"),
+                            axis=alt.Axis(labelColor="#8a8780", gridColor="#f0ede6")),
+                    color=alt.Color("Status:N", legend=alt.Legend(orient="top", title=None),
+                                    scale=alt.Scale(domain=statuses,
+                                                    range=[v["color"] for v in _COV_STATUS.values()])),
+                    shape=alt.Shape("Status:N", legend=None,
+                                    scale=alt.Scale(domain=statuses,
+                                                    range=["circle", "triangle-up", "square"])),
+                    tooltip=["Plan", alt.Tooltip("AUM $bn:Q", format=",.0f"),
+                             "Documents, 12 months", "Status"])
+            .properties(height=320)
+            .configure_view(strokeWidth=0).configure(background="#fbfaf7", font="Inter Tight"))
+
+
+def page_coverage():
+    st.markdown(_CROWDING_CSS + _COVERAGE_CSS, unsafe_allow_html=True)
+    st.title("Coverage")
+    st.caption("Board material (agendas, packs, minutes, performance reports) per plan over time. "
+               "Temporary gaps are things that normally arrive and have stopped; structural gaps "
+               "are plans we get nothing from. CAFRs and IPS documents are annual, so they are "
+               "listed per plan but do not count here.")
+    r = _coverage_report()
+    rows, gaps, weekly, b = r["status"], r["gaps"], r["weekly"], r["balance"]
+    if not rows:
+        st.info("No plans in the database yet.")
+        return
+
+    complete = [w for w in weekly if not w["partial"]]
+    typical = sorted(w["plans"] for w in complete)[len(complete) // 2] if complete else 0
+    now = weekly[-1]
+    overdue = [x for x in rows if x["status"] == "overdue"]
+    structural = [x for x in rows if x["status"] == "structural"]
+    ongoing = [g for g in gaps if complete and g["end"] >= complete[-1]["week"]]
+    st.markdown(
+        '<div class="cr-strip">'
+        f'<div><div class="eyebrow">Plans with material, 12 months</div>'
+        f'<div class="cr-num">{b["plans_12m"]}<span class="cr-muted" style="font-size:20px"> / {b["plans_total"]}</span></div></div>'
+        f'<div><div class="eyebrow">Share of AUM, last 90 days</div><div class="cr-num">{b["aum_share_90d"]:.0%}</div></div>'
+        f'<div><div class="eyebrow">Plans reached this week · typical</div>'
+        f'<div class="cr-num">{now["plans"]:,}<span class="cr-muted" style="font-size:20px"> · {typical:,}</span></div></div>'
+        f'<div><div class="eyebrow">Temporary · structural gaps</div>'
+        f'<div class="cr-num accent">{len(overdue) + len(ongoing)}<span class="cr-muted" style="font-size:20px"> · {len(structural)}</span></div></div>'
+        '</div>', unsafe_allow_html=True)
+
+    alerts = []
+    for g in reversed(gaps):
+        live = g in ongoing
+        alerts.append(_cov_alert(
+            "stalled" if live else "resolved",
+            f"{'Intake has stalled' if live else 'Intake stalled'}: {g['downloads']} documents in "
+            f"{g['weeks']} weeks, {_fmt_day(g['start'].isoformat())} – {_fmt_day(g['end'].isoformat())}",
+            f"A typical week brings {g['typical']}."
+            + (" Check the daily pipeline run and the credit preflight." if live else
+               " Material published then may still be missing for plans that only list recent items.")))
+    for x in overdue:
+        alerts.append(_cov_alert("overdue", _cov_plan_label(x), x["reason"] + (
+            f". Last material {x['last_month']}." if x["last_month"] else "")))
+    st.markdown('<div class="eyebrow cr-section">Alerts</div>'
+                + ("".join(alerts) or '<p class="cr-muted">No temporary gaps.</p>'),
+                unsafe_allow_html=True)
+    if structural:
+        aum = sum(x["aum"] or 0 for x in structural)
+        with st.expander(f"{len(structural)} plans with no board material in 12 months "
+                         f"(${aum:,.0f}bn, {aum / max(sum(x['aum'] or 0 for x in rows), 1):.0%} of AUM)"):
+            st.markdown("".join(_cov_alert("structural", _cov_plan_label(x), x["reason"])
+                                for x in structural), unsafe_allow_html=True)
+
+    st.markdown('<div class="eyebrow cr-section">Plans reached each week</div>', unsafe_allow_html=True)
+    st.altair_chart(_cov_weekly_chart(weekly, gaps), width="stretch")
+    _coverage_detail(rows, r["months"], b)
+
+
+@st.fragment
+def _coverage_detail(rows: list[dict], grid: dict, b: dict) -> None:
+    """Heatmap, balance and table. A fragment, so the filters rerun only this."""
+    st.markdown('<div class="eyebrow cr-section">Board material by plan and month</div>',
+                unsafe_allow_html=True)
+    show = st.segmented_control("Plans", ["Top 50 by AUM", "With gaps", "All"],
+                                default="Top 50 by AUM", key="cov_show",
+                                label_visibility="collapsed") or "Top 50 by AUM"
+    picked = (rows[:50] if show == "Top 50 by AUM"
+              else [x for x in rows if x["status"] != "ok"] if show == "With gaps" else rows)
+    st.altair_chart(_cov_heatmap(picked, grid), width="stretch")
+    st.caption("Placed in the month of the meeting, else the month downloaded. "
+               + "  ".join(f'{v["icon"]} {v["label"]}' for v in _COV_STATUS.values()))
+
+    st.markdown('<div class="eyebrow cr-section">Balance</div>', unsafe_allow_html=True)
+    st.markdown(f"The top 10 plans hold **{b['top_share']:.0%}** of the last 12 months' "
+                f"{b['docs_12m']:,} board documents. Plans with any material cover "
+                f"**{b['aum_share_12m']:.0%}** of tracked AUM over 12 months and "
+                f"**{b['aum_share_90d']:.0%}** over the last 90 days.")
+    st.altair_chart(_cov_balance_chart(rows), width="stretch")
+    st.caption("Plans well above the cloud are over-represented for their size; plans on the "
+               "floor send nothing.")
+
+    import pandas as pd
+    st.markdown('<div class="eyebrow cr-section">Every plan, every dataset</div>',
+                unsafe_allow_html=True)
+    df = pd.DataFrame([{
+        "Status": f'{_COV_STATUS[x["status"]]["icon"]} {_COV_STATUS[x["status"]]["label"]}',
+        "Plan": x["name"], "AUM $bn": x["aum"], "Cadence": x["cadence"],
+        "Last material": x["last_month"] or "—", "Docs 12m": x["docs_12m"],
+        "Not summarised": x["unsummarised"], "Latest CAFR FY": x["latest_cafr_fy"],
+        "IPS": "yes" if x["has_ips"] else "—", "Recordings 12m": x["recordings_12m"],
+        "Fund commitments": x["fund_commitments"], "Why": x["reason"]} for x in rows])
+    st.dataframe(df, hide_index=True, width="stretch", height=420,
+                 column_config={"AUM $bn": st.column_config.NumberColumn(format="%,.0f"),
+                                "Latest CAFR FY": st.column_config.NumberColumn(format="%d")})
+
+
+# ---------------------------------------------------------------------------
 # App entry
 # ---------------------------------------------------------------------------
 
@@ -4311,6 +4537,7 @@ def main():
         # for anyone who signed up before). Unlock admin to see the form.
         tab_specs.append(("Subscribe", lambda: page_subscribe()))
         tab_specs.append(("Crowding", lambda: page_crowding()))
+        tab_specs.append(("Coverage", lambda: page_coverage()))
         tab_specs.append(("Archive", lambda: page_archive()))
         tab_specs.append(("Drafts",  lambda: page_drafts()))
         tab_specs.append(("Admin",   lambda: page_admin()))

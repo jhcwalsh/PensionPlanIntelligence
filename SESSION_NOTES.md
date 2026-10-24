@@ -27,6 +27,20 @@
 - The full app never reached idle in a local browser in 15 minutes, before and after the change, so the
   per-click gain in the full app was not measured. It's the same unexplained local stall as on 23 Oct.
 
+**Coverage tab** (admin only, `coverage_health.py` + `page_coverage`)
+- Weekly intake, a plan × month heatmap, balance against AUM, and a per-plan table across every dataset.
+  It flags pipeline outages, overdue plans and structural gaps. On its own it finds the 14 Sep – 11 Oct outage.
+- Review findings: 125/150 plans have board material in 12 months (91% of AUM, 88% over 90 days); the top 10
+  plans hold 43% of documents (Metro Nashville 601); 25 plans ($499bn, 9% of AUM) are structural gaps;
+  7 overdue (ERS Texas, SCERS, Wyoming...); performance reports from 1 plan; recordings for 45.
+- Recordings: the weekly catalogue hung on 10 Oct and failed on 17 Oct (`git pull` refuses a dirty tree);
+  downloads have been off by design since July. Asked James about downloads and the `git pull` fix.
+
+**Next**
+1. Push (James's call): the fund data is already live in Neon, but the code isn't on master yet.
+2. Recordings: soften the `git pull` in `run_recordings.bat` and add a source timeout; decide on downloads.
+3. An email alert from the coverage checks, and why the full app never settles locally.
+
 ## 2026-10-23 (later) — Fund Crowding tab in the app (admin only)
 
 **Done**
